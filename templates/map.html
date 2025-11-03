@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-lg-4">
+            <h2 class="mb-3">Search Locations</h2>
+            <form method="GET" action="{{ url_for('map_search') }}">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" placeholder="Search locations..." name="query" value="{{ query or '' }}">
+                    <button class="btn btn-primary" type="submit">Search</button>
+                </div>
+            </form>
+
+            <hr>
+            <h4>Results</h4>
+            <div class="list-group">
+                {% for loc in locations %}
+                    <a href="{{ url_for('location_detail', location_id=loc.id) }}" class="list-group-item list-group-item-action">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h5 class="mb-1">{{ loc.name }}</h5>
+                        </div>
+                        <p class="mb-1">{{ loc.description[:80] }}...</p>
+                    </a>
+                {% else %}
+                    <p>No locations found. Try searching for "Eiffel Tower" or "Colosseum".</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <h2 class="mb-3">Map</h2>
+            <div class="iframe-container" style="position: relative; overflow: hidden; width: 100%; padding-top: 75%;"> <iframe 
+                src="{{ url_for('map_embed', lat=request.args.get('lat'), lon=request.args.get('lon'), query=request.args.get('query')) }}" 
+                style="position: absolute; top: 0; left: 0; bottom: 0; right: 0; width: 100%; height: 100%; border: none;">
+              </iframe>
+            </div>
+        </div>
+    </div>
+{% endblock %}

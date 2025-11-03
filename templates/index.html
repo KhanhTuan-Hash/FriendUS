@@ -1,0 +1,54 @@
+{% extends "layout.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-lg-8">
+            <h2>Hi, {{ current_user.username }}!</h2>
+            
+            <div class="card mb-4">
+                <div class="card-body">
+                    {{ render_form(form, action=url_for('index')) }}
+                </div>
+            </div>
+        
+            <h3>Your Feed</h3>
+            <hr>
+            {% for post in posts %}
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <a href="{{ url_for('profile', username=post.author.username) }}">{{ post.author.username }}</a>
+                        <small class="text-muted float-end">{{ post.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">{{ post.body }}</p>
+                        {% if post.latitude and post.longitude %}
+                            <small class="text-muted">
+                                Location: ({{ post.latitude }}, {{ post.longitude }})
+                                <a href="{{ url_for('map_search', lat=post.latitude, lon=post.longitude) }}" class="ms-2">View on Map</a>
+                            </small>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <p>No posts yet! Create a post or see the map for suggestions.</p>
+            {% endfor %}
+        </div>
+
+        <div class="col-lg-4">
+            <h3 class="mb-3">Travel Suggestions</h3>
+            {% for suggestion in suggestions %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ suggestion.name }}</h5>
+                        <p class="card-text">{{ suggestion.description }}</p>
+                    </div>
+                    <div class="card-footer d-flex justify-content-between">
+                        <a href="{{ url_for('location_detail', location_id=suggestion.id) }}" class="btn btn-secondary btn-sm">View Details</a>
+                        <a href="{{ url_for('map_search', lat=suggestion.latitude, lon=suggestion.longitude) }}" class="btn btn-primary btn-sm">View on Map</a>
+                    </div>
+                </div>
+            {% endfor %}
+            </div>
+    </div>
+{% endblock %}

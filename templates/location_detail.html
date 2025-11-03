@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block content %}
+    <div class="p-4 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-3">
+            <h1 class="display-5 fw-bold">{{ location.name }}</h1>
+            <p class="col-md-8 fs-5">{{ location.description }}</p>
+            <hr>
+            <ul class="list-unstyled">
+                <li><strong>Hours:</strong> {{ location.hours or 'N/A' }}</li>
+                <li><strong>Phone:</strong> {{ location.phone or 'N/A' }}</li>
+                <li><strong>Website:</strong> <a href="{{ location.website or '#' }}" target="_blank">{{ location.website or 'N/A' }}</a></li>
+            </ul>
+            <a href="{{ url_for('map_search', lat=location.latitude, lon=location.longitude) }}" class="btn btn-primary btn-lg">View on Map</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-5">
+            <h3>Leave a Review</h3>
+            {{ render_form(form) }}
+        </div>
+
+        <div class="col-lg-7">
+            <h3>Reviews</h3>
+            <hr>
+            {% for review in reviews %}
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ '★' * review.rating }}{{ '☆' * (5 - review.rating) }}</h5>
+                        <p class="card-text">{{ review.body }}</T>
+                        <small class="text-muted">
+                            By <a href="{{ url_for('profile', username=review.author.username) }}">{{ review.author.username }}</a> 
+                            on {{ review.timestamp.strftime('%Y-%m-%d') }}
+                        </small>
+                    </div>
+                </div>
+            {% else %}
+                <p>No reviews yet. Be the first to leave one!</p>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
