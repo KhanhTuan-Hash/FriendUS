@@ -1,6 +1,19 @@
 {% extends "layout.html" %}
 
 {% block content %}
+<!-- 
+  Leaflet CSS & styles are now in layout.html, 
+  but we'll keep the <style> tag just in case.
+-->
+<style>
+    /* This style is needed for the map to be visible */
+    #map { 
+        height: 600px; 
+        border-radius: 0.25rem; 
+        border: 1px solid #dee2e6; 
+    }
+</style>
+
     <div class="row">
         <div class="col-lg-4">
             <h2 class="mb-3">Search Locations</h2>
@@ -10,30 +23,162 @@
                     <button class="btn btn-primary" type="submit">Search</button>
                 </div>
             </form>
-
-            <hr>
-            <h4>Results</h4>
-            <div class="list-group">
-                {% for loc in locations %}
-                    <a href="{{ url_for('location_detail', location_id=loc.id) }}" class="list-group-item list-group-item-action">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h5 class="mb-1">{{ loc.name }}</h5>
-                        </div>
-                        <p class="mb-1">{{ loc.description[:80] }}...</p>
-                    </a>
-                {% else %}
-                    <p>No locations found. Try searching for "Eiffel Tower" or "Colosseum".</p>
-                {% endfor %}
+            
+            <!-- "Find Me" button for user convenience -->
+            <div class="d-grid mb-3">
+                <button class="btn btn-secondary" id="find-me-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-geo-alt-fill" viewBox="0 0 16 16">
+                      <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                    </svg>
+                    Find My Location
+                </button>
             </div>
+            
+            <!-- NEW: Geolocation error message area -->
+            <div id="geo-error" class="text-danger small mb-3"></div>
+            
+            <hr>
+            <h4>Map Results</h4>
+            <p>Locations are shown as markers on the map. Click a marker for details.</p>
+            <p class="text-muted small">If the map is empty, try searching for "Eiffel Tower" or "Colosseum".</p>
+            <!-- NEW: JSON error message area -->
+            <div id="json-error" class="text-danger small mb-3"></div>
         </div>
 
         <div class="col-lg-8">
-            <h2 class="mb-3">Map</h2>
-            <div class="iframe-container" style="position: relative; overflow: hidden; width: 100%; padding-top: 75%;"> <iframe 
-                src="{{ url_for('map_embed', lat=request.args.get('lat'), lon=request.args.get('lon'), query=request.args.get('query')) }}" 
-                style="position: absolute; top: 0; left: 0; bottom: 0; right: 0; width: 100%; height: 100%; border: none;">
-              </iframe>
-            </div>
+            <h2 class="mb-3">Interactive Map</h2>
+            <!-- 
+              The data is passed from Flask/Jinja to the HTML here.
+              The 'data-locations' attribute is wrapped in single quotes
+              to safely contain the double-quoted JSON string.
+            -->
+            <div id="map" 
+                 data-default-lat="{{ default_lat if default_lat is defined and default_lat is not none else '' }}"
+                 data-default-lon="{{ default_lon if default_lon is defined and default_lon is not none else '' }}"
+                 data-locations='{{ locations_json|safe if locations_json is defined and locations_json else "[]" }}'
+            ></div>
         </div>
     </div>
+{% endblock %}
+
+<!-- 
+  FIX: Moved all JavaScript into the 'scripts' block,
+  which is defined in layout.html and loads *after*
+  the main libraries (Bootstrap, Socket.IO, Leaflet).
+  This should fix the Jinja rendering error.
+-->
+{% block scripts %}
+<script>
+    function initMap() {
+        // Check if Leaflet (L) is loaded (it should be, from layout.html)
+        if (typeof L === 'undefined') {
+            console.error("Leaflet.js is not loaded.");
+            // We can't proceed.
+            return;
+        }
+
+        const mapElement = document.getElementById('map');
+        const jsonErrorDiv = document.getElementById('json-error');
+        
+        // 1. Initialize the Map
+        let defaultLat = parseFloat(mapElement.dataset.defaultLat);
+        let defaultLon = parseFloat(mapElement.dataset.defaultLon);
+        let defaultZoom;
+        
+        if (isNaN(defaultLat) || isNaN(defaultLon)) {
+            defaultLat = 20;    // Default world view
+            defaultLon = 0;
+            defaultZoom = 2;
+        } else {
+            defaultZoom = 13;   // Zoom in if a specific lat was provided
+        }
+
+        var map = L.map('map').setView([defaultLat, defaultLon], defaultZoom);
+
+        // 2. Add Tile Layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // 3. Get location data from Flask
+        let locations = [];
+        var markers = [];
+
+        // --- FIX: Read from the data-locations attribute and parse ---
+        try {
+            // data-locations should contain a valid JSON string.
+            const locationsJsonString = mapElement.dataset.locations;
+            if (locationsJsonString) {
+                locations = JSON.parse(locationsJsonString);
+            }
+        } catch (e) {
+            console.error("Failed to parse locations JSON:", e);
+            console.error("Invalid JSON string from data-locations:", mapElement.dataset.locations);
+            jsonErrorDiv.textContent = "Error loading location data. The JSON is malformed.";
+        }
+        // --- END OF FIX ---
+
+        // 4. Add Markers for each location
+        if (locations && locations.length > 0) {
+            locations.forEach(function(loc) {
+                
+                // Add safety checks for loc properties
+                if (!loc || typeof loc.lat === 'undefined' || typeof loc.lon === 'undefined') {
+                    console.warn("Skipping invalid location data:", loc);
+                    return; // skip this iteration
+                }
+
+                let description = (loc.desc || loc.name || "No description available");
+                let title = (loc.name || "Unnamed Location");
+                let url = (loc.url || "#"); // Safety check for URL
+
+                const escapeHTML = (str) => {
+                    if (!str) return "";
+                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                };
+                
+                let safeTitle = escapeHTML(title);
+                let safeDesc = escapeHTML(description.substring(0, 75));
+
+                var marker = L.marker([loc.lat, loc.lon])
+                    .addTo(map)
+                    .bindPopup(
+                        `<div style="font-family: Arial, sans-serif; width: 200px;">
+                            <h5 style="margin-bottom: 5px;">${safeTitle}</h5>
+                            <p style="font-size: 13px; margin: 5px 0;">${safeDesc}...</p>
+                            <a href="${url}" class="btn btn-primary btn-sm d-block w-100" style="text-decoration: none;">View Details</a>
+                        </div>`
+                    );
+                markers.push(marker);
+            });
+
+            // 5. Auto-zoom to fit all markers
+            if (markers.length > 0) {
+                var group = new L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.3));
+            }
+        }
+
+        // 6. "Find Me" Button Logic
+        const geoErrorDiv = document.getElementById('geo-error'); 
+        document.getElementById('find-me-btn').addEventListener('click', function() {
+            geoErrorDiv.textContent = ''; 
+            navigator.geolocation.getCurrentPosition(function(position) {
+                var lat = position.coords.latitude;
+                var lon = position.coords.longitude;
+                
+                map.setView([lat, lon], 15);
+                L.marker([lat, lon]).addTo(map)
+                    .bindPopup("<strong>You are here!</strong>")
+                    .openPopup();
+
+            }, function(err) {
+                geoErrorDiv.textContent = 'Could not get your location. Error: ' + err.message;
+            });
+        });
+    }
+    
+    // Use DOMContentLoaded to call initMap
+    document.addEventListener('DOMContentLoaded', initMap);
+</script>
 {% endblock %}

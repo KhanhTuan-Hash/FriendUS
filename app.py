@@ -1,9 +1,10 @@
 import os
+import json
 from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_login import login_user, logout_user, current_user, login_required
-import folium
+from flask_socketio import SocketIO, send, emit, join_room, leave_room
 
 # Import extensions and models
 from ext import db, login_manager
@@ -24,6 +25,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'fr
 db.init_app(app)
 login_manager.init_app(app)
 bootstrap = Bootstrap5(app) 
+# Initialize SocketIO
+socketio = SocketIO(app)
 
 # --- Login Manager Helper ---
 @login_manager.user_loader
@@ -89,7 +92,7 @@ def login():
     form = LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
-        if user and user.password == form.password.data:
+        if user and user.password == form.password.data: # NOTE: In a real app, hash passwords!
             login_user(user, remember=form.remember.data)
             flash('You are now logged in!', 'success')
             return redirect(url_for('index'))
@@ -141,88 +144,56 @@ def account():
         
     return render_template('account.html', title='Account', form=form)
 
-# --- MAP/LOCATION ROUTES ---
+# --- MAP/LOCATION ROUTES (UPDATED) ---
 
 @app.route('/map')
 @login_required
 def map():
+    # Redirect to the main map search page
     return redirect(url_for('map_search'))
 
 @app.route('/map/search')
 @login_required
 def map_search():
     query = request.args.get('query')
+    # --- ADD THESE LINES to get lat/lon from URL ---
+    lat = request.args.get('lat', type=float)
+    lon = request.args.get('lon', type=float)
+    # --- END OF ADDED LINES ---
+    
     locations = []
     
     if query:
         locations = Location.query.filter(Location.name.ilike(f'%{query}%')).all()
     else:
         locations = Location.query.all()
-        
-    return render_template('map.html', title='Map Search', locations=locations, query=query)
-
-@app.route('/map_embed')
-@login_required
-def map_embed():
-    lat = request.args.get('lat', type=float)
-    lon = request.args.get('lon', type=float)
-    query = request.args.get('query')
-
-    if lat and lon:
-        map_location = [lat, lon]
-        map_zoom = 13
-    else:
-        map_location = [10.77, 106.66] # Default to Ho Chi Minh City
-        map_zoom = 11
-
-    m = folium.Map(location=map_location, zoom_start=map_zoom)
-
-    if lat and lon:
-        folium.Marker(
-            location=[lat, lon],
-            popup="Selected Location",
-            icon=folium.Icon(color='blue', icon='star')
-        ).add_to(m)
     
-    if query:
-        locations = Location.query.filter(Location.name.ilike(f'%{query}%')).all()
-    else:
-        locations = Location.query.all()
-
-    # --- THIS IS THE UPDATED SECTION ---
-    # Create the more interactive popups
+    # --- THIS IS THE KEY CHANGE ---
+    # Serialize location data for JavaScript (Leaflet)
+    locations_data = []
     for loc in locations:
-        
-        # Create a more detailed HTML for the popup
-        popup_html = f"""
-        <div style='width: 220px; font-family: Arial, sans-serif;'>
-            <h5 style='margin-bottom: 5px; font-size: 16px;'>{loc.name}</h5>
-            <p style='margin: 5px 0; font-size: 12px; color: #333;'>{loc.description[:75]}...</p>
-            <p style='margin: 5px 0; font-size: 12px;'><strong>Hours:</strong> {loc.hours or 'N/A'}</p>
-            <a href='{url_for('location_detail', location_id=loc.id)}' target='_top' style='
-                display: block; 
-                width: 95%; 
-                padding: 8px 0; 
-                margin-top: 10px;
-                background-color: #0d6efd; 
-                color: white; 
-                text-align: center; 
-                text-decoration: none; 
-                border-radius: 5px;
-                font-size: 14px;
-            '>View Details</a>
-        </div>
-        """
-        
-        folium.Marker(
-            location=[loc.latitude, loc.longitude],
-            # We set a max width for the popup so it looks clean
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=loc.name
-        ).add_to(m)
-    # --- END OF UPDATED SECTION ---
+        locations_data.append({
+            'id': loc.id,
+            'name': loc.name,
+            'desc': loc.description,
+            'lat': loc.latitude,
+            'lon': loc.longitude,
+            'url': url_for('location_detail', location_id=loc.id)
+        })
 
-    return m._repr_html_()
+    # Pass the JSON string and map defaults to the template
+    return render_template('map.html', 
+                           title='Map Search', 
+                           query=query,
+                           locations_json=json.dumps(locations_data),
+                           # --- ADD THESE LINES to pass defaults ---
+                           default_lat=lat,
+                           default_lon=lon
+                           # --- END OF ADDED LINES ---
+                           )
+
+# Note: The '/map_embed' route is no longer needed, as Leaflet
+# will render the map directly in the 'map.html' template.
 
 @app.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required
@@ -246,9 +217,53 @@ def location_detail(location_id):
     
     return render_template('location_detail.html', title=location.name, location=location, form=form, reviews=reviews)
 
+# --- CHAT ROUTES (NEW) ---
+
+@app.route('/chat')
+@login_required
+def chat():
+    # Renders the chat interface
+    return render_template('chat.html', title='Group Chat')
+
+# --- SOCKETIO EVENT HANDLERS (NEW) ---
+
+@socketio.on('connect')
+def handle_connect():
+    """Event handler for when a user connects."""
+    if current_user.is_authenticated:
+        join_room('general')
+        emit('status', 
+             {'msg': f'{current_user.username} has joined the chat.'}, 
+             to='general')
+    else:
+        # Handle unauthenticated connection if necessary
+        pass
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Event handler for when a user disconnects."""
+    if current_user.is_authenticated:
+        leave_room('general')
+        emit('status', 
+             {'msg': f'{current_user.username} has left the chat.'}, 
+             to='general')
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    """Event handler for when a user sends a message."""
+    if current_user.is_authenticated:
+        message_content = data.get('msg')
+        if message_content:
+            emit('receive_message', {
+                'msg': message_content,
+                'username': current_user.username,
+                'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M')
+            }, to='general')
+
 # --- Run the App ---
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         populate_db() 
-    app.run(debug=True)
+    # Use socketio.run() to enable WebSockets and the web server
+    socketio.run(app, debug=True)

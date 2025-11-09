@@ -6,3 +6,5 @@ bootstrap-flask
 email_validator
 extensions
 folium
+flask-socketio
+eventlet
