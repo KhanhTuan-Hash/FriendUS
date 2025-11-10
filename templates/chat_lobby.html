@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-4">
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>Create New Room</h3>
+            </div>
+            <div class="card-body">
+                {{ render_form(form, action=url_for('chat')) }}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>My Rooms</h3>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for room in my_rooms %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="{{ url_for('chat_room', room_name=room.name) }}">{{ room.name }}</a>
+                        <span class="badge bg-primary rounded-pill">{{ room.members.count() }}</span>
+                    </li>
+                {% else %}
+                    <li class="list-group-item">You haven't joined any rooms.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+    </div>
+
+    <div class="col-lg-8">
+        <h2>All Rooms</h2>
+        <div class="list-group">
+            {% for room in all_rooms %}
+                <div class="list-group-item list-group-item-action flex-column align-items-start mb-3 shadow-sm">
+                    <div class="d-flex w-100 justify-content-between">
+                        <a href="{{ url_for('chat_room', room_name=room.name) }}" class="text-decoration-none">
+                            <h5 class="mb-1 text-primary">{{ room.name }}</h5>
+                        </a>
+                        
+                        <div>
+                            <small class="text-muted me-3">{{ room.members.count() }} member(s)</small>
+                            {% if room.creator == current_user %}
+                                <form action="{{ url_for('delete_chat_room', room_id=room.id) }}" method="POST" style="display: inline;" 
+                                      onsubmit="return confirm('Are you sure you want to permanently delete this room and all its messages? This cannot be undone.');">
+                                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                </form>
+                            {% elif room.name == 'general' %}
+                                {% endif %}
+                        </div>
+                        </div>
+                    <p class="mb-1">{{ room.description or "No description." }}</p>
+                    <small class="text-muted">Created by: {{ room.creator.username if room.creator else 'System' }}</small>
+                </div>
+            {% else %}
+                <p>No rooms found. Why not create one?</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
