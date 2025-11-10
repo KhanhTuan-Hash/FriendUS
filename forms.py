@@ -3,6 +3,7 @@ from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextA
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional, NumberRange
 from flask_login import current_user
 from models import User 
+from models import User, Room
 
 class RegisterForm(FlaskForm):
     username = StringField('Username',
@@ -56,10 +57,21 @@ class UpdateAccountForm(FlaskForm):
             if user:
                 raise ValidationError('That email is already in use.')
 
-# --- THIS IS THE CLASS YOU ARE MISSING ---
 class ReviewForm(FlaskForm):
     rating = SelectField('Rating', 
                          choices=[('5', '5 Stars'), ('4', '4 Stars'), ('3', '3 Stars'), ('2', '2 Stars'), ('1', '1 Star')], 
                          validators=[DataRequired()])
     body = TextAreaField('Your Review', validators=[DataRequired(), Length(min=10)])
     submit = SubmitField('Submit Review')
+class CreateRoomForm(FlaskForm):
+    name = StringField('Room Name', 
+                         validators=[DataRequired(), Length(min=3, max=50)])
+    description = TextAreaField('Description', 
+                                validators=[Optional(), Length(max=200)])
+    submit = SubmitField('Create Room')
+
+    def validate_name(self, name):
+        # Check if room name is already taken
+        room = Room.query.filter_by(name=name.data).first()
+        if room:
+            raise ValidationError('That room name is taken. Please choose another.')
