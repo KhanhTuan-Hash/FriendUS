@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<!-- 
-  Leaflet CSS & styles are now in layout.html, 
-  but we'll keep the <style> tag just in case.
--->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+
 <style>
-    /* This style is needed for the map to be visible */
+    /* We still keep this style here
+       to guarantee the map is visible 
+    */
     #map { 
         height: 600px; 
         border-radius: 0.25rem; 
@@ -16,169 +16,201 @@
 
     <div class="row">
         <div class="col-lg-4">
-            <h2 class="mb-3">Search Locations</h2>
+            <h2 class="mb-3">Search Database</h2>
             <form method="GET" action="{{ url_for('map_search') }}">
                 <div class="input-group mb-3">
-                    <input type="text" class="form-control" placeholder="Search locations..." name="query" value="{{ query or '' }}">
+                    <input type="text" class="form-control" placeholder="Search your locations..." name="query" value="{{ query or '' }}">
                     <button class="btn btn-primary" type="submit">Search</button>
                 </div>
             </form>
             
-            <!-- "Find Me" button for user convenience -->
             <div class="d-grid mb-3">
                 <button class="btn btn-secondary" id="find-me-btn">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-geo-alt-fill" viewBox="0 0 16 16">
-                      <path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
+                      <path d="M8 16s6-5-6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>
                     </svg>
                     Find My Location
                 </button>
             </div>
             
-            <!-- NEW: Geolocation error message area -->
             <div id="geo-error" class="text-danger small mb-3"></div>
             
             <hr>
-            <h4>Map Results</h4>
-            <p>Locations are shown as markers on the map. Click a marker for details.</p>
-            <p class="text-muted small">If the map is empty, try searching for "Eiffel Tower" or "Colosseum".</p>
-            <!-- NEW: JSON error message area -->
-            <div id="json-error" class="text-danger small mb-3"></div>
+            <h4>Map Guide</h4>
+            <p class="text-muted small">
+                Use the new search bar on the <strong>top-right of the map</strong> to search for any address in the world.
+            </p>
+            <p class="text-muted small">
+                Use the <strong>"Search your locations"</strong> bar above to find places from your database (e.g., "Eiffel Tower").
+            </p>
         </div>
 
         <div class="col-lg-8">
             <h2 class="mb-3">Interactive Map</h2>
-            <!-- 
-              The data is passed from Flask/Jinja to the HTML here.
-              The 'data-locations' attribute is wrapped in single quotes
-              to safely contain the double-quoted JSON string.
-            -->
+            
             <div id="map" 
                  data-default-lat="{{ default_lat if default_lat is defined and default_lat is not none else '' }}"
                  data-default-lon="{{ default_lon if default_lon is defined and default_lon is not none else '' }}"
-                 data-locations='{{ locations_json|safe if locations_json is defined and locations_json else "[]" }}'
+                 data-locations='{{ locations_data|tojson|safe if locations_data is defined else "[]" }}'
             ></div>
+
         </div>
     </div>
 {% endblock %}
 
-<!-- 
-  FIX: Moved all JavaScript into the 'scripts' block,
-  which is defined in layout.html and loads *after*
-  the main libraries (Bootstrap, Socket.IO, Leaflet).
-  This should fix the Jinja rendering error.
--->
+
 {% block scripts %}
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
 <script>
     function initMap() {
-        // Check if Leaflet (L) is loaded (it should be, from layout.html)
-        if (typeof L === 'undefined') {
-            console.error("Leaflet.js is not loaded.");
-            // We can't proceed.
-            return;
-        }
-
         const mapElement = document.getElementById('map');
-        const jsonErrorDiv = document.getElementById('json-error');
         
-        // 1. Initialize the Map
+        // 1. Initialize Map
         let defaultLat = parseFloat(mapElement.dataset.defaultLat);
         let defaultLon = parseFloat(mapElement.dataset.defaultLon);
         let defaultZoom;
         
         if (isNaN(defaultLat) || isNaN(defaultLon)) {
-            defaultLat = 20;    // Default world view
+            defaultLat = 20;    // World view
             defaultLon = 0;
             defaultZoom = 2;
         } else {
-            defaultZoom = 13;   // Zoom in if a specific lat was provided
+            defaultZoom = 13;   // Zoom in
         }
 
         var map = L.map('map').setView([defaultLat, defaultLon], defaultZoom);
 
-        // 2. Add Tile Layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // 2. Add Map Layers
+        var streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        });
+        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri'
+        });
+        streetLayer.addTo(map);
+        var baseMaps = {
+            "Streets": streetLayer,
+            "Satellite": satelliteLayer
+        };
+        L.control.layers(baseMaps).addTo(map);
 
-        // 3. Get location data from Flask
+
+        // 3. --- NEW: Add Address Search Bar (Geocoder) ---
+        var geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false 
+        })
+        .on('markgeocode', function(e) {
+            var bbox = e.geocode.bbox;
+            var center = e.geocode.center;
+            map.fitBounds(bbox); 
+            L.marker(center)
+                .addTo(map)
+                .bindPopup(e.geocode.name)
+                .openPopup();
+        })
+        .addTo(map);
+
+
+        // 4. Parse DB Locations JSON
         let locations = [];
-        var markers = [];
-
-        // --- FIX: Read from the data-locations attribute and parse ---
+        const locationsJSON = mapElement.dataset.locations;
         try {
-            // data-locations should contain a valid JSON string.
-            const locationsJsonString = mapElement.dataset.locations;
-            if (locationsJsonString) {
-                locations = JSON.parse(locationsJsonString);
-            }
+            locations = JSON.parse(locationsJSON);
         } catch (e) {
             console.error("Failed to parse locations JSON:", e);
-            console.error("Invalid JSON string from data-locations:", mapElement.dataset.locations);
-            jsonErrorDiv.textContent = "Error loading location data. The JSON is malformed.";
+            document.getElementById('geo-error').textContent = 'Error loading location data. Template error?';
         }
-        // --- END OF FIX ---
+        
+        // 5. Create a Marker Cluster Group for DB Locations
+        var markers = L.markerClusterGroup();
 
-        // 4. Add Markers for each location
+        // 6. Add DB Markers
         if (locations && locations.length > 0) {
             locations.forEach(function(loc) {
-                
-                // Add safety checks for loc properties
                 if (!loc || typeof loc.lat === 'undefined' || typeof loc.lon === 'undefined') {
                     console.warn("Skipping invalid location data:", loc);
-                    return; // skip this iteration
+                    return; 
                 }
-
-                let description = (loc.desc || loc.name || "No description available");
-                let title = (loc.name || "Unnamed Location");
-                let url = (loc.url || "#"); // Safety check for URL
-
-                const escapeHTML = (str) => {
-                    if (!str) return "";
-                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-                };
                 
-                let safeTitle = escapeHTML(title);
-                let safeDesc = escapeHTML(description.substring(0, 75));
+                const popupDiv = document.createElement('div');
+                popupDiv.style.fontFamily = 'Arial, sans-serif';
+                popupDiv.style.width = '200px';
+
+                const title = document.createElement('h5');
+                title.style.marginBottom = '5px';
+                title.textContent = loc.name || "Unnamed Location";
+
+                const desc = document.createElement('p');
+                desc.style.fontSize = '13px';
+                desc.style.margin = '5px 0';
+                desc.textContent = (loc.desc || loc.name || "No description").substring(0, 75) + '...';
+
+                const link = document.createElement('a');
+                link.href = loc.url || "#";
+                link.className = 'btn btn-primary btn-sm d-block w-100';
+                link.style.textDecoration = 'none';
+                link.textContent = 'View Details';
+                
+                popupDiv.appendChild(title);
+                popupDiv.appendChild(desc);
+                popupDiv.appendChild(link);
 
                 var marker = L.marker([loc.lat, loc.lon])
-                    .addTo(map)
-                    .bindPopup(
-                        `<div style="font-family: Arial, sans-serif; width: 200px;">
-                            <h5 style="margin-bottom: 5px;">${safeTitle}</h5>
-                            <p style="font-size: 13px; margin: 5px 0;">${safeDesc}...</p>
-                            <a href="${url}" class="btn btn-primary btn-sm d-block w-100" style="text-decoration: none;">View Details</a>
-                        </div>`
-                    );
-                markers.push(marker);
+                    .bindPopup(popupDiv);
+                markers.addLayer(marker);
             });
 
-            // 5. Auto-zoom to fit all markers
-            if (markers.length > 0) {
-                var group = new L.featureGroup(markers);
-                map.fitBounds(group.getBounds().pad(0.3));
+            // 7. Add CLUSTER GROUP to map
+            map.addLayer(markers);
+
+            // 8. Auto-zoom
+            if (isNaN(defaultLat) && isNaN(defaultLon)) {
+                 setTimeout(function() {
+                    try {
+                         map.fitBounds(markers.getBounds().pad(0.3));
+                    } catch (e) {
+                        console.warn("Could not auto-zoom:", e);
+                    }
+                }, 100);
             }
         }
-
-        // 6. "Find Me" Button Logic
+        
+        // 9. "Find Me" Button
         const geoErrorDiv = document.getElementById('geo-error'); 
         document.getElementById('find-me-btn').addEventListener('click', function() {
             geoErrorDiv.textContent = ''; 
             navigator.geolocation.getCurrentPosition(function(position) {
                 var lat = position.coords.latitude;
                 var lon = position.coords.longitude;
-                
                 map.setView([lat, lon], 15);
                 L.marker([lat, lon]).addTo(map)
                     .bindPopup("<strong>You are here!</strong>")
                     .openPopup();
-
             }, function(err) {
+                // --- THIS IS THE FIX ---
+                // The broken text is removed.
                 geoErrorDiv.textContent = 'Could not get your location. Error: ' + err.message;
+                // --- END FIX ---
             });
         });
+
+        // --- Fix for broken tiles ---
+        // Force the map to check its size and redraw *after*
+        // all other elements have been added.
+        setTimeout(function() {
+            map.invalidateSize();
+        }, 100);
     }
     
-    // Use DOMContentLoaded to call initMap
-    document.addEventListener('DOMContentLoaded', initMap);
+    // Run the initMap function
+    window.addEventListener('load', function() {
+        if (typeof L !== 'undefined' && typeof L.markerClusterGroup !== 'undefined' && typeof L.Control.geocoder !== 'undefined') {
+            initMap();
+        } else {
+            console.error('Leaflet, MarkerCluster, or Geocoder libraries failed to load.');
+            document.getElementById('geo-error').textContent = 'Error: Map libraries failed to load. Please refresh the page.';
+        }
+    });
 </script>
 {% endblock %}
