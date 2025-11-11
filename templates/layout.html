@@ -10,14 +10,14 @@
     {% endif %}
     {{ bootstrap.load_css() }}
     
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhOIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
      
-    <!-- Leaflet MarkerCluster CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
     <style>
         /* Set a default height for the map */
@@ -45,7 +45,6 @@
               <li class="nav-item">
                 <a class="nav-link" href="{{ url_for('map') }}">Map</a>
               </li>
-              <!-- Add Chat Link -->
               <li class="nav-item">
                 <a class="nav-link" href="{{ url_for('chat') }}">Chat</a>
               </li>
@@ -85,18 +84,14 @@
 
     {{ bootstrap.load_js() }}
     
-    <!-- Socket.IO Client Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 
-    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
      crossorigin=""></script>
      
-    <!-- Leaflet MarkerCluster JS -->
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
-    <!-- Block for page-specific scripts -->
     {% block scripts %}{% endblock %}
   </body>
 </html>
