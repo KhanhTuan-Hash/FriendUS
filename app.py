@@ -5,7 +5,8 @@ from flask import Flask, render_template, redirect, url_for, flash, request, jso
 from flask_bootstrap import Bootstrap5
 from flask_login import login_user, logout_user, current_user, login_required
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
-
+# --- ĐÂY LÀ PHẦN ĐÃ CẬP NHẬT ---
+from sqlalchemy import func
 # Import extensions and models
 from ext import db, login_manager
 # UPDATED: Import all models, including the new Room model
@@ -38,23 +39,25 @@ def load_user(user_id):
 # --- Function to populate database with locations ---
 def populate_db():
     if not Location.query.first():
+        # --- CẬP NHẬT: Thêm 'type' và 'price_range' cho các địa điểm mẫu ---
         loc1 = Location(
-            name="Eiffel Tower",
-            description="Iconic wrought-iron landmark in Paris, France.",
-            latitude=48.8584, longitude=2.2945,
-            hours="9:00 AM - 10:45 PM", phone="+33 892 70 12 39", website="https://www.toureiffel.paris"
+            name="Eiffel Tower", description="Iconic wrought-iron landmark in Paris, France.",
+            latitude=48.8584, longitude=2.2945, hours="9:00 AM - 10:45 PM", 
+            phone="+33 892 70 12 39", website="https://www.toureiffel.paris",
+            type="Attraction", price_range=3 # ($$$)
         )
         loc2 = Location(
-            name="Colosseum",
-            description="Ancient oval amphitheatre in the centre of Rome, Italy.",
-            latitude=41.8902, longitude=12.4922,
-            hours="8:30 AM - 7:00 PM", phone="+39 06 3996 7700", website="https://colosseo.it"
+            name="Colosseum", description="Ancient oval amphitheatre in the centre of Rome, Italy.",
+            latitude=41.8902, longitude=12.4922, hours="8:30 AM - 7:00 PM", 
+            phone="+39 06 3996 7700", website="https://colosseo.it",
+            type="Attraction", price_range=2 # ($$)
         )
         loc3 = Location(
             name="Ho Chi Minh City University of Technology",
             description="A member of Vietnam National University, Ho Chi Minh City.",
-            latitude=10.7729, longitude=106.6584,
-            hours="7:00 AM - 5:00 PM", phone="+84 28 3864 7256", website="https://hcmut.edu.vn"
+            latitude=10.7729, longitude=106.6584, hours="7:00 AM - 5:00 PM", 
+            phone="+84 28 3864 7256", website="https://hcmut.edu.vn",
+            type="Education", price_range=1 # ($)
         )
         db.session.add_all([loc1, loc2, loc3])
         db.session.commit()
@@ -71,6 +74,7 @@ def populate_db():
 
 # --- Routes ---
 
+# --- ROUTE NÀY ĐÃ ĐƯỢC CẬP NHẬT HOÀN TOÀN ---
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/index', methods=['GET', 'POST'])
 @login_required
@@ -89,9 +93,29 @@ def index():
         return redirect(url_for('index'))
     
     posts = Post.query.order_by(Post.timestamp.desc()).all()
-    suggestions = Location.query.limit(3).all()
+    
+    # --- ĐÂY LÀ LOGIC ĐÃ SỬA ---
+    
+    # 1. Định nghĩa cách tính rating trung bình
+    # Dùng func.coalesce để đổi giá trị NULL (chưa có review) thành 0
+    avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
+
+    # 2. Truy vấn TẤT CẢ địa điểm, dùng 'outerjoin'
+    # 'outerjoin' sẽ lấy tất cả địa điểm, ngay cả khi chúng không có review
+    suggestions_query = db.session.query(Location, avg_rating) \
+        .outerjoin(Review, Location.id == Review.location_id) \
+        .group_by(Location.id) \
+        .order_by(avg_rating.desc()) \
+        .limit(5)
+        
+    suggestions = suggestions_query.all() 
+    # Giờ đây chúng ta không cần fallback nữa
+    
+    # --- KẾT THÚC PHẦN SỬA ---
     
     return render_template('index.html', title='Home', form=form, posts=posts, suggestions=suggestions)
+# --- KẾT THÚC ROUTE ĐÃ CẬP NHẬT ---
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -160,41 +184,72 @@ def account():
 def map():
     return redirect(url_for('map_search'))
 
+# --- ROUTE NÀY ĐÃ ĐƯỢC LÀM LẠI HOÀN TOÀN ---
 @app.route('/map/search')
 @login_required
 def map_search():
-    query = request.args.get('query')
-    # Get lat/lon from query params for default view
+    # Lấy các tham số từ URL
+    query_name = request.args.get('query')
+    query_type = request.args.get('type')
+    query_price = request.args.get('price', type=int)
+    query_rating = request.args.get('rating', type=int)
+    
+    # Lấy lat/lon để căn giữa bản đồ
     lat = request.args.get('lat', type=float)
     lon = request.args.get('lon', type=float)
     
-    locations = []
-    
-    if query:
-        locations = Location.query.filter(Location.name.ilike(f'%{query}%')).all()
-    else:
-        locations = Location.query.all()
+    # Bắt đầu truy vấn
+    avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
+    query = db.session.query(Location, avg_rating) \
+              .outerjoin(Review, Location.id == Review.location_id) \
+              .group_by(Location.id)
+
+    # 1. Lọc theo Tên (Search by name)
+    if query_name:
+        query = query.filter(Location.name.ilike(f'%{query_name}%'))
         
-    # Serialize location data for JavaScript
+    # 2. Lọc theo Loại (Filter by type)
+    if query_type:
+        query = query.filter(Location.type == query_type)
+        
+    # 3. Lọc theo Giá (Filter by price)
+    if query_price:
+        query = query.filter(Location.price_range == query_price)
+        
+    # 4. Lọc theo Rating (Filter by rating)
+    if query_rating:
+        # Dùng .having() vì 'avg_rating' là một trường được tính toán
+        query = query.having(avg_rating >= query_rating) # Đã sửa: filter -> having
+
+    # Thực thi truy vấn
+    locations_with_rating = query.all()
+    
+    # Chuẩn bị dữ liệu cho JavaScript
     locations_data = []
-    for loc in locations:
+    for loc, rating in locations_with_rating:
         locations_data.append({
             'id': loc.id,
             'name': loc.name,
             'desc': loc.description,
             'lat': loc.latitude,
             'lon': loc.longitude,
-            'url': url_for('location_detail', location_id=loc.id)
+            'url': url_for('location_detail', location_id=loc.id),
+            'rating': float(rating) # Thêm rating vào
         })
     
     return render_template('map.html', 
                            title='Map Search', 
-                           query=query,
-                           # Pass data for Leaflet.js
+                           # Gửi lại các giá trị lọc để giữ chúng trong form
+                           query=query_name,
+                           query_type=query_type,
+                           query_price=query_price,
+                           query_rating=query_rating,
                            locations_data=locations_data,
                            default_lat=lat,
                            default_lon=lon
                            )
+# --- KẾT THÚC ROUTE ĐÃ CẬP NHẬT ---
+
 
 @app.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required
@@ -202,12 +257,15 @@ def location_detail(location_id):
     location = Location.query.get_or_404(location_id)
     form = ReviewForm()
     
+    # --- MỚI: Kiểm tra xem người dùng đã yêu thích chưa ---
+    is_favorited = current_user.favorite_locations.filter(
+        Location.id == location.id
+    ).count() > 0
+    
     if form.validate_on_submit():
         review = Review(
-            body=form.body.data,
-            rating=int(form.rating.data),
-            author=current_user,
-            location=location
+            body=form.body.data, rating=int(form.rating.data),
+            author=current_user, location=location
         )
         db.session.add(review)
         db.session.commit()
@@ -216,7 +274,34 @@ def location_detail(location_id):
     
     reviews = Review.query.filter_by(location=location).order_by(Review.timestamp.desc()).all()
     
-    return render_template('location_detail.html', title=location.name, location=location, form=form, reviews=reviews)
+    return render_template('location_detail.html', 
+                           title=location.name, 
+                           location=location, 
+                           form=form, 
+                           reviews=reviews,
+                           is_favorited=is_favorited) # Gửi trạng thái yêu thích
+
+# --- CÁC ROUTE MỚI CHO TÍNH NĂNG YÊU THÍCH ---
+@app.route('/location/favorite/<int:location_id>', methods=['POST'])
+@login_required
+def add_favorite(location_id):
+    location = Location.query.get_or_404(location_id)
+    if not current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.append(location)
+        db.session.commit()
+        flash(f'Added {location.name} to favorites!', 'success')
+    return redirect(url_for('location_detail', location_id=location_id))
+
+@app.route('/location/unfavorite/<int:location_id>', methods=['POST'])
+@login_required
+def remove_favorite(location_id):
+    location = Location.query.get_or_404(location_id)
+    if current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.remove(location)
+        db.session.commit()
+        flash(f'Removed {location.name} from favorites.', 'info')
+    return redirect(url_for('location_detail', location_id=location_id))
+
 
 # --- CHAT ROUTES (UPDATED) ---
 
@@ -407,7 +492,26 @@ def handle_disconnect():
                  {'users': get_users_in_room(room_name)}, 
                  to=room_name)
             break
+        
+@socketio.on('typing')
+def handle_typing(data):
+    """Broadcasts to others that the user is typing."""
+    if current_user.is_authenticated:
+        room_name = data['room']
+        emit('typing_status', 
+             {'username': current_user.username, 'isTyping': True}, 
+             to=room_name, 
+             include_self=False) # Send to everyone EXCEPT the user who is typing
 
+@socketio.on('stopped_typing')
+def handle_stopped_typing(data):
+    """Broadcasts to others that the user has stopped typing."""
+    if current_user.is_authenticated:
+        room_name = data['room']
+        emit('typing_status', 
+             {'username': current_user.username, 'isTyping': False}, 
+             to=room_name, 
+             include_self=False)
 # --- Run the App ---
 if __name__ == '__main__':
     with app.app_context():

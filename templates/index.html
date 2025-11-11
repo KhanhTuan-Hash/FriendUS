@@ -36,19 +36,32 @@
         </div>
 
         <div class="col-lg-4">
-            <h3 class="mb-3">Travel Suggestions</h3>
-            {% for suggestion in suggestions %}
-                <div class="card mb-3">
+            <h3 class="mb-3">⭐ Top Rated Places</h3>
+            
+            {% for location, rating in suggestions %}
+                <div class="card mb-3 shadow-sm">
                     <div class="card-body">
-                        <h5 class="card-title">{{ suggestion.name }}</h5>
-                        <p class="card-text">{{ suggestion.description }}</p>
+                        <h5 class="card-title">{{ location.name }}</h5>
+                        
+                        {% if rating > 0 %}
+                            <h6 class="card-subtitle mb-2 text-warning">
+                                {{ '★' * rating|round|int }}{{ '☆' * (5 - rating|round|int) }}
+                                <span class="text-muted small">({{ rating|round(1) }} avg)</span>
+                            </h6>
+                        {% else %}
+                            <h6 class="card-subtitle mb-2 text-muted">Not reviewed yet</h6>
+                        {% endif %}
+                        
+                        <p class="card-text">{{ location.description | truncate(100) }}</p>
                     </div>
-                    <div class="card-footer d-flex justify-content-between">
-                        <a href="{{ url_for('location_detail', location_id=suggestion.id) }}" class="btn btn-secondary btn-sm">View Details</a>
-                        <a href="{{ url_for('map_search', lat=suggestion.latitude, lon=suggestion.longitude) }}" class="btn btn-primary btn-sm">View on Map</a>
+                    <div class="card-footer d-flex justify-content-between bg-light">
+                        <a href="{{ url_for('location_detail', location_id=location.id) }}" class="btn btn-secondary btn-sm">View Details</a>
+                        <a href="{{ url_for('map_search', lat=location.latitude, lon=location.longitude) }}" class="btn btn-primary btn-sm">View on Map</a>
                     </div>
                 </div>
+            {% else %}
+                <p class="text-muted">No locations added to the database yet.</p>
             {% endfor %}
-            </div>
-    </div>
+        </div>
+        </div>
 {% endblock %}

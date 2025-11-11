@@ -2,8 +2,13 @@ from ext import db
 from flask_login import UserMixin
 from datetime import datetime
 
-# --- Association Table for Users and Rooms ---
-# This links users to the rooms they are members of
+# --- BẢNG QUAN HỆ MỚI CHO "YÊU THÍCH" ---
+user_favorites = db.Table('user_favorites',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('location_id', db.Integer, db.ForeignKey('location.id'), primary_key=True)
+)
+
+# --- Bảng quan hệ cho Thành viên phòng chat (Giữ nguyên) ---
 room_members = db.Table('room_members',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('room_id', db.Integer, db.ForeignKey('room.id'), primary_key=True)
@@ -20,12 +25,14 @@ class User(UserMixin, db.Model):
     reviews = db.relationship('Review', backref='author', lazy=True)
     messages = db.relationship('Message', backref='author', lazy=True)
     
-    # Relationship to rooms user is a member of
     rooms = db.relationship('Room', secondary=room_members,
                             back_populates='members', lazy='dynamic')
     
-    # --- NEW: Add relationship for created rooms ---
     created_rooms = db.relationship('Room', back_populates='creator', lazy='dynamic')
+
+    # --- MỐI QUAN HỆ YÊU THÍCH MỚI ---
+    favorite_locations = db.relationship('Location', secondary=user_favorites,
+                                         back_populates='favorited_by', lazy='dynamic')
 
     def __repr__(self):
         return f"User('{self.username}', '{self.email}')"
@@ -51,8 +58,18 @@ class Location(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     website = db.Column(db.String(100), nullable=True)
     
+    # --- CÁC TRƯỜNG MỚI ĐỂ LỌC ---
+    # Ví dụ: 'Restaurant', 'Hotel', 'Attraction'
+    type = db.Column(db.String(50), nullable=True, index=True)
+    # Ví dụ: 1 ($), 2 ($$), 3 ($$$)
+    price_range = db.Column(db.Integer, nullable=True)
+    
     # Relationship
     reviews = db.relationship('Review', backref='location', lazy=True)
+
+    # --- MỐI QUAN HỆ YÊU THÍCH MỚI ---
+    favorited_by = db.relationship('User', secondary=user_favorites,
+                                   back_populates='favorite_locations', lazy='dynamic')
 
     def __repr__(self):
         return f"Location('{self.name}')"

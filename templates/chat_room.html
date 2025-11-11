@@ -1,8 +1,10 @@
 {% extends "layout.html" %}
 
 {% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
 <style>
-    /* Modern chat styles */
+    /* --- NÂNG CẤP CHỦ ĐỀ DU LỊCH --- */
     #chat-container {
         display: flex;
         flex-direction: row;
@@ -11,108 +13,124 @@
         border-radius: 0.375rem;
         overflow: hidden;
     }
-
-    /* Sidebar for user list */
     #user-sidebar {
         flex: 0 0 250px;
-        background-color: #f8f9fa;
+        background-color: #f7f3f0; /* Màu kem/cát nhạt */
         border-right: 1px solid #dee2e6;
         padding: 1rem;
         overflow-y: auto;
     }
-
     #user-sidebar h5 {
         border-bottom: 1px solid #ccc;
         padding-bottom: 0.5rem;
     }
-
     #user-sidebar .list-group-item {
         border: none;
         padding: 0.5rem 0.25rem;
         font-weight: 500;
+        background-color: transparent; /* Nền trong suốt */
     }
     #user-sidebar .list-group-item .online-dot {
         height: 8px;
         width: 8px;
-        background-color: #28a745; /* green */
+        background-color: #28a745;
         border-radius: 50%;
         display: inline-block;
         margin-right: 8px;
     }
-
-    /* Main chat area */
     #chat-main {
         flex-grow: 1;
         display: flex;
         flex-direction: column;
         height: 100%;
-    }
+        position: relative;
+        
+        /* Chúng ta dùng 'url_for' của Jinja2 để lấy đúng đường dẫn ảnh */
+        background-image: url("{{ url_for('static', filename='img/background-chat.jpg') }}");
 
-    /* Message display area */
+        background-size: cover;
+        background-position: center;
+    }
     #messages {
         flex-grow: 1;
         overflow-y: scroll;
         padding: 1rem;
         display: flex;
         flex-direction: column;
-        background-color: #ffffff;
+        
+        /* === ĐÂY LÀ PHẦN SỬA LỖI OPACITY === */
+        /* Giảm từ 0.9 xuống 0.75 để trong suốt hơn */
+        background-color: rgba(255, 255, 255, 0.75);
+        /* ================================= */
     }
-
-    /* Message bubbles */
     .message-bubble {
         max-width: 75%;
         padding: 0.5rem 1rem;
         margin-bottom: 0.5rem;
         border-radius: 1rem;
         word-wrap: break-word;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08); /* Bóng mờ đẹp hơn */
     }
-
+    .message-bubble img {
+        max-width: 100%;
+        border-radius: 0.5rem;
+        margin-top: 5px;
+    }
     .message-self {
         align-self: flex-end;
-        background-color: #0d6efd; /* bootstrap primary */
+        background-color: #007bff; /* Màu xanh dương (Bầu trời/Biển) */
         color: white;
         border-bottom-right-radius: 0;
     }
-
     .message-other {
         align-self: flex-start;
-        background-color: #e9ecef; /* bootstrap light grey */
+        background-color: #ffffff; /* Màu trắng */
         color: #212529;
+        border: 1px solid #f0f0f0;
         border-bottom-left-radius: 0;
     }
-    
     .message-info {
         font-size: 0.75rem;
         color: #6c757d;
         margin-bottom: 0.25rem;
     }
-    .message-info-self { text-align: right; }
+    .message-info-self { text-align: right; color: rgba(255,255,255,0.85); }
     .message-info-other { text-align: left; }
-
-    /* Status message (join/leave) */
     .message-status {
         align-self: center;
         font-size: 0.8rem;
         color: #6c757d;
         margin: 0.5rem 0;
     }
-
-    /* Message input form */
     #chat-form-container {
         border-top: 1px solid #dee2e6;
         padding: 1rem;
         background-color: #f8f9fa;
     }
+    #emoji-picker {
+        position: absolute;
+        bottom: 80px; 
+        right: 10px;
+        z-index: 1000;
+        display: none; 
+    }
+    #emoji-btn {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
 </style>
 
 <div class="container-fluid">
-    <h2 class="mb-3">Chat Room: <span class="text-primary">{{ room.name }}</span></h2>
+    <h2 class="mb-3">
+        <i class="bi bi-compass text-primary"></i>
+        Chat Room: <span class="text-primary">{{ room.name }}</span>
+    </h2>
     <p class="text-muted">{{ room.description }}</p>
 
     <div id="chat-container" class="shadow-sm">
         
         <div id="user-sidebar">
-            <h5>Online Users (<span id="user-count">0</span>)</h5>
+            <h5><i class="bi bi-person-check-fill me-2"></i>Online Users (<span id="user-count">0</span>)</h5>
             <ul id="user-list" class="list-group">
                 </ul>
         </div>
@@ -122,11 +140,25 @@
                 <div class="message-status">Welcome to the chat! Loading history...</div>
             </div>
 
+            <div id="typing-status" class="small text-muted px-3 py-2" style="height: 30px; background-color: rgba(255, 255, 255, 0.75);">
+                </div>
+            
+            <div id="emoji-picker">
+                <emoji-picker></emoji-picker>
+            </div>
+
             <div id="chat-form-container">
                 <form id="chat-form">
                     <div class="input-group">
-                        <input type="text" class="form-control" id="message-input" placeholder="Type your message..." autocomplete="off" aria-label="Message" required>
-                        <button class="btn btn-primary" type="submit">Send</button>
+                        <input type="text" class="form-control" id="message-input" placeholder="Type your message or paste a GIF URL..." autocomplete="off" aria-label="Message" required>
+                        
+                        <button class="btn btn-outline-secondary" type="button" id="emoji-btn">
+                            <i class="bi bi-emoji-smile"></i>
+                        </button>
+                        
+                        <button class="btn btn-primary" type="submit">
+                            <i class="bi bi-send-fill"></i> Send
+                        </button>
                     </div>
                 </form>
             </div>
@@ -137,9 +169,11 @@
 
 {% block scripts %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    
+    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
+
     <script type="text/javascript">
         document.addEventListener('DOMContentLoaded', (event) => {
-            // 1. Connect to Socket.IO and get references
             var socket = io();
             const roomName = '{{ room.name }}';
             const currentUsername = '{{ current_user.username }}';
@@ -149,40 +183,55 @@
             const messageInput = document.getElementById('message-input');
             const userList = document.getElementById('user-list');
             const userCount = document.getElementById('user-count');
+            const emojiPicker = document.getElementById('emoji-picker');
+            const emojiBtn = document.getElementById('emoji-btn');
+            const typingStatus = document.getElementById('typing-status');
+            let typingTimer;
 
-            // --- Helper Functions ---
-            function scrollToBottom() {
-                messageContainer.scrollTop = messageContainer.scrollHeight;
-            }
+            function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
+            function addMessage(html) { messageContainer.appendChild(html); }
 
-            function addMessage(html) {
-                messageContainer.appendChild(html);
-            }
-
-            // Helper to create message bubble HTML
+            // === HÀM NÂNG CẤP ĐỂ HIỂN THỊ GIF/ẢNH ===
             function createMessageHtml(data) {
                 let isSelf = data.username === currentUsername;
                 let bubbleClass = isSelf ? 'message-self' : 'message-other';
                 let infoClass = isSelf ? 'message-info-self' : 'message-info-other';
                 let usernameDisplay = isSelf ? 'You' : data.username;
 
+                // Hàm kiểm tra URL ảnh/gif
+                function isImageUrl(url) {
+                    return(url.match(/\.(jpeg|jpg|gif|png)$/) != null);
+                }
+
+                let messageBodyHtml;
+                if (isImageUrl(data.msg)) {
+                    // Nếu là URL ảnh, hiển thị thẻ <img>
+                    messageBodyHtml = `<img src="${data.msg}" alt="User image">`;
+                } else {
+                    // Nếu là văn bản, chỉ hiển thị văn bản (an toàn)
+                    const bodyDiv = document.createElement('div');
+                    bodyDiv.textContent = data.msg;
+                    messageBodyHtml = bodyDiv.innerHTML; // Lấy HTML an toàn
+                }
+
                 const msgDiv = document.createElement('div');
                 msgDiv.classList.add('message-bubble', bubbleClass);
 
                 const infoDiv = document.createElement('div');
                 infoDiv.classList.add('message-info', infoClass);
-                infoDiv.innerHTML = `<strong>${usernameDisplay}</strong> <small class="text-muted ms-2">${data.timestamp}</small>`;
+                infoDiv.innerHTML = `<strong>${usernameDisplay}</strong> <small class="ms-2">${data.timestamp}</small>`;
                 
-                const bodyDiv = document.createElement('div');
-                bodyDiv.classList.add('message-body');
-                bodyDiv.textContent = data.msg; // Use textContent to prevent XSS
+                // Thêm nội dung tin nhắn (văn bản hoặc ảnh)
+                const bodyContainer = document.createElement('div');
+                bodyContainer.classList.add('message-body');
+                bodyContainer.innerHTML = messageBodyHtml;
 
                 msgDiv.appendChild(infoDiv);
-                msgDiv.appendChild(bodyDiv);
+                msgDiv.appendChild(bodyContainer);
                 return msgDiv;
             }
+            // ===========================================
 
-            // Helper to create status message HTML
             function createStatusHtml(data) {
                 const statusDiv = document.createElement('div');
                 statusDiv.classList.add('message-status');
@@ -190,41 +239,60 @@
                 return statusDiv;
             }
 
-            // --- Socket.IO Event Handlers ---
+            // --- Logic cho Emoji Picker (không đổi) ---
+            emojiBtn.addEventListener('click', () => {
+                emojiPicker.style.display = (emojiPicker.style.display === 'none' || emojiPicker.style.display === '') ? 'block' : 'none';
+            });
+            emojiPicker.addEventListener('emoji-click', event => {
+                messageInput.value += event.detail.unicode;
+            });
 
-            // 2. Emit 'join' event when connected
+
+            // --- Logic cho "Đang gõ phím" (không đổi) ---
+            messageInput.addEventListener('input', () => {
+                clearTimeout(typingTimer);
+                socket.emit('typing', { room: roomName });
+                typingTimer = setTimeout(() => {
+                    socket.emit('stopped_typing', { room: roomName });
+                }, 2000);
+            });
+            socket.on('typing_status', (data) => {
+                if (data.isTyping) {
+                    typingStatus.textContent = `${data.username} is typing...`;
+                } else {
+                    if (typingStatus.textContent.includes(data.username)) {
+                         typingStatus.textContent = '';
+                    }
+                }
+            });
+
+            // --- Trình xử lý sự kiện Socket.IO (không đổi) ---
             socket.on('connect', function() {
-                console.log('Connected, emitting join for room:', roomName);
                 socket.emit('join', { 'room': roomName });
             });
             
-            // 3. Listen for 'load_history'
             socket.on('load_history', function(messages) {
-                messageContainer.innerHTML = ''; // Clear "Loading..."
-                messages.forEach(function(data) {
-                    addMessage(createMessageHtml(data));
-                });
+                messageContainer.innerHTML = ''; 
+                messages.forEach(function(data) { addMessage(createMessageHtml(data)); });
                 scrollToBottom(); 
             });
 
-            // 4. Listen for 'receive_message'
             socket.on('receive_message', function(data) {
                 addMessage(createMessageHtml(data));
                 scrollToBottom(); 
+                if (typingStatus.textContent.includes(data.username)) {
+                    typingStatus.textContent = '';
+                }
             });
 
-            // 5. Listen for 'status' events (joins/leaves)
             socket.on('status', function(data) {
                 addMessage(createStatusHtml(data));
                 scrollToBottom(); 
             });
 
-            // 6. Listen for 'user_list' updates
             socket.on('user_list', function(data) {
-                userList.innerHTML = ''; // Clear list
-                let count = data.users.length;
-                userCount.textContent = count;
-                
+                userList.innerHTML = '';
+                userCount.textContent = data.users.length;
                 data.users.forEach(function(username) {
                     const li = document.createElement('li');
                     li.classList.add('list-group-item');
@@ -233,21 +301,21 @@
                 });
             });
 
-            // 7. Handle form submission to send a message
             chatForm.addEventListener('submit', function(e) {
                 e.preventDefault(); 
                 let msg = messageInput.value.trim();
                 if (msg) {
                     socket.emit('send_message', { 'msg': msg, 'room': roomName });
-                    messageInput.value = ''; // Clear input
+                    clearTimeout(typingTimer);
+                    socket.emit('stopped_typing', { room: roomName });
+                    messageInput.value = '';
+                    emojiPicker.style.display = 'none';
                 }
             });
 
-            // 8. Emit 'leave' on disconnect (e.g., closing tab)
             window.addEventListener('beforeunload', function() {
                 socket.emit('leave', { 'room': roomName });
             });
-
         });
     </script>
 {% endblock %}
