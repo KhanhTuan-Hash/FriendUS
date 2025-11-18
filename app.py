@@ -5,6 +5,8 @@ from flask import Flask, render_template, redirect, url_for, flash, request, jso
 from flask_bootstrap import Bootstrap5
 from flask_login import login_user, logout_user, current_user, login_required
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
+import osmnx as ox
+import geopandas as gpd
 # --- ĐÂY LÀ PHẦN ĐÃ CẬP NHẬT ---
 from sqlalchemy import func
 # Import extensions and models
@@ -302,6 +304,45 @@ def remove_favorite(location_id):
         flash(f'Removed {location.name} from favorites.', 'info')
     return redirect(url_for('location_detail', location_id=location_id))
 
+# --- NEW OSMnx ROUTE ---
+@app.route('/api/get_street_network')
+@login_required
+def get_street_network():
+    """
+    Uses OSMnx to get a street network for a given query and returns it as GeoJSON.
+    """
+    # Get the 'place' query from the URL (e.g., /api/get_street_network?place=Paris, France)
+    place_query = request.args.get('place')
+    
+    if not place_query:
+        return jsonify({"error": "A 'place' parameter is required."}), 400
+
+    try:
+        # 1. Get the graph from OSMnx
+        # We use 'drive' network_type, but 'walk' or 'all' are also options
+        G = ox.graph_from_place(place_query, network_type='drive', simplify=True)
+        
+        # 2. Convert graph edges to a GeoDataFrame
+        # We only want the edges (the streets), not the nodes (intersections)
+        gdf_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
+        
+        # 3. Project to standard WGS84 (lat/lon) for Leaflet
+        gdf_edges_wgs84 = gdf_edges.to_crs(epsg=4326)
+
+        # 4. Convert the GeoDataFrame to a GeoJSON string
+        # We use json.loads to convert the string output of .to_json()
+        # into a Python dict that jsonify can handle.
+        geojson_data = json.loads(gdf_edges_wgs84.to_json())
+
+        # 5. Return as JSON
+        return jsonify(geojson_data)
+
+    except Exception as e:
+        print(f"OSMnx error: {e}")
+        # Return a more helpful error to the user
+        return jsonify({"error": f"Could not find or process network for '{place_query}'. Error: {e}"}), 500
+
+# --- END OF NEW ROUTE ---
 
 # --- CHAT ROUTES (UPDATED) ---
 

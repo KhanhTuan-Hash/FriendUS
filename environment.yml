@@ -1,0 +1,23 @@
+name: friendus-env
+channels:
+  - conda-forge
+dependencies:
+  # Core
+  - python=3.10
+  - pip
+
+  # Flask Web App
+  - flask
+  - flask-bootstrap
+  - flask-login
+  - flask-socketio
+  - flask-sqlalchemy
+  - gunicorn  # Good for running the web app
+
+  # Geospatial Libraries (This is the key part!)
+  - osmnx
+  - geopandas
+  - pyogrio
+  
+  # Other
+  # - Add any other libraries you need here

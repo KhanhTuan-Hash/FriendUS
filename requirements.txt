@@ -8,3 +8,4 @@ extensions
 folium
 flask-socketio
 eventlet
+osmnx geopandas
