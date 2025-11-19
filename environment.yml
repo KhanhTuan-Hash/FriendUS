@@ -2,22 +2,25 @@ name: friendus-env
 channels:
   - conda-forge
 dependencies:
-  # Core
+  # --- Core Python ---
   - python=3.10
   - pip
 
-  # Flask Web App
+  # --- Flask Web Framework ---
   - flask
-  - flask-bootstrap
-  - flask-login
-  - flask-socketio
-  - flask-sqlalchemy
-  - gunicorn  # Good for running the web app
+  - bootstrap-flask    # REQUIRED for: from flask_bootstrap import Bootstrap5
+  - flask-login        # REQUIRED for: login_user, current_user, etc.
+  - flask-socketio     # REQUIRED for: SocketIO, emit, join_room
+  - flask-sqlalchemy   # REQUIRED for: db, models
+  - flask-wtf          # REQUIRED for: forms (RegisterForm, LoginForm, etc.)
+  - email-validator    # REQUIRED for: validating emails in your forms
+  - waitress           # The Windows web server (replaces gunicorn)
 
-  # Geospatial Libraries (This is the key part!)
-  - osmnx
-  - geopandas
-  - pyogrio
-  
-  # Other
-  # - Add any other libraries you need here
+  # --- Geospatial Data (The heavy lifters) ---
+  - osmnx              # REQUIRED for: import osmnx
+  - geopandas          # REQUIRED for: import geopandas
+  - pyogrio            # Faster file reading for geopandas (highly recommended)
+  - matplotlib-base    # Often needed by osmnx for plotting (optional but good to have)
+
+  # --- Database ---
+  - sqlalchemy

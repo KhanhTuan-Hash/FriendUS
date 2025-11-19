@@ -6,57 +6,42 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 {% endblock %}
 
 {% block content %}
 <style>
-    /* New container to allow floating controls */
     .map-container {
         position: relative;
         width: 100%;
     }
-
-    /* Main map element */
     #map { 
-        /* Fills the screen, minus 80px for your top navbar */
         height: calc(100vh - 80px); 
         width: 100%;
         border-radius: 0.375rem; 
         border: 1px solid #dee2e6; 
-        /* z-index 500 so it's behind controls */
         z-index: 500;
-        /* Cursor shows map is clickable for routing */
         cursor: crosshair; 
     }
-    .leaflet-container { 
-        height: 100%; 
-        width: 100%; 
-    }
+    .leaflet-container { height: 100%; width: 100%; }
 
-    /* Floating controls panel in top-left */
+    /* Floating Controls Panel */
     .map-controls {
         position: absolute;
         top: 15px;
         left: 15px;
-        /* z-index 1000 so it's on top of the map */
         z-index: 1000; 
         background: #fff;
         padding: 1rem;
         border-radius: 0.375rem;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        min-width: 240px; /* Wider for the new input */
+        min-width: 220px; 
     }
-
-    /* Ensure routing panel is also on top */
-    .leaflet-routing-container {
-        z-index: 1000;
-    }
+    .leaflet-routing-container { z-index: 1000; }
 </style>
 
 <div class="map-container">
-    
     <div class="map-controls">
         <div class="d-grid mb-2">
             <button class="btn btn-secondary" id="find-me-btn">
@@ -64,14 +49,6 @@
             </button>
         </div>
         <div id="geo-error" class="text-danger small"></div>
-
-        <hr>
-        <label for="osmnx-query-input" class="form-label small">Load Street Network</label>
-        <div class="input-group">
-            <input type="text" class="form-control" placeholder="e.g., Paris, France" id="osmnx-query-input">
-            <button class="btn btn-outline-secondary" type="button" id="fetch-network-btn">Load</button>
-        </div>
-        <div id="osmnx-error" class="text-danger small mt-1"></div>
     </div>
 
     <div id="map" 
@@ -79,298 +56,215 @@
          data-default-lon="{{ default_lon if default_lon is defined and default_lon is not none else '' }}"
          data-locations='{{ locations_data|tojson|safe if locations_data is defined else "[]" }}'
     ></div>
-
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
 
 <script>
     function initMap() {
+        console.log("Initializing Map...");
         const mapElement = document.getElementById('map');
         if (!mapElement) return;
         
         // 1. Initialize Map
         let defaultLat = parseFloat(mapElement.dataset.defaultLat);
         let defaultLon = parseFloat(mapElement.dataset.defaultLon);
-        let defaultZoom;
-        
-        if (isNaN(defaultLat) || isNaN(defaultLon)) {
-            defaultLat = 20; defaultLon = 0; defaultZoom = 2; // World view
-        } else {
-            defaultZoom = 13; // Zoom in if coords are provided
-        }
-        var map = L.map('map').setView([defaultLat, defaultLon], defaultZoom);
+        let defaultZoom = (isNaN(defaultLat) || isNaN(defaultLon)) ? 2 : 13;
+        if (isNaN(defaultLat)) { defaultLat = 20; defaultLon = 0; }
 
-        // 2. Add Map Layers (Streets & Satellite)
-        var streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        // Disable default zoom control so we can move it
+        var map = L.map('map', { zoomControl: false }).setView([defaultLat, defaultLon], defaultZoom);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+        // 2. Layers
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
         }).addTo(map);
-        var satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri'
-        });
-        L.control.layers({"Streets": streetLayer, "Satellite": satelliteLayer}).addTo(map);
 
-        // --- 3. Click-to-Route Feature ---
-
-        // Geocoder instance for address lookups
-        var geocoder = L.Control.Geocoder.nominatim();
-
-        // Initialize routing control, but hide it.
+        // 3. Routing (Directions)
         var routingControl = L.Routing.control({
+            waypoints: [],
             routeWhileDragging: true,
-            geocoder: geocoder,
-            waypoints: [], // Start empty
-            show: false, // Don't show panel by default
-            fitBoundsOptions: { padding: [50, 50] },
-            createMarker: function() { return null; } // We'll make our own markers
+            show: false,
+            createMarker: function() { return null; }
         }).addTo(map);
 
-        // Keep track of the temporary marker
+        // 4. Search Bar (Wrapped in Try/Catch so it doesn't break the rest of the app)
+        try {
+            var geocoder = L.Control.Geocoder.nominatim();
+            L.Control.geocoder({ defaultMarkGeocode: false, geocoder: geocoder })
+                .on('markgeocode', function(e) { map.fitBounds(e.geocode.bbox); })
+                .addTo(map);
+        } catch (e) {
+            console.error("Search bar plugin failed to load:", e);
+        }
+
+        // ============================================================
+        // 5. THE NEW STABLE CLICK HANDLER (Uses direct API Fetch)
+        // ============================================================
         var clickMarker;
 
-        // Handle Map Click Event
+        // Function to generate the popup HTML content
+        function createPopupContent(lat, lon, name, address) {
+            var container = document.createElement('div');
+            container.style.textAlign = "center";
+            container.style.width = "200px";
+            
+            var titleEl = document.createElement('strong');
+            titleEl.innerText = name;
+            titleEl.style.display = "block";
+            titleEl.style.marginBottom = "5px";
+
+            var addrEl = document.createElement('p');
+            addrEl.innerText = address;
+            addrEl.style.fontSize = "12px";
+            addrEl.className = "text-muted";
+            addrEl.style.marginBottom = "10px";
+
+            // View Details Button
+            var viewBtn = document.createElement('button');
+            viewBtn.className = 'btn btn-primary btn-sm w-100 mb-2';
+            viewBtn.innerHTML = '<i class="bi bi-eye"></i> View Details';
+            viewBtn.onclick = function() {
+                viewBtn.disabled = true;
+                viewBtn.innerText = "Saving...";
+                fetch('/api/create_location_on_click', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({lat: lat, lon: lon, name: name, address: address})
+                })
+                .then(r => r.json())
+                .then(data => { if(data.url) window.location.href = data.url; })
+                .catch(err => { console.error(err); viewBtn.innerText = "Error"; });
+            };
+
+            // Directions Button
+            var routeBtn = document.createElement('button');
+            routeBtn.className = 'btn btn-success btn-sm w-100';
+            routeBtn.innerHTML = '<i class="bi bi-sign-turn-right"></i> Directions Here';
+            routeBtn.onclick = function() {
+                if (!navigator.geolocation) { alert("Geolocation not supported"); return; }
+                map.closePopup();
+                const tempMsg = L.popup().setLatLng([lat, lon]).setContent("Calculating route...").openOn(map);
+                navigator.geolocation.getCurrentPosition(pos => {
+                    var start = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                    var end = L.latLng(lat, lon);
+                    map.removeLayer(tempMsg);
+                    routingControl.setWaypoints([start, end]);
+                    routingControl.show();
+                    L.marker(start).addTo(map).bindPopup("Start: You are here");
+                }, err => { alert("Could not get your location."); map.removeLayer(tempMsg); });
+            };
+
+            container.appendChild(titleEl);
+            container.appendChild(addrEl);
+            container.appendChild(viewBtn);
+            container.appendChild(routeBtn);
+            return container;
+        }
+
         map.on('click', function(e) {
             const lat = e.latlng.lat;
             const lon = e.latlng.lng;
+            console.log("Map Clicked at:", lat, lon);
 
-            // Clear any old route and marker
-            routingControl.setWaypoints([]);
-            routingControl.hide();
-            if (clickMarker) {
-                map.removeLayer(clickMarker);
-            }
+            // 1. Clear old UI
+            if (clickMarker) { map.removeLayer(clickMarker); }
+            routingControl.hide(); 
+            routingControl.setWaypoints([]); 
+
+            // 2. Place Marker immediately
+            clickMarker = L.marker([lat, lon]).addTo(map);
+            clickMarker.bindPopup('<div class="text-center">Loading address...<br><span class="spinner-border spinner-border-sm"></span></div>').openPopup();
+
+            // 3. Perform Direct API Call
+            const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`;
             
-            // Add a new marker
-            clickMarker = L.marker(e.latlng).addTo(map);
+            let isUpdated = false;
 
-            // Find the address
-            geocoder.reverse(e.latlng, map.options.crs.scale(map.getZoom()), function(results) {
-                var address = "Could not find address";
-                if (results && results.length > 0 && results[0].name) {
-                    address = results[0].name;
-                }
+            fetch(url, { headers: { 'Accept-Language': 'vi-VN, vi;q=0.9, en;q=0.8' } }) // Prefer Vietnamese
+                .then(response => response.json())
+                .then(data => {
+                    if (isUpdated) return;
+                    isUpdated = true;
 
-                // Create the Popup Content with a button
-                var container = document.createElement('div');
-                container.style.fontFamily = 'Arial, sans-serif';
-                container.style.width = '220px';
+                    let name = "Dropped Pin";
+                    let address = "Unknown Address";
 
-                var addressEl = document.createElement('strong');
-                addressEl.style.marginBottom = '10px';
-                addressEl.style.display = 'block';
-                addressEl.innerText = address;
-                
-                var latLonEl = document.createElement('p');
-                latLonEl.className = 'text-muted small';
-                latLonEl.style.margin = '5px 0';
-                latLonEl.innerText = `Lat: ${lat.toFixed(5)}, Lon: ${lon.toFixed(5)}`;
-
-                var routeBtn = document.createElement('button');
-                routeBtn.className = 'btn btn-primary btn-sm w-100';
-                routeBtn.innerText = 'Get Directions Here';
-
-                container.appendChild(addressEl);
-                container.appendChild(latLonEl);
-                container.appendChild(routeBtn);
-
-                // Add click listener to the popup button
-                routeBtn.addEventListener('click', function() {
-                    if (!navigator.geolocation) {
-                        alert('Geolocation is not supported by this browser.'); return;
-                    }
-                    
-                    map.closePopup(); 
-                    if (clickMarker) map.removeLayer(clickMarker);
-                    
-                    const tempPopup = L.popup()
-                        .setLatLng(e.latlng)
-                        .setContent('Finding your location...')
-                        .openOn(map);
-
-                    navigator.geolocation.getCurrentPosition(function(position) {
-                        var startLat = position.coords.latitude;
-                        var startLng = position.coords.longitude;
-                        var start = L.latLng(startLat, startLng);
-                        var end = e.latlng; // The clicked point
-
-                        // Set waypoints on our routing control
-                        routingControl.setWaypoints([start, end]);
+                    if (data && data.address) {
+                        address = data.display_name; // The full address string
                         
-                        // Show the directions panel
-                        routingControl.show();
+                        // Smart Naming Logic
+                        const p = data.address;
+                        name = p.university || p.college || p.school || p.amenity || p.building || p.office || p.leisure || p.tourism || p.road || "Dropped Pin";
+                    } else if (data && data.error) {
+                         console.warn("Nominatim API Error:", data.error);
+                    }
 
-                        // Add Start/End markers
-                        map.removeLayer(tempPopup);
-                        L.marker(start).addTo(map).bindPopup("<strong>Start: You are here</strong>").openPopup();
-                        L.marker(end).addTo(map).bindPopup("<strong>Destination</strong>");
-
-                    }, function(err) {
-                        map.removeLayer(tempPopup);
-                        alert('Could not get your location. Error: ' + err.message);
-                    });
+                    const content = createPopupContent(lat, lon, name, address);
+                    clickMarker.setPopupContent(content);
+                })
+                .catch(err => {
+                    console.error("Geocoding Fetch Error:", err);
                 });
-                
-                // Bind popup to the marker
-                clickMarker.bindPopup(container).openPopup();
-            }, this);
+
+            // 4. Safety Timeout (3.5 seconds)
+            // If API is blocked or slow, force the popup to show coordinates
+            setTimeout(() => {
+                if (!isUpdated) {
+                    console.warn("Geocoding timed out. Falling back to coordinates.");
+                    isUpdated = true;
+                    const coordName = `Loc: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+                    const content = createPopupContent(lat, lon, "Dropped Pin", coordName);
+                    clickMarker.setPopupContent(content);
+                }
+            }, 3500);
         });
 
+        // ============================================================
+        // END NEW LOGIC
+        // ============================================================
 
-        // 4. Add Address Search Box (top right)
-        L.Control.geocoder({ 
-            defaultMarkGeocode: false,
-            geocoder: geocoder 
-        })
-            .on('markgeocode', function(e) {
-                map.fitBounds(e.geocode.bbox); 
-                L.marker(e.geocode.center).addTo(map).bindPopup(e.geocode.name).openPopup();
-            })
-            .addTo(map);
-        
-
-        // 5. Parse & Add Database Locations
+        // 6. Load Existing DB Locations
         let locations = [];
-        const locationsJSON = mapElement.dataset.locations;
-        try {
-            locations = JSON.parse(locationsJSON);
-        } catch (e) {
-            console.error("Failed to parse locations JSON:", e);
-            document.getElementById('geo-error').textContent = 'Error loading location data.';
-        }
-        
-        // Use Marker Clusters
+        try { locations = JSON.parse(mapElement.dataset.locations); } catch (e) {}
         var markers = L.markerClusterGroup();
 
         if (locations && locations.length > 0) {
             locations.forEach(function(loc) {
-                if (!loc || typeof loc.lat === 'undefined' || typeof loc.lon === 'undefined') {
-                    console.warn("Skipping invalid location data:", loc); return; 
-                }
-                
-                // Create custom popup for DB locations
+                if (!loc || !loc.lat || !loc.lon) return;
                 const rating = parseFloat(loc.rating) || 0;
                 const stars = '★'.repeat(Math.round(rating)) + '☆'.repeat(5 - Math.round(rating));
-                const ratingText = rating > 0 ? `<h6 class="text-warning mb-2">${stars} <span class="text-muted small">(${rating.toFixed(1)})</span></h6>` : `<p class="text-muted small mb-2">No reviews yet</p>`;
-
-                const popupDiv = document.createElement('div');
-                popupDiv.style.fontFamily = 'Arial, sans-serif';
-                popupDiv.style.width = '200px';
-
-                const title = document.createElement('h5');
-                title.style.marginBottom = '5px';
-                title.textContent = loc.name || "Unnamed Location";
-
-                const desc = document.createElement('p');
-                desc.style.fontSize = '13px';
-                desc.style.margin = '5px 0';
-                desc.textContent = (loc.desc || loc.name || "No description").substring(0, 75) + '...';
-
-                const link = document.createElement('a');
-                link.href = loc.url || "#";
-                link.className = 'btn btn-primary btn-sm d-block w-100';
-                link.style.textDecoration = 'none';
-                link.textContent = 'View Details';
-                
-                popupDiv.appendChild(title);
-                popupDiv.innerHTML += ratingText;
-                popupDiv.appendChild(desc);
-                popupDiv.appendChild(link);
-
-                var marker = L.marker([loc.lat, loc.lon]).bindPopup(popupDiv);
-                markers.addLayer(marker);
+                const popupHtml = `
+                    <div style="width:200px">
+                        <h5>${loc.name}</h5>
+                        ${rating > 0 ? `<div class="text-warning mb-1">${stars}</div>` : ''}
+                        <p class="small">${(loc.desc || '').substring(0,70)}...</p>
+                        <a href="${loc.url}" class="btn btn-primary btn-sm w-100">View Details</a>
+                    </div>`;
+                markers.addLayer(L.marker([loc.lat, loc.lon]).bindPopup(popupHtml));
             });
-
             map.addLayer(markers);
-
-            // Auto-zoom to DB markers if no default lat/lon was provided
-            if (isNaN(defaultLat) && isNaN(defaultLon) && locations.length > 0) {
-                 setTimeout(() => {
-                    try { map.fitBounds(markers.getBounds().pad(0.3)); } 
-                    catch (e) { console.warn("Could not auto-zoom:", e); }
-                }, 100);
-            }
         }
-        
-        // 6. "Find Me" Button Logic
+
+        // 7. Find Me Button
         const geoErrorDiv = document.getElementById('geo-error'); 
         document.getElementById('find-me-btn').addEventListener('click', function() {
-            geoErrorDiv.textContent = ''; 
-            if (!navigator.geolocation) {
-                geoErrorDiv.textContent = 'Geolocation is not supported by this browser.'; return;
-            }
-            navigator.geolocation.getCurrentPosition(function(position) {
-                var lat = position.coords.latitude; var lon = position.coords.longitude;
+            if (!navigator.geolocation) { geoErrorDiv.textContent = 'Not supported'; return; }
+            navigator.geolocation.getCurrentPosition(pos => {
+                const {latitude: lat, longitude: lon} = pos.coords;
                 map.setView([lat, lon], 15);
-                L.marker([lat, lon]).addTo(map).bindPopup("<strong>You are here!</strong>").openPopup();
-            }, function(err) {
-                geoErrorDiv.textContent = 'Could not get your location. Error: ' + err.message;
-            });
+                L.marker([lat, lon]).addTo(map).bindPopup("You are here").openPopup();
+            }, err => geoErrorDiv.textContent = err.message);
         });
 
-        // 7. OSMnx Street Network Loader Logic
-        var streetNetworkLayer; // Keep track of the current network layer
-        const fetchBtn = document.getElementById('fetch-network-btn');
-        const queryInput = document.getElementById('osmnx-query-input');
-        const osmnxErrorDiv = document.getElementById('osmnx-error');
-
-        fetchBtn.addEventListener('click', function() {
-            const placeName = queryInput.value;
-            if (!placeName) {
-                osmnxErrorDiv.textContent = 'Please enter a place name.';
-                return;
-            }
-            
-            osmnxErrorDiv.textContent = '';
-            fetchBtn.disabled = true;
-            fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
-
-            // Call the new API endpoint
-            fetch(`/api/get_street_network?place=${encodeURIComponent(placeName)}`)
-                .then(response => {
-                    if (!response.ok) {
-                        return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    // Clear old network layer if it exists
-                    if (streetNetworkLayer) {
-                        map.removeLayer(streetNetworkLayer);
-                    }
-
-                    // Create a new GeoJSON layer with the street data
-                    streetNetworkLayer = L.geoJSON(data, {
-                        style: {
-                            color: '#e63946', // Red color
-                            weight: 2,
-                            opacity: 0.6
-                        }
-                    }).addTo(map);
-
-                    // Zoom to the new layer
-                    map.fitBounds(streetNetworkLayer.getBounds());
-
-                    fetchBtn.disabled = false;
-                    fetchBtn.innerHTML = 'Load';
-                })
-                .catch(error => {
-                    console.error('Error fetching street network:', error);
-                    osmnxErrorDiv.textContent = `Error: ${error.message}`;
-                    fetchBtn.disabled = false;
-                    fetchBtn.innerHTML = 'Load';
-                });
-        });
-
-        // 8. Fix for broken tiles (especially in modals or tabs)
         setTimeout(() => map.invalidateSize(), 100);
     }
-    
-    // Run initMap() once the window is fully loaded
     window.addEventListener('load', initMap);
 </script>
 {% endblock %}

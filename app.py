@@ -38,37 +38,39 @@ socketio = SocketIO(app)
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- Function to populate database with locations ---
-def populate_db():
-    if not Location.query.first():
-        # --- CẬP NHẬT: Thêm 'type' và 'price_range' cho các địa điểm mẫu ---
-        loc1 = Location(
-            name="Eiffel Tower", description="Iconic wrought-iron landmark in Paris, France.",
-            latitude=48.8584, longitude=2.2945, hours="9:00 AM - 10:45 PM", 
-            phone="+33 892 70 12 39", website="https://www.toureiffel.paris",
-            type="Attraction", price_range=3 # ($$$)
-        )
-        loc2 = Location(
-            name="Colosseum", description="Ancient oval amphitheatre in the centre of Rome, Italy.",
-            latitude=41.8902, longitude=12.4922, hours="8:30 AM - 7:00 PM", 
-            phone="+39 06 3996 7700", website="https://colosseo.it",
-            type="Attraction", price_range=2 # ($$)
-        )
-        loc3 = Location(
-            name="Ho Chi Minh City University of Technology",
-            description="A member of Vietnam National University, Ho Chi Minh City.",
-            latitude=10.7729, longitude=106.6584, hours="7:00 AM - 5:00 PM", 
-            phone="+84 28 3864 7256", website="https://hcmut.edu.vn",
-            type="Education", price_range=1 # ($)
-        )
-        db.session.add_all([loc1, loc2, loc3])
-        db.session.commit()
-        print("Database populated with locations.")
+@app.route('/api/create_location_on_click', methods=['POST'])
+@login_required
+def create_location_on_click():
+    data = request.json
     
-    # --- NEW: Populate a default 'general' room ---
+    # Check if this location already exists (simple check by very close coordinates)
+    # This prevents creating duplicates if you click the same spot twice
+    existing = Location.query.filter(
+        Location.latitude.between(data['lat'] - 0.0001, data['lat'] + 0.0001),
+        Location.longitude.between(data['lon'] - 0.0001, data['lon'] + 0.0001)
+    ).first()
+    
+    if existing:
+        return jsonify({'url': url_for('location_detail', location_id=existing.id)})
+
+    # Create new location
+    new_loc = Location(
+        name=data['name'] if data['name'] else "Dropped Pin",
+        description=f"Address: {data['address']}", # Use the address as the description
+        latitude=data['lat'],
+        longitude=data['lon'],
+        type="Custom",       # Default type
+        price_range=0        # Default price
+    )
+    
+    db.session.add(new_loc)
+    db.session.commit()
+    
+    return jsonify({'url': url_for('location_detail', location_id=new_loc.id)})
+
+def populate_db():
+    # 1. We check if the 'general' room exists
     if not Room.query.filter_by(name='general').first():
-        # Note: We don't set a creator for the 'general' room
-        # so no one can delete it.
         general_room = Room(name='general', description='A general chat room for all users.')
         db.session.add(general_room)
         db.session.commit()
@@ -304,45 +306,49 @@ def remove_favorite(location_id):
         flash(f'Removed {location.name} from favorites.', 'info')
     return redirect(url_for('location_detail', location_id=location_id))
 
-# --- NEW OSMnx ROUTE ---
+# --- NEW SMART OSMnx ROUTE ---
 @app.route('/api/get_street_network')
 @login_required
 def get_street_network():
     """
-    Uses OSMnx to get a street network for a given query and returns it as GeoJSON.
+    Smart OSMnx handler:
+    1. Tries to find a place boundary (City/District).
+    2. If that fails, finds the specific point (Building/Landmark) and gets streets within 1km.
     """
-    # Get the 'place' query from the URL (e.g., /api/get_street_network?place=Paris, France)
     place_query = request.args.get('place')
     
     if not place_query:
         return jsonify({"error": "A 'place' parameter is required."}), 400
 
     try:
-        # 1. Get the graph from OSMnx
-        # We use 'drive' network_type, but 'walk' or 'all' are also options
-        G = ox.graph_from_place(place_query, network_type='drive', simplify=True)
-        
-        # 2. Convert graph edges to a GeoDataFrame
-        # We only want the edges (the streets), not the nodes (intersections)
+        # STRATEGY 1: Try to get the graph by Place Name (Polygon/City)
+        try:
+            G = ox.graph_from_place(place_query, network_type='drive', simplify=True)
+        except Exception:
+            # STRATEGY 2: If Place fails, try to get it by Address/Point + Distance
+            print(f"Could not find place polygon for '{place_query}', trying address point...")
+            try:
+                # Geocode the string to get lat/lon
+                lat_lon = ox.geocode(place_query)
+                # Get graph within 1000 meters (1km) of that point
+                G = ox.graph_from_point(lat_lon, dist=1000, network_type='drive', simplify=True)
+            except Exception as e:
+                raise Exception(f"Could not find location or street network for '{place_query}'")
+
+        # Convert graph edges to a GeoDataFrame (Streets only)
         gdf_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
         
-        # 3. Project to standard WGS84 (lat/lon) for Leaflet
+        # Project to standard WGS84 (lat/lon) for Leaflet
         gdf_edges_wgs84 = gdf_edges.to_crs(epsg=4326)
 
-        # 4. Convert the GeoDataFrame to a GeoJSON string
-        # We use json.loads to convert the string output of .to_json()
-        # into a Python dict that jsonify can handle.
+        # Convert to JSON
         geojson_data = json.loads(gdf_edges_wgs84.to_json())
 
-        # 5. Return as JSON
         return jsonify(geojson_data)
 
     except Exception as e:
         print(f"OSMnx error: {e}")
-        # Return a more helpful error to the user
-        return jsonify({"error": f"Could not find or process network for '{place_query}'. Error: {e}"}), 500
-
-# --- END OF NEW ROUTE ---
+        return jsonify({"error": str(e)}), 500
 
 # --- CHAT ROUTES (UPDATED) ---
 
