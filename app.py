@@ -7,16 +7,15 @@ from flask_login import login_user, logout_user, current_user, login_required
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
 import osmnx as ox
 import geopandas as gpd
-# --- ĐÂY LÀ PHẦN ĐÃ CẬP NHẬT ---
 from sqlalchemy import func
+
 # Import extensions and models
 from ext import db, login_manager
-# UPDATED: Import all models, including the new Room model
-from models import User, Post, Location, Review, Message, Room 
+# UPDATE THIS LINE: Add Activity, Constraint
+from models import User, Post, Location, Review, Message, Room, Transaction, Outsider, Activity, Constraint
 
-# Import forms
-# UPDATED: Import the new CreateRoomForm
-from forms import RegisterForm, LoginForm, PostForm, UpdateAccountForm, ReviewForm, CreateRoomForm
+# UPDATE THIS LINE: Add ActivityForm, ConstraintForm
+from forms import RegisterForm, LoginForm, PostForm, UpdateAccountForm, ReviewForm, CreateRoomForm, TransactionForm, ActivityForm, ConstraintForm
 
 # --- App Setup ---
 app = Flask(__name__)
@@ -30,7 +29,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'fr
 db.init_app(app)
 login_manager.init_app(app)
 bootstrap = Bootstrap5(app) 
-# Initialize SocketIO
 socketio = SocketIO(app)
 
 # --- Login Manager Helper ---
@@ -42,9 +40,6 @@ def load_user(user_id):
 @login_required
 def create_location_on_click():
     data = request.json
-    
-    # Check if this location already exists (simple check by very close coordinates)
-    # This prevents creating duplicates if you click the same spot twice
     existing = Location.query.filter(
         Location.latitude.between(data['lat'] - 0.0001, data['lat'] + 0.0001),
         Location.longitude.between(data['lon'] - 0.0001, data['lon'] + 0.0001)
@@ -53,32 +48,129 @@ def create_location_on_click():
     if existing:
         return jsonify({'url': url_for('location_detail', location_id=existing.id)})
 
-    # Create new location
     new_loc = Location(
         name=data['name'] if data['name'] else "Dropped Pin",
-        description=f"Address: {data['address']}", # Use the address as the description
+        description=f"Address: {data['address']}",
         latitude=data['lat'],
         longitude=data['lon'],
-        type="Custom",       # Default type
-        price_range=0        # Default price
+        type="Custom",
+        price_range=0
     )
     
     db.session.add(new_loc)
     db.session.commit()
-    
     return jsonify({'url': url_for('location_detail', location_id=new_loc.id)})
 
 def populate_db():
-    # 1. We check if the 'general' room exists
     if not Room.query.filter_by(name='general').first():
         general_room = Room(name='general', description='A general chat room for all users.')
         db.session.add(general_room)
         db.session.commit()
         print("Created 'general' room.")
 
-# --- Routes ---
+# --- FINANCE LOGIC (THUẬT TOÁN ĐỒ THỊ) ---
+def simplify_debts(transactions):
+    """
+    Logic tối giản nợ:
+    - 'debt': Sender nợ Receiver -> Sender bị trừ tiền, Receiver được cộng tiền.
+    - 'repayment': Sender trả Receiver -> Sender được cộng tiền (bớt nợ), Receiver bị trừ tiền (bớt nhận).
+    """
+    balances = {}
+    
+    for t in transactions:
+        s_name = t.sender.username
+        
+        if t.receiver:
+            r_name = t.receiver.username
+        elif t.outsider:
+            r_name = f"{t.outsider.name} (Outside)"
+        else:
+            continue 
 
-# --- ROUTE NÀY ĐÃ ĐƯỢC CẬP NHẬT HOÀN TOÀN ---
+        amount = t.amount
+
+        if t.type == 'debt':
+            # A nợ B: A âm, B dương
+            balances[s_name] = balances.get(s_name, 0) - amount
+            balances[r_name] = balances.get(r_name, 0) + amount
+        
+        elif t.type == 'repayment':
+            # A trả B: A bớt âm, B bớt dương
+            balances[s_name] = balances.get(s_name, 0) + amount
+            balances[r_name] = balances.get(r_name, 0) - amount
+
+    debtors = []
+    creditors = []
+    
+    # Lọc những người có số dư khác 0
+    for person, bal in balances.items():
+        if bal < -1: debtors.append({'person': person, 'amount': bal})
+        elif bal > 1: creditors.append({'person': person, 'amount': bal})
+
+    simplified_edges = []
+    debtors.sort(key=lambda x: x['amount'])       
+    creditors.sort(key=lambda x: x['amount'], reverse=True) 
+
+    i = 0
+    j = 0
+    while i < len(debtors) and j < len(creditors):
+        debtor = debtors[i]
+        creditor = creditors[j]
+        
+        amount = min(abs(debtor['amount']), creditor['amount'])
+        
+        # Cạnh: Debtor -> Creditor (Nghĩa là Nợ)
+        simplified_edges.append({
+            'from': debtor['person'],
+            'to': creditor['person'],
+            'amount': amount,
+            'label': f"{amount:,.0f}" 
+        })
+
+        debtor['amount'] += amount
+        creditor['amount'] -= amount
+
+        if abs(debtor['amount']) < 1: i += 1
+        if creditor['amount'] < 1: j += 1
+        
+    return simplified_edges
+
+# --- PLANNER LOGIC (NEW) ---
+def check_conflicts(activities, constraints):
+    conflicts = {} # Map activity_id -> list of conflict messages
+    
+    for act in activities:
+        act_conflicts = []
+        for cons in constraints:
+            # PRICE CHECK
+            if cons.type == 'price':
+                try:
+                    limit = float(cons.value)
+                    if act.price > limit:
+                        msg = f"Over budget (${limit})"
+                        if cons.intensity == 'rough':
+                            act_conflicts.append({'msg': msg, 'level': 'critical'})
+                        else:
+                            act_conflicts.append({'msg': msg, 'level': 'warning'})
+                except ValueError:
+                    pass
+            
+            # TIME CHECK
+            if cons.type == 'time':
+                # Assume constraint is "After X time"
+                if act.start_time and act.start_time < cons.value:
+                    msg = f"Too early (Before {cons.value})"
+                    if cons.intensity == 'rough':
+                        act_conflicts.append({'msg': msg, 'level': 'critical'})
+                    else:
+                        act_conflicts.append({'msg': msg, 'level': 'warning'})
+
+        if act_conflicts:
+            conflicts[act.id] = act_conflicts
+            
+    return conflicts
+
+# --- Routes ---
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/index', methods=['GET', 'POST'])
 @login_required
@@ -98,14 +190,7 @@ def index():
     
     posts = Post.query.order_by(Post.timestamp.desc()).all()
     
-    # --- ĐÂY LÀ LOGIC ĐÃ SỬA ---
-    
-    # 1. Định nghĩa cách tính rating trung bình
-    # Dùng func.coalesce để đổi giá trị NULL (chưa có review) thành 0
     avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
-
-    # 2. Truy vấn TẤT CẢ địa điểm, dùng 'outerjoin'
-    # 'outerjoin' sẽ lấy tất cả địa điểm, ngay cả khi chúng không có review
     suggestions_query = db.session.query(Location, avg_rating) \
         .outerjoin(Review, Location.id == Review.location_id) \
         .group_by(Location.id) \
@@ -113,13 +198,7 @@ def index():
         .limit(5)
         
     suggestions = suggestions_query.all() 
-    # Giờ đây chúng ta không cần fallback nữa
-    
-    # --- KẾT THÚC PHẦN SỬA ---
-    
     return render_template('index.html', title='Home', form=form, posts=posts, suggestions=suggestions)
-# --- KẾT THÚC ROUTE ĐÃ CẬP NHẬT ---
-
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -188,83 +267,47 @@ def account():
 def map():
     return redirect(url_for('map_search'))
 
-# --- ROUTE NÀY ĐÃ ĐƯỢC LÀM LẠI HOÀN TOÀN ---
 @app.route('/map/search')
 @login_required
 def map_search():
-    # Lấy các tham số từ URL
     query_name = request.args.get('query')
     query_type = request.args.get('type')
     query_price = request.args.get('price', type=int)
     query_rating = request.args.get('rating', type=int)
-    
-    # Lấy lat/lon để căn giữa bản đồ
     lat = request.args.get('lat', type=float)
     lon = request.args.get('lon', type=float)
     
-    # Bắt đầu truy vấn
     avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
     query = db.session.query(Location, avg_rating) \
               .outerjoin(Review, Location.id == Review.location_id) \
               .group_by(Location.id)
 
-    # 1. Lọc theo Tên (Search by name)
-    if query_name:
-        query = query.filter(Location.name.ilike(f'%{query_name}%'))
-        
-    # 2. Lọc theo Loại (Filter by type)
-    if query_type:
-        query = query.filter(Location.type == query_type)
-        
-    # 3. Lọc theo Giá (Filter by price)
-    if query_price:
-        query = query.filter(Location.price_range == query_price)
-        
-    # 4. Lọc theo Rating (Filter by rating)
-    if query_rating:
-        # Dùng .having() vì 'avg_rating' là một trường được tính toán
-        query = query.having(avg_rating >= query_rating) # Đã sửa: filter -> having
+    if query_name: query = query.filter(Location.name.ilike(f'%{query_name}%'))
+    if query_type: query = query.filter(Location.type == query_type)
+    if query_price: query = query.filter(Location.price_range == query_price)
+    if query_rating: query = query.having(avg_rating >= query_rating)
 
-    # Thực thi truy vấn
     locations_with_rating = query.all()
-    
-    # Chuẩn bị dữ liệu cho JavaScript
     locations_data = []
     for loc, rating in locations_with_rating:
         locations_data.append({
-            'id': loc.id,
-            'name': loc.name,
-            'desc': loc.description,
-            'lat': loc.latitude,
-            'lon': loc.longitude,
+            'id': loc.id, 'name': loc.name, 'desc': loc.description,
+            'lat': loc.latitude, 'lon': loc.longitude,
             'url': url_for('location_detail', location_id=loc.id),
-            'rating': float(rating) # Thêm rating vào
+            'rating': float(rating)
         })
     
-    return render_template('map.html', 
-                           title='Map Search', 
-                           # Gửi lại các giá trị lọc để giữ chúng trong form
-                           query=query_name,
-                           query_type=query_type,
-                           query_price=query_price,
-                           query_rating=query_rating,
-                           locations_data=locations_data,
-                           default_lat=lat,
-                           default_lon=lon
-                           )
-# --- KẾT THÚC ROUTE ĐÃ CẬP NHẬT ---
-
+    return render_template('map.html', title='Map Search', 
+                           query=query_name, query_type=query_type,
+                           query_price=query_price, query_rating=query_rating,
+                           locations_data=locations_data, default_lat=lat, default_lon=lon)
 
 @app.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required
 def location_detail(location_id):
     location = Location.query.get_or_404(location_id)
     form = ReviewForm()
-    
-    # --- MỚI: Kiểm tra xem người dùng đã yêu thích chưa ---
-    is_favorited = current_user.favorite_locations.filter(
-        Location.id == location.id
-    ).count() > 0
+    is_favorited = current_user.favorite_locations.filter(Location.id == location.id).count() > 0
     
     if form.validate_on_submit():
         review = Review(
@@ -277,15 +320,9 @@ def location_detail(location_id):
         return redirect(url_for('location_detail', location_id=location.id))
     
     reviews = Review.query.filter_by(location=location).order_by(Review.timestamp.desc()).all()
-    
-    return render_template('location_detail.html', 
-                           title=location.name, 
-                           location=location, 
-                           form=form, 
-                           reviews=reviews,
-                           is_favorited=is_favorited) # Gửi trạng thái yêu thích
+    return render_template('location_detail.html', title=location.name, 
+                           location=location, form=form, reviews=reviews, is_favorited=is_favorited)
 
-# --- CÁC ROUTE MỚI CHO TÍNH NĂNG YÊU THÍCH ---
 @app.route('/location/favorite/<int:location_id>', methods=['POST'])
 @login_required
 def add_favorite(location_id):
@@ -306,62 +343,139 @@ def remove_favorite(location_id):
         flash(f'Removed {location.name} from favorites.', 'info')
     return redirect(url_for('location_detail', location_id=location_id))
 
-# --- NEW SMART OSMnx ROUTE ---
 @app.route('/api/get_street_network')
 @login_required
 def get_street_network():
-    """
-    Smart OSMnx handler:
-    1. Tries to find a place boundary (City/District).
-    2. If that fails, finds the specific point (Building/Landmark) and gets streets within 1km.
-    """
     place_query = request.args.get('place')
-    
-    if not place_query:
-        return jsonify({"error": "A 'place' parameter is required."}), 400
-
+    if not place_query: return jsonify({"error": "A 'place' parameter is required."}), 400
     try:
-        # STRATEGY 1: Try to get the graph by Place Name (Polygon/City)
         try:
             G = ox.graph_from_place(place_query, network_type='drive', simplify=True)
         except Exception:
-            # STRATEGY 2: If Place fails, try to get it by Address/Point + Distance
-            print(f"Could not find place polygon for '{place_query}', trying address point...")
-            try:
-                # Geocode the string to get lat/lon
-                lat_lon = ox.geocode(place_query)
-                # Get graph within 1000 meters (1km) of that point
-                G = ox.graph_from_point(lat_lon, dist=1000, network_type='drive', simplify=True)
-            except Exception as e:
-                raise Exception(f"Could not find location or street network for '{place_query}'")
-
-        # Convert graph edges to a GeoDataFrame (Streets only)
-        gdf_edges = ox.graph_to_gdfs(G, nodes=False, edges=True)
-        
-        # Project to standard WGS84 (lat/lon) for Leaflet
-        gdf_edges_wgs84 = gdf_edges.to_crs(epsg=4326)
-
-        # Convert to JSON
-        geojson_data = json.loads(gdf_edges_wgs84.to_json())
-
-        return jsonify(geojson_data)
-
+            lat_lon = ox.geocode(place_query)
+            G = ox.graph_from_point(lat_lon, dist=1000, network_type='drive', simplify=True)
+        gdf_edges_wgs84 = ox.graph_to_gdfs(G, nodes=False, edges=True).to_crs(epsg=4326)
+        return jsonify(json.loads(gdf_edges_wgs84.to_json()))
     except Exception as e:
-        print(f"OSMnx error: {e}")
         return jsonify({"error": str(e)}), 500
 
-# --- CHAT ROUTES (UPDATED) ---
+# --- FINANCE ROUTES (MỚI) ---
+
+@app.route('/finance', methods=['GET', 'POST'])
+@login_required
+def finance_dashboard():
+    form = TransactionForm()
+    
+    # Populate User List
+    users = User.query.filter(User.id != current_user.id).all()
+    form.receiver.choices = [(u.id, u.username) for u in users]
+    if not form.receiver.choices: form.receiver.choices = [(0, 'No members')]
+
+    if form.validate_on_submit():
+        amount = form.amount.data
+        desc = form.description.data
+        trans_type = form.type.data # 'debt' or 'repayment'
+        
+        new_trans = Transaction(
+            amount=amount, description=desc, type=trans_type,
+            sender_id=current_user.id, status='pending'
+        )
+
+        # Xử lý Người lạ (Outsider)
+        if form.is_outside.data and form.outsider_name.data:
+            o_name = form.outsider_name.data.strip()
+            # Tìm hoặc tạo Outsider (Node phụ)
+            outsider = Outsider.query.filter_by(name=o_name, creator_id=current_user.id).first()
+            
+            if not outsider:
+                outsider = Outsider(name=o_name, creator_id=current_user.id)
+                db.session.add(outsider)
+                db.session.commit()
+            
+            new_trans.outsider_id = outsider.id
+            new_trans.status = 'confirmed' # Auto confirm cho người lạ
+            flash(f'Recorded transaction with {o_name} (Outsider).', 'success')
+        
+        # Xử lý Member
+        else:
+            new_trans.receiver_id = form.receiver.data
+            flash('Transaction sent! Waiting for confirmation.', 'info')
+
+        db.session.add(new_trans)
+        db.session.commit()
+        return redirect(url_for('finance_dashboard'))
+
+    # Lấy dữ liệu hiển thị
+    pending = Transaction.query.filter_by(receiver_id=current_user.id, status='pending').all()
+    
+    # History: Lấy cả giao dịch với User và Outsider
+    history = Transaction.query.filter(
+        (Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)
+    ).order_by(Transaction.timestamp.desc()).all()
+
+    return render_template('finance.html', form=form, pending=pending, history=history)
+
+@app.route('/finance/confirm/<int:trans_id>', methods=['POST'])
+@login_required
+def confirm_transaction(trans_id):
+    trans = Transaction.query.get_or_404(trans_id)
+    if trans.receiver_id != current_user.id:
+        flash('Permission denied.', 'danger')
+        return redirect(url_for('finance_dashboard'))
+    
+    trans.status = 'confirmed'
+    db.session.commit()
+    flash('Transaction Confirmed!', 'success')
+    return redirect(url_for('finance_dashboard'))
+
+@app.route('/finance/delete/<int:trans_id>', methods=['POST'])
+@login_required
+def delete_transaction(trans_id):
+    trans = Transaction.query.get_or_404(trans_id)
+    
+    # Chỉ cho phép người tạo (sender) xóa
+    if trans.sender_id != current_user.id:
+        flash('Permission denied.', 'danger')
+        return redirect(url_for('finance_dashboard'))
+    
+    # Chỉ cho phép xóa khi chưa confirm (để an toàn)
+    if trans.status == 'confirmed' and not trans.outsider_id: # Cho phép xóa người lạ vì auto-confirm
+         # Tùy chỉnh: Nếu bạn muốn cho phép xóa cả Confirmed, bỏ dòng check này
+         # Nhưng tốt nhất chỉ cho xóa Pending
+         pass 
+
+    db.session.delete(trans)
+    db.session.commit()
+    flash('Transaction cancelled.', 'success')
+    return redirect(url_for('finance_dashboard'))
+
+@app.route('/api/finance_graph')
+@login_required
+def api_finance_graph():
+    transactions = Transaction.query.filter(
+        (Transaction.status == 'confirmed') | 
+        (Transaction.status == 'pending') # Hiển thị cả pending để thấy ngay thay đổi
+    ).all()
+    
+    edges = simplify_debts(transactions)
+    
+    nodes_set = set()
+    for e in edges:
+        nodes_set.add(e['from'])
+        nodes_set.add(e['to'])
+    nodes = [{'id': n, 'label': n, 'shape': 'dot', 'size': 20} for n in nodes_set]
+
+    return jsonify({'nodes': nodes, 'edges': edges})
+
+
+# --- CHAT ROUTES ---
 
 @app.route('/chat', methods=['GET', 'POST'])
 @login_required
 def chat():
     form = CreateRoomForm()
     if form.validate_on_submit():
-        # --- MODIFIED: Add the creator ---
-        new_room = Room(name=form.name.data, 
-                        description=form.description.data, 
-                        creator=current_user) # <-- ADDED THIS
-        
+        new_room = Room(name=form.name.data, description=form.description.data, creator=current_user)
         new_room.members.append(current_user)
         db.session.add(new_room)
         db.session.commit()
@@ -370,7 +484,6 @@ def chat():
 
     all_rooms = Room.query.all()
     my_rooms = current_user.rooms.all()
-    
     return render_template('chat_lobby.html', title='Chat Lobby', 
                            form=form, all_rooms=all_rooms, my_rooms=my_rooms)
 
@@ -378,191 +491,172 @@ def chat():
 @login_required
 def chat_room(room_name):
     room = Room.query.filter_by(name=room_name).first_or_404()
-    
-    # Add user to room members if not already in it
     if current_user not in room.members:
         room.members.append(current_user)
         db.session.commit()
         flash(f'You have joined the "{room.name}" room.', 'info')
-        
     return render_template('chat_room.html', title=f'Chat - {room.name}', room=room)
 
-
-# --- NEW: ROUTE TO DELETE A CHAT ROOM ---
 @app.route('/chat/delete/<int:room_id>', methods=['POST'])
 @login_required
 def delete_chat_room(room_id):
     room_to_delete = Room.query.get_or_404(room_id)
-    
-    # Check if the current user is the creator
-    # Also protect the 'general' room from being deleted
     if room_to_delete.name == 'general':
-         flash('The general room cannot be deleted.', 'danger')
-         return redirect(url_for('chat'))
-
+          flash('The general room cannot be deleted.', 'danger')
+          return redirect(url_for('chat'))
     if room_to_delete.creator != current_user:
         flash('You do not have permission to delete this room.', 'danger')
         return redirect(url_for('chat'))
-        
     try:
-        # 1. Delete all messages from the room
         Message.query.filter_by(room=room_to_delete.name).delete()
-        
-        # 2. Clear all members from the association table
         room_to_delete.members = []
-        
-        # 3. Delete the room itself
         db.session.delete(room_to_delete)
-        
-        # 4. Commit changes
         db.session.commit()
-        
         flash(f'Room "{room_to_delete.name}" has been deleted.', 'success')
-        
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting room: {e}', 'danger')
-
     return redirect(url_for('chat'))
 
-# --- SOCKETIO EVENT HANDLERS ---
+@app.route('/planner/<int:room_id>', methods=['GET', 'POST'])
+@login_required
+def planner(room_id):
+    room = Room.query.get_or_404(room_id)
+    
+    # Forms
+    act_form = ActivityForm()
+    cons_form = ConstraintForm()
+    
+    # Handle Adding Activity
+    if 'submit' in request.form and act_form.validate_on_submit():
+        new_act = Activity(
+            name=act_form.name.data,
+            location=act_form.location.data,
+            price=act_form.price.data,
+            start_time=act_form.start_time.data,
+            end_time=act_form.end_time.data,
+            rating=act_form.rating.data if act_form.rating.data else 0,
+            room=room
+        )
+        db.session.add(new_act)
+        db.session.commit()
+        return redirect(url_for('planner', room_id=room_id))
 
-# We use this to track users in rooms
+    # Handle Adding Constraint
+    if 'add_constraint' in request.form and cons_form.validate_on_submit():
+        new_cons = Constraint(
+            type=cons_form.type.data,
+            intensity=cons_form.intensity.data,
+            value=cons_form.value.data,
+            user=current_user,
+            room_id=room.id
+        )
+        db.session.add(new_cons)
+        db.session.commit()
+        return redirect(url_for('planner', room_id=room_id))
+
+    # Fetch Data
+    activities = Activity.query.filter_by(room_id=room.id).all()
+    my_constraints = Constraint.query.filter_by(user_id=current_user.id, room_id=room.id).all()
+    
+    # Run Logic
+    conflict_map = check_conflicts(activities, my_constraints)
+
+    return render_template('planner.html', room=room, 
+                           act_form=act_form, cons_form=cons_form, 
+                           activities=activities, constraints=my_constraints,
+                           conflicts=conflict_map)
+
+@app.route('/planner/delete_activity/<int:id>')
+@login_required
+def delete_activity(id):
+    act = Activity.query.get_or_404(id)
+    room_id = act.room_id
+    db.session.delete(act)
+    db.session.commit()
+    return redirect(url_for('planner', room_id=room_id))
+
+@app.route('/planner/delete_constraint/<int:id>')
+@login_required
+def delete_constraint(id):
+    cons = Constraint.query.get_or_404(id)
+    room_id = cons.room_id
+    if cons.user_id == current_user.id:
+        db.session.delete(cons)
+        db.session.commit()
+    return redirect(url_for('planner', room_id=room_id))
+
+# --- SOCKETIO ---
 online_users_in_rooms = {}
-
 def get_users_in_room(room_name):
-    """Helper function to get list of usernames in a room."""
     if room_name in online_users_in_rooms:
         return list(online_users_in_rooms[room_name].values())
     return []
 
 @socketio.on('connect')
 def handle_connect():
-    if current_user.is_authenticated:
-        print(f'Client connected: {current_user.username} ({request.sid})')
-    else:
-        return False # Reject connection
+    if not current_user.is_authenticated: return False
 
 @socketio.on('join')
 def handle_join(data):
-    if not current_user.is_authenticated:
-        return
-        
+    if not current_user.is_authenticated: return
     room_name = data['room']
-    
-    if room_name not in online_users_in_rooms:
-        online_users_in_rooms[room_name] = {}
+    if room_name not in online_users_in_rooms: online_users_in_rooms[room_name] = {}
     online_users_in_rooms[room_name][request.sid] = current_user.username
-    
     join_room(room_name)
-    
-    emit('status', 
-         {'msg': f'{current_user.username} has joined the chat.'}, 
-         to=room_name)
-    
+    emit('status', {'msg': f'{current_user.username} has joined.'}, to=room_name)
     try:
         messages = Message.query.filter_by(room=room_name).order_by(Message.timestamp.asc()).limit(50).all()
-        history = []
-        for msg in messages:
-            history.append({
-                'msg': msg.body,
-                'username': msg.author.username,
-                'timestamp': msg.timestamp.strftime('%Y-%m-%d %H:%M')
-            })
+        history = [{'msg': m.body, 'username': m.author.username, 'timestamp': m.timestamp.strftime('%Y-%m-%d %H:%M')} for m in messages]
         emit('load_history', history, to=request.sid)
-    except Exception as e:
-        print(f"Error loading chat history: {e}")
-
-    emit('user_list', 
-         {'users': get_users_in_room(room_name)}, 
-         to=room_name)
+    except Exception as e: print(f"Error history: {e}")
+    emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
 
 @socketio.on('send_message')
 def handle_send_message(data):
     if current_user.is_authenticated:
-        msg_body = data['msg']
-        room_name = data['room']
-        
         try:
-            new_msg = Message(
-                body=msg_body,
-                room=room_name,
-                author=current_user
-            )
+            new_msg = Message(body=data['msg'], room=data['room'], author=current_user)
             db.session.add(new_msg)
             db.session.commit()
-            
             emit('receive_message', {
-                'msg': new_msg.body,
-                'username': new_msg.author.username,
+                'msg': new_msg.body, 'username': new_msg.author.username,
                 'timestamp': new_msg.timestamp.strftime('%Y-%m-%d %H:%M')
-            }, to=room_name)
-            
-        except Exception as e:
-            print(f"Error saving message: {e}")
-            db.session.rollback()
+            }, to=data['room'])
+        except Exception as e: db.session.rollback()
 
 @socketio.on('leave')
 def handle_leave(data):
-    if not current_user.is_authenticated:
-        return
-        
+    if not current_user.is_authenticated: return
     room_name = data['room']
     leave_room(room_name)
-    
     if room_name in online_users_in_rooms and request.sid in online_users_in_rooms[room_name]:
         username = online_users_in_rooms[room_name].pop(request.sid)
-        
-        emit('status', 
-             {'msg': f'{username} has left the chat.'}, 
-             to=room_name)
-        
-        emit('user_list', 
-             {'users': get_users_in_room(room_name)}, 
-             to=room_name)
+        emit('status', {'msg': f'{username} has left.'}, to=room_name)
+        emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    if not current_user.is_authenticated:
-        return
-        
-    print(f'Client disconnected: {request.sid}')
+    if not current_user.is_authenticated: return
     for room_name, users in online_users_in_rooms.items():
         if request.sid in users:
             username = users.pop(request.sid)
-            
-            emit('status', 
-                 {'msg': f'{username} has left the chat.'}, 
-                 to=room_name)
-            
-            emit('user_list', 
-                 {'users': get_users_in_room(room_name)}, 
-                 to=room_name)
+            emit('status', {'msg': f'{username} has left.'}, to=room_name)
+            emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
             break
-        
+
 @socketio.on('typing')
 def handle_typing(data):
-    """Broadcasts to others that the user is typing."""
     if current_user.is_authenticated:
-        room_name = data['room']
-        emit('typing_status', 
-             {'username': current_user.username, 'isTyping': True}, 
-             to=room_name, 
-             include_self=False) # Send to everyone EXCEPT the user who is typing
+        emit('typing_status', {'username': current_user.username, 'isTyping': True}, to=data['room'], include_self=False)
 
 @socketio.on('stopped_typing')
 def handle_stopped_typing(data):
-    """Broadcasts to others that the user has stopped typing."""
     if current_user.is_authenticated:
-        room_name = data['room']
-        emit('typing_status', 
-             {'username': current_user.username, 'isTyping': False}, 
-             to=room_name, 
-             include_self=False)
-# --- Run the App ---
+        emit('typing_status', {'username': current_user.username, 'isTyping': False}, to=data['room'], include_self=False)
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         populate_db() 
-    # Use socketio.run() to run the app
     socketio.run(app, host='0.0.0.0', debug=True, allow_unsafe_werkzeug=True)

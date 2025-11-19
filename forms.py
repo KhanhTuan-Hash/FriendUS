@@ -1,8 +1,7 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, FloatField, IntegerField, SelectField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, FloatField, IntegerField, SelectField, RadioField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional, NumberRange
 from flask_login import current_user
-from models import User 
 from models import User, Room
 
 class RegisterForm(FlaskForm):
@@ -63,6 +62,7 @@ class ReviewForm(FlaskForm):
                          validators=[DataRequired()])
     body = TextAreaField('Your Review', validators=[DataRequired(), Length(min=10)])
     submit = SubmitField('Submit Review')
+
 class CreateRoomForm(FlaskForm):
     name = StringField('Room Name', 
                          validators=[DataRequired(), Length(min=3, max=50)])
@@ -71,7 +71,44 @@ class CreateRoomForm(FlaskForm):
     submit = SubmitField('Create Room')
 
     def validate_name(self, name):
-        # Check if room name is already taken
         room = Room.query.filter_by(name=name.data).first()
         if room:
             raise ValidationError('That room name is taken. Please choose another.')
+
+# --- FORM MỚI CHO TÀI CHÍNH ---
+class TransactionForm(FlaskForm):
+    amount = FloatField('Amount (VNĐ)', validators=[DataRequired()])
+    description = StringField('Description', validators=[DataRequired()])
+    
+    # Loại giao dịch: Nợ hoặc Trả nợ
+    type = RadioField('Transaction Type', choices=[
+        ('debt', 'I Owe them (Ghi nợ)'), 
+        ('repayment', 'I Paid them (Trả nợ)')
+    ], default='debt', validators=[DataRequired()])
+    
+    # Chọn người nhận (Member) - Validate Optional vì có thể chọn Outside
+    receiver = SelectField('Receiver (Member)', choices=[], coerce=int, validators=[Optional()])
+    
+    # Người lạ
+    is_outside = BooleanField('Outside/Stranger?')
+    outsider_name = StringField('Outsider Name')
+    
+    submit = SubmitField('Create Transaction')
+
+class ActivityForm(FlaskForm):
+    name = StringField('Activity Name', validators=[DataRequired()])
+    location = StringField('Location')
+    price = FloatField('Est. Price ($)', validators=[DataRequired()])
+    start_time = StringField('Start Time (e.g. 09:00)') # Using string for simplicity
+    end_time = StringField('End Time (e.g. 11:00)')
+    rating = FloatField('Initial Rating (1-5)', validators=[Optional()])
+    submit = SubmitField('Add Activity')
+
+class ConstraintForm(FlaskForm):
+    type = SelectField('Type', choices=[('price', 'Price'), ('time', 'Time'), ('location', 'Location')])
+    intensity = RadioField('Intensity', choices=[('soft', 'Soft (!)'), ('rough', 'Rough (!!) - Hard Rule')], default='soft')
+    
+    # Simplified input: We assume Price is always "Less than" and Time is "After" for this demo
+    value = StringField('Value (e.g. 25 for price, 08:00 for time)', validators=[DataRequired()])
+    
+    submit = SubmitField('Add Constraint')

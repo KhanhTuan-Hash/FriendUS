@@ -10,6 +10,8 @@
     {% endif %}
     {{ bootstrap.load_css() }}
     
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
@@ -38,34 +40,58 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav ms-auto">
-            {% if current_user.is_authenticated %}
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('index') }}">Home</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('map') }}">Map</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('chat') }}">Chat</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('account') }}">Account</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
-              </li>
+          {% if current_user.is_authenticated %}
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('index') }}">Home</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('map') }}">Map</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('chat') }}">Chat</a>
+            </li>
+            
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('finance_dashboard') }}">Finance</a>
+            </li>
+
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="plannerDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Trip Planner
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="plannerDropdown">
+                {# Using .all() to execute the dynamic query #}
+                {% for room in current_user.rooms.all() %}
+                  <li>
+                      <a class="dropdown-item" href="{{ url_for('planner', room_id=room.id) }}">
+                          Plan for: <strong>{{ room.name }}</strong>
+                      </a>
+                  </li>
+                {% else %}
+                  <li><span class="dropdown-item text-muted">No groups yet</span></li>
+                {% endfor %}
+              </ul>
+            </li>
+          
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
+            </li>
+            
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('account') }}">Account</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+            </li>
             {% else %}
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('login') }}">Login</a>
-              </li>
-              <li class="nav-item">
-                <a class="nav-link" href="{{ url_for('register') }}">Register</a>
-              </li>
-            {% endif %}
-          </ul>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" href="{{ url_for('register') }}">Register</a>
+            </li>
+          {% endif %}
+        </ul>
         </div>
       </div>
     </nav>

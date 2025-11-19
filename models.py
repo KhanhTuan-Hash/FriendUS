@@ -8,7 +8,7 @@ user_favorites = db.Table('user_favorites',
     db.Column('location_id', db.Integer, db.ForeignKey('location.id'), primary_key=True)
 )
 
-# --- Bảng quan hệ cho Thành viên phòng chat (Giữ nguyên) ---
+# --- Bảng quan hệ cho Thành viên phòng chat ---
 room_members = db.Table('room_members',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('room_id', db.Integer, db.ForeignKey('room.id'), primary_key=True)
@@ -30,7 +30,6 @@ class User(UserMixin, db.Model):
     
     created_rooms = db.relationship('Room', back_populates='creator', lazy='dynamic')
 
-    # --- MỐI QUAN HỆ YÊU THÍCH MỚI ---
     favorite_locations = db.relationship('Location', secondary=user_favorites,
                                          back_populates='favorited_by', lazy='dynamic')
 
@@ -58,16 +57,10 @@ class Location(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     website = db.Column(db.String(100), nullable=True)
     
-    # --- CÁC TRƯỜNG MỚI ĐỂ LỌC ---
-    # Ví dụ: 'Restaurant', 'Hotel', 'Attraction'
     type = db.Column(db.String(50), nullable=True, index=True)
-    # Ví dụ: 1 ($), 2 ($$), 3 ($$$)
     price_range = db.Column(db.Integer, nullable=True)
     
-    # Relationship
     reviews = db.relationship('Review', backref='location', lazy=True)
-
-    # --- MỐI QUAN HỆ YÊU THÍCH MỚI ---
     favorited_by = db.relationship('User', secondary=user_favorites,
                                    back_populates='favorite_locations', lazy='dynamic')
 
@@ -79,42 +72,100 @@ class Review(db.Model):
     body = db.Column(db.Text, nullable=False)
     rating = db.Column(db.Integer, nullable=False, default=5)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    
-    # Foreign Keys
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey('location.id'), nullable=False)
 
     def __repr__(self):
         return f"Review('{self.body}', {self.rating})"
 
-# --- NEW MODEL FOR CHAT ROOMS ---
 class Room(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(200), nullable=True)
-    
-    # --- NEW: Link to the user who created the room ---
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     creator = db.relationship('User', back_populates='created_rooms')
-    
-    # Relationship to members
     members = db.relationship('User', secondary=room_members,
                               back_populates='rooms', lazy='dynamic')
 
     def __repr__(self):
         return f"Room('{self.name}')"
 
-# --- NEW MODEL FOR CHAT HISTORY ---
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     body = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
-    
-    # We use the *room name* as the key
     room = db.Column(db.String(50), nullable=False) 
-    
-    # Foreign Key to User
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     def __repr__(self):
         return f"Message('{self.body}', '{self.author.username}')"
+
+# --- PHẦN FINANCE MỚI ---
+
+class Outsider(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    # Người tạo ra contact người lạ này
+    creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    creator = db.relationship('User', backref='outsiders')
+
+    def __repr__(self):
+        return f"<Outsider {self.name}>"
+
+class Transaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(200))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Type: 'debt' (Ghi nợ) hoặc 'repayment' (Trả nợ)
+    type = db.Column(db.String(20), default='debt') 
+    
+    status = db.Column(db.String(20), default='pending') 
+
+    # Người tạo giao dịch (Sender)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    # Người nhận: Có thể là User HOẶC Outsider
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    outsider_id = db.Column(db.Integer, db.ForeignKey('outsider.id'), nullable=True)
+
+    # Relationships
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_transactions')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_transactions')
+    outsider = db.relationship('Outsider', backref='transactions')
+
+    def __repr__(self):
+        return f"<Transaction {self.amount} ({self.type})>"
+    
+class Activity(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    location = db.Column(db.String(100)) # Could be linked to Location model later
+    price = db.Column(db.Float, nullable=False, default=0.0)
+    start_time = db.Column(db.String(20)) # keeping simple string for HH:MM
+    end_time = db.Column(db.String(20))
+    rating = db.Column(db.Float, default=0.0)
+    
+    # Link to a specific Room (The Group)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    room = db.relationship('Room', backref='activities')
+
+    def __repr__(self):
+        return f"<Activity {self.name}>"
+
+class Constraint(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.String(20), nullable=False) # 'price', 'time', 'location'
+    intensity = db.Column(db.String(10), nullable=False) # 'soft', 'rough'
+    value = db.Column(db.String(50), nullable=False) # e.g. "25", "08:00"
+    operator = db.Column(db.String(5), default="<") # '<', '>', 'after', etc.
+    
+    # Link to User (Personal View) AND Room (Context)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    
+    user = db.relationship('User', backref='constraints')
+
+    def __repr__(self):
+        return f"<Constraint {self.type} {self.intensity}>"
