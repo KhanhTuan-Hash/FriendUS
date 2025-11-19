@@ -14,7 +14,7 @@ dependencies:
   - flask-sqlalchemy   # REQUIRED for: db, models
   - flask-wtf          # REQUIRED for: forms (RegisterForm, LoginForm, etc.)
   - email-validator    # REQUIRED for: validating emails in your forms
-  - waitress           # The Windows web server (replaces gunicorn)
+  - eventlet          # The Windows web server (replaces gunicorn)
 
   # --- Geospatial Data (The heavy lifters) ---
   - osmnx              # REQUIRED for: import osmnx

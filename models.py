@@ -37,6 +37,7 @@ class User(UserMixin, db.Model):
         return f"User('{self.username}', '{self.email}')"
 
 class Post(db.Model):
+    media_filename = db.Column(db.String(100), nullable=True)
     id = db.Column(db.Integer, primary_key=True)
     body = db.Column(db.String(140), nullable=False)
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
@@ -169,3 +170,4 @@ class Constraint(db.Model):
 
     def __repr__(self):
         return f"<Constraint {self.type} {self.intensity}>"
+    

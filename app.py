@@ -1,3 +1,4 @@
+from werkzeug.utils import secure_filename
 import os
 import json
 from datetime import datetime
@@ -177,11 +178,25 @@ def check_conflicts(activities, constraints):
 def index():
     form = PostForm()
     if form.validate_on_submit():
+        filename = None
+        
+        # LOGIC TO SAVE IMAGE/VIDEO
+        if form.media.data:
+            file = form.media.data
+            filename = secure_filename(file.filename)
+            
+            # Make sure this folder exists: friendus/static/uploads
+            upload_folder = os.path.join(app.root_path, 'static', 'uploads')
+            if not os.path.exists(upload_folder):
+                os.makedirs(upload_folder)
+                
+            file.save(os.path.join(upload_folder, filename))
+
+        # CHANGED: Save media_filename instead of lat/lon
         post = Post(
             body=form.body.data, 
             author=current_user,
-            latitude=form.latitude.data,
-            longitude=form.longitude.data
+            media_filename=filename
         )
         db.session.add(post)
         db.session.commit()
@@ -659,4 +674,11 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         populate_db() 
+
+    # Print the clickable link
+    print("----------------------------------------------------------------")
+    print("Server is running! Click the link below to open:")
+    print("http://127.0.0.1:5000")
+    print("----------------------------------------------------------------")
+
     socketio.run(app, host='0.0.0.0', debug=True, allow_unsafe_werkzeug=True)
