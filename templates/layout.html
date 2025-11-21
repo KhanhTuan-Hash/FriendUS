@@ -22,97 +22,50 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
     <style>
-        /* Set a default height for the map */
         #map { 
             height: 600px; 
             border-radius: 0.25rem; 
             border: 1px solid #dee2e6;
         }
 
-        /* --- SCATTERED WIDGET STYLES (NEW) --- */
-        /* Nút mở Widget (Góc dưới trái) */
         .scattered-toggle-btn {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            width: 60px;
-            height: 60px;
-            background-color: #4a90e2;
-            color: white;
-            border-radius: 50%;
-            border: none;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            z-index: 1050;
-            cursor: pointer;
-            font-size: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
+            background-color: #4a90e2; color: white; border-radius: 50%; border: none;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 1050; cursor: pointer;
+            font-size: 24px; display: flex; align-items: center; justify-content: center;
             transition: transform 0.2s;
         }
         .scattered-toggle-btn:hover { transform: scale(1.1); }
 
-        /* Khung chính Widget */
         .scattered-widget {
-            position: fixed;
-            bottom: 90px; /* Nằm trên nút toggle */
-            left: 20px;
-            width: 320px;
-            height: 450px;
-            background-color: #ffffff;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            z-index: 1050;
-            display: none; /* Ẩn mặc định */
-            flex-direction: column;
-            overflow: hidden;
-            border: 1px solid #e0e0e0;
-            font-family: 'Segoe UI', sans-serif;
+            position: fixed; bottom: 90px; left: 20px; width: 320px; height: 450px;
+            background-color: #ffffff; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 1050; display: none; flex-direction: column; overflow: hidden;
+            border: 1px solid #e0e0e0; font-family: 'Segoe UI', sans-serif;
         }
-
         .sw-header { padding: 15px; border-bottom: 1px solid #eee; background: #f8f9fa; }
         .sw-search { width: 100%; padding: 8px; border-radius: 20px; border: 1px solid #ddd; outline: none; font-size: 0.9rem;}
-        
-        .sw-list { 
-            flex: 1; padding: 10px; overflow-y: auto; 
-            background-color: #f4f4f9; display: flex; flex-direction: column; gap: 8px; 
-        }
-
+        .sw-list { flex: 1; padding: 10px; overflow-y: auto; background-color: #f4f4f9; display: flex; flex-direction: column; gap: 8px; }
         .sw-item {
-            background: white; padding: 10px; border-radius: 10px;
-            border-bottom-left-radius: 2px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            display: flex; justify-content: space-between; align-items: center;
-            font-size: 0.9rem;
+            background: white; padding: 10px; border-radius: 10px; border-bottom-left-radius: 2px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem;
         }
         .sw-item-content { max-width: 85%; overflow: hidden; }
         .sw-title { font-weight: bold; display: block; color: #333; }
         .sw-link { font-size: 0.8rem; color: #4a90e2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; text-decoration: none;}
-        
         .sw-btn-remove {
-            background: #ffebee; color: #d32f2f; border: none;
-            width: 20px; height: 20px; border-radius: 50%;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            font-size: 12px;
+            background: #ffebee; color: #d32f2f; border: none; width: 20px; height: 20px;
+            border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;
         }
-
         .sw-footer { padding: 10px; border-top: 1px solid #eee; background: white; text-align: center; }
-        .sw-btn-add {
-            width: 100%; padding: 8px; background-color: #4a90e2; color: white;
-            border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer;
-        }
+        .sw-btn-add { width: 100%; padding: 8px; background-color: #4a90e2; color: white; border: none; border-radius: 8px; font-size: 1.2rem; cursor: pointer; }
         .sw-btn-add:hover { background-color: #357abd; }
 
-        /* Popup Modal */
         .sw-modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 1060;
-            display: none; justify-content: center; align-items: center;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);
+            z-index: 1060; display: none; justify-content: center; align-items: center;
         }
-        .sw-modal-box {
-            background: white; width: 300px; padding: 20px; border-radius: 12px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        }
+        .sw-modal-box { background: white; width: 300px; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         .sw-input-group { margin-bottom: 15px; }
         .sw-input-group label { display: block; font-size: 0.85rem; margin-bottom: 5px; color: #666; }
         .sw-input-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
@@ -136,32 +89,11 @@
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('map') }}">Map</a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('chat') }}">Chat</a>
-            </li>
             
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('finance_dashboard') }}">Finance</a>
+              <a class="nav-link fw-bold" href="{{ url_for('chat') }}">Trip Planner</a>
             </li>
-
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" id="plannerDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                Trip Planner
-              </a>
-              <ul class="dropdown-menu" aria-labelledby="plannerDropdown">
-                {# Using .all() to execute the dynamic query #}
-                {% for room in current_user.rooms.all() %}
-                  <li>
-                      <a class="dropdown-item" href="{{ url_for('planner', room_id=room.id) }}">
-                          Plan for: <strong>{{ room.name }}</strong>
-                      </a>
-                  </li>
-                {% else %}
-                  <li><span class="dropdown-item text-muted">No groups yet</span></li>
-                {% endfor %}
-              </ul>
-            </li>
-          
+            
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('profile', username=current_user.username) }}">Profile</a>
             </li>
@@ -198,32 +130,17 @@
     </div>
 
     {% if current_user.is_authenticated %}
-    <button class="scattered-toggle-btn" onclick="toggleWidget()" title="Scattered Info">
-        <i class="bi bi-journal-bookmark-fill"></i>
-    </button>
-
+    <button class="scattered-toggle-btn" onclick="toggleWidget()" title="Scattered Info"><i class="bi bi-journal-bookmark-fill"></i></button>
     <div class="scattered-widget" id="swWidget">
-        <div class="sw-header">
-            <input type="text" class="sw-search" placeholder="🔍 Search (inactive)..." disabled>
-        </div>
-        <div class="sw-list" id="swList">
-            </div>
-        <div class="sw-footer">
-            <button class="sw-btn-add" onclick="openSwModal()">+</button>
-        </div>
+        <div class="sw-header"><input type="text" class="sw-search" placeholder="🔍 Search (inactive)..." disabled></div>
+        <div class="sw-list" id="swList"></div>
+        <div class="sw-footer"><button class="sw-btn-add" onclick="openSwModal()">+</button></div>
     </div>
-
     <div class="sw-modal-overlay" id="swModal">
         <div class="sw-modal-box">
             <h5 style="text-align:center; margin-bottom:15px;">Add Info</h5>
-            <div class="sw-input-group">
-                <label>Title:</label>
-                <input type="text" id="swInputTitle" placeholder="e.g. Hotel Link">
-            </div>
-            <div class="sw-input-group">
-                <label>Content/Link:</label>
-                <input type="text" id="swInputLink" placeholder="Enter text or URL">
-            </div>
+            <div class="sw-input-group"><label>Title:</label><input type="text" id="swInputTitle" placeholder="e.g. Hotel Link"></div>
+            <div class="sw-input-group"><label>Content/Link:</label><input type="text" id="swInputLink" placeholder="Enter text or URL"></div>
             <div class="sw-actions">
                 <button class="btn btn-sm btn-secondary" onclick="closeSwModal()">Cancel</button>
                 <button class="btn btn-sm btn-primary" onclick="addSwItem()">OK</button>
@@ -234,11 +151,7 @@
     {{ bootstrap.load_js() }}
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""></script>
-      
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
@@ -248,79 +161,41 @@
         const swInputTitle = document.getElementById('swInputTitle');
         const swInputLink = document.getElementById('swInputLink');
 
-        // --- Logic Hiển thị Widget ---
         function toggleWidget() {
-            if (swWidget.style.display === 'flex') {
-                swWidget.style.display = 'none';
-            } else {
-                swWidget.style.display = 'flex';
-                loadSwItems(); // Tải dữ liệu khi mở
-            }
+            if (swWidget.style.display === 'flex') { swWidget.style.display = 'none'; } 
+            else { swWidget.style.display = 'flex'; loadSwItems(); }
         }
+        function openSwModal() { swModal.style.display = 'flex'; swInputTitle.focus(); }
+        function closeSwModal() { swModal.style.display = 'none'; swInputTitle.value = ''; swInputLink.value = ''; }
 
-        function openSwModal() {
-            swModal.style.display = 'flex';
-            swInputTitle.focus();
-        }
-
-        function closeSwModal() {
-            swModal.style.display = 'none';
-            swInputTitle.value = '';
-            swInputLink.value = '';
-        }
-
-        // --- Logic Data (LocalStorage) ---
         function loadSwItems() {
             swList.innerHTML = '';
             const data = JSON.parse(localStorage.getItem('scattered_info_friendus')) || [];
-            
             data.forEach((item, index) => {
                 const div = document.createElement('div');
                 div.className = 'sw-item';
-                
-                // Xử lý link
-                let linkContent = item.link;
                 let href = item.link;
                 if (!href.startsWith('http') && !href.startsWith('//')) href = 'http://' + href;
-
-                div.innerHTML = `
-                    <div class="sw-item-content">
-                        <span class="sw-title">${escapeHtml(item.title)}</span>
-                        <a href="${href}" target="_blank" class="sw-link">${escapeHtml(item.link)}</a>
-                    </div>
-                    <button class="sw-btn-remove" onclick="removeSwItem(${index})">−</button>
-                `;
+                div.innerHTML = `<div class="sw-item-content"><span class="sw-title">${escapeHtml(item.title)}</span><a href="${href}" target="_blank" class="sw-link">${escapeHtml(item.link)}</a></div><button class="sw-btn-remove" onclick="removeSwItem(${index})">−</button>`;
                 swList.appendChild(div);
             });
         }
-
         function addSwItem() {
             const title = swInputTitle.value.trim();
             const link = swInputLink.value.trim();
-            
-            if (!title || !link) {
-                alert('Please fill both fields');
-                return;
-            }
-
+            if (!title || !link) { alert('Please fill both fields'); return; }
             const data = JSON.parse(localStorage.getItem('scattered_info_friendus')) || [];
             data.push({ title: title, link: link });
             localStorage.setItem('scattered_info_friendus', JSON.stringify(data));
-            
-            loadSwItems();
-            closeSwModal();
+            loadSwItems(); closeSwModal();
         }
-
         function removeSwItem(index) {
             const data = JSON.parse(localStorage.getItem('scattered_info_friendus')) || [];
             data.splice(index, 1);
             localStorage.setItem('scattered_info_friendus', JSON.stringify(data));
             loadSwItems();
         }
-
-        function escapeHtml(text) {
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
+        function escapeHtml(text) { return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
     </script>
     
     {% block scripts %}{% endblock %}

@@ -2,182 +2,285 @@
 
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 
 <style>
-    /* --- NÂNG CẤP CHỦ ĐỀ DU LỊCH --- */
+    /* Chat Styling */
     #chat-container {
-        display: flex;
-        flex-direction: row;
-        height: 75vh;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
-        overflow: hidden;
+        display: flex; flex-direction: row; height: 70vh;
+        border: 1px solid #dee2e6; border-radius: 0.375rem; overflow: hidden;
     }
     #user-sidebar {
-        flex: 0 0 250px;
-        background-color: #f7f3f0; /* Màu kem/cát nhạt */
-        border-right: 1px solid #dee2e6;
-        padding: 1rem;
-        overflow-y: auto;
-    }
-    #user-sidebar h5 {
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 0.5rem;
-    }
-    #user-sidebar .list-group-item {
-        border: none;
-        padding: 0.5rem 0.25rem;
-        font-weight: 500;
-        background-color: transparent; /* Nền trong suốt */
-    }
-    #user-sidebar .list-group-item .online-dot {
-        height: 8px;
-        width: 8px;
-        background-color: #28a745;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
+        flex: 0 0 200px; background-color: #f7f3f0;
+        border-right: 1px solid #dee2e6; padding: 1rem; overflow-y: auto;
     }
     #chat-main {
-        flex-grow: 1;
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        position: relative;
-        
-        /* Chúng ta dùng 'url_for' của Jinja2 để lấy đúng đường dẫn ảnh */
+        flex-grow: 1; display: flex; flex-direction: column; height: 100%; position: relative;
         background-image: url("{{ url_for('static', filename='img/background-chat.jpg') }}");
-
         background-size: cover;
-        background-position: center;
     }
     #messages {
-        flex-grow: 1;
-        overflow-y: scroll;
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-        
-        /* === ĐÂY LÀ PHẦN SỬA LỖI OPACITY === */
-        /* Giảm từ 0.9 xuống 0.75 để trong suốt hơn */
+        flex-grow: 1; overflow-y: scroll; padding: 1rem;
         background-color: rgba(255, 255, 255, 0.75);
-        /* ================================= */
     }
     .message-bubble {
-        max-width: 75%;
-        padding: 0.5rem 1rem;
-        margin-bottom: 0.5rem;
-        border-radius: 1rem;
-        word-wrap: break-word;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.08); /* Bóng mờ đẹp hơn */
+        max-width: 75%; padding: 0.5rem 1rem; margin-bottom: 0.5rem; border-radius: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     }
-    .message-bubble img {
-        max-width: 100%;
-        border-radius: 0.5rem;
-        margin-top: 5px;
-    }
-    .message-self {
-        align-self: flex-end;
-        background-color: #007bff; /* Màu xanh dương (Bầu trời/Biển) */
-        color: white;
-        border-bottom-right-radius: 0;
-    }
-    .message-other {
-        align-self: flex-start;
-        background-color: #ffffff; /* Màu trắng */
-        color: #212529;
-        border: 1px solid #f0f0f0;
-        border-bottom-left-radius: 0;
-    }
-    .message-info {
-        font-size: 0.75rem;
-        color: #6c757d;
-        margin-bottom: 0.25rem;
-    }
-    .message-info-self { text-align: right; color: rgba(255,255,255,0.85); }
-    .message-info-other { text-align: left; }
-    .message-status {
-        align-self: center;
-        font-size: 0.8rem;
-        color: #6c757d;
-        margin: 0.5rem 0;
-    }
-    #chat-form-container {
-        border-top: 1px solid #dee2e6;
-        padding: 1rem;
-        background-color: #f8f9fa;
-    }
-    #emoji-picker {
-        position: absolute;
-        bottom: 80px; 
-        right: 10px;
-        z-index: 1000;
-        display: none; 
-    }
-    #emoji-btn {
-        border-top-left-radius: 0;
-        border-bottom-left-radius: 0;
+    .message-self { align-self: flex-end; background-color: #007bff; color: white; }
+    .message-other { align-self: flex-start; background-color: white; border: 1px solid #f0f0f0; }
+    .message-info { font-size: 0.75rem; color: #6c757d; margin-bottom: 0.25rem; }
+    
+    /* Tab Styling */
+    .nav-tabs .nav-link.active {
+        background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold;
     }
 </style>
 
-<div class="container-fluid">
-    <h2 class="mb-3">
-        <i class="bi bi-compass text-primary"></i>
-        Chat Room: <span class="text-primary">{{ room.name }}</span>
-    </h2>
-    <p class="text-muted">{{ room.description }}</p>
+<div class="container-fluid mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h3><i class="bi bi-geo-alt-fill text-primary"></i> {{ room.name }} <small class="text-muted fs-6">{{ room.description }}</small></h3>
+    </div>
 
-    <div id="chat-container" class="shadow-sm">
+    <ul class="nav nav-tabs" id="roomTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat-panel" type="button" role="tab">
+                <i class="bi bi-chat-dots"></i> Chat
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="planner-tab" data-bs-toggle="tab" data-bs-target="#planner-panel" type="button" role="tab">
+                <i class="bi bi-calendar-check"></i> Planner
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="finance-tab" data-bs-toggle="tab" data-bs-target="#finance-panel" type="button" role="tab" onclick="loadGraph()">
+                <i class="bi bi-cash-coin"></i> Finance
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3 bg-white shadow-sm" id="roomTabsContent" style="min-height: 75vh;">
         
-        <div id="user-sidebar">
-            <h5><i class="bi bi-person-check-fill me-2"></i>Online Users (<span id="user-count">0</span>)</h5>
-            <ul id="user-list" class="list-group">
-                </ul>
-        </div>
-
-        <div id="chat-main">
-            <div id="messages">
-                <div class="message-status">Welcome to the chat! Loading history...</div>
-            </div>
-
-            <div id="typing-status" class="small text-muted px-3 py-2" style="height: 30px; background-color: rgba(255, 255, 255, 0.75);">
+        <div class="tab-pane fade show active" id="chat-panel" role="tabpanel">
+            <div id="chat-container">
+                <div id="user-sidebar">
+                    <h6>Online (<span id="user-count">0</span>)</h6>
+                    <ul id="user-list" class="list-group list-group-flush small"></ul>
                 </div>
-            
-            <div id="emoji-picker">
-                <emoji-picker></emoji-picker>
-            </div>
-
-            <div id="chat-form-container">
-                <form id="chat-form">
-                    <div class="input-group">
-                        <input type="text" class="form-control" id="message-input" placeholder="Type your message or paste a GIF URL..." autocomplete="off" aria-label="Message" required>
-                        
-                        <button class="btn btn-outline-secondary" type="button" id="emoji-btn">
-                            <i class="bi bi-emoji-smile"></i>
-                        </button>
-                        
-                        <button class="btn btn-primary" type="submit">
-                            <i class="bi bi-send-fill"></i> Send
-                        </button>
+                <div id="chat-main">
+                    <div id="messages" class="d-flex flex-column"></div>
+                    <div id="typing-status" class="small text-muted px-3 py-1 bg-light"></div>
+                    
+                    <div id="emoji-picker" style="display:none; position: absolute; bottom: 60px; right: 10px; z-index: 100;">
+                        <emoji-picker></emoji-picker>
                     </div>
-                </form>
+
+                    <div class="p-2 bg-light border-top">
+                        <form id="chat-form">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="message-input" placeholder="Message..." autocomplete="off">
+                                <button class="btn btn-outline-secondary" type="button" id="emoji-btn">😊</button>
+                                <button class="btn btn-primary" type="submit">Send</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="planner-panel" role="tabpanel">
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="card h-100">
+                        <div class="card-header bg-info text-white">Itinerary</div>
+                        <div class="card-body bg-light overflow-auto" style="max-height: 65vh;">
+                            {% for act in activities %}
+                            <div class="card mb-2 shadow-sm">
+                                <div class="card-body p-2">
+                                    <div class="d-flex justify-content-between">
+                                        <h6 class="fw-bold">{{ act.name }}</h6>
+                                        <a href="{{ url_for('delete_activity', id=act.id) }}" class="text-danger small text-decoration-none">Delete</a>
+                                    </div>
+                                    <div class="small text-muted">
+                                        <i class="bi bi-clock"></i> {{ act.start_time }} - {{ act.end_time }} | 
+                                        <i class="bi bi-geo-alt"></i> {{ act.location }} | 
+                                        <i class="bi bi-currency-dollar"></i> {{ act.price }}
+                                    </div>
+                                    {% if conflicts.get(act.id) %}
+                                        <div class="mt-1">
+                                            {% for err in conflicts[act.id] %}
+                                                <span class="badge bg-{{ 'danger' if err.level=='critical' else 'warning text-dark' }}">{{ err.msg }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
+                                <p class="text-muted text-center mt-4">No activities planned yet.</p>
+                            {% endfor %}
+
+                            <hr>
+                            <h6>Add Activity</h6>
+                            <form action="{{ url_for('add_room_activity', room_id=room.id) }}" method="POST">
+                                {{ act_form.hidden_tag() }}
+                                <div class="row g-2">
+                                    <div class="col-6">{{ act_form.name(class="form-control form-control-sm", placeholder="Name") }}</div>
+                                    <div class="col-3">{{ act_form.price(class="form-control form-control-sm", placeholder="Price") }}</div>
+                                    <div class="col-3">{{ act_form.rating(class="form-control form-control-sm", placeholder="Rate (0-5)") }}</div>
+                                    <div class="col-6">{{ act_form.start_time(class="form-control form-control-sm", placeholder="Start Time") }}</div>
+                                    <div class="col-6">{{ act_form.end_time(class="form-control form-control-sm", placeholder="End Time") }}</div>
+                                    <div class="col-12">{{ act_form.location(class="form-control form-control-sm", placeholder="Location") }}</div>
+                                    <div class="col-12">{{ act_form.submit(class="btn btn-sm btn-info w-100 text-white") }}</div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-5">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">My Constraints</div>
+                        <div class="card-body">
+                            {% for cons in constraints %}
+                            <div class="alert alert-light border d-flex justify-content-between py-1 px-2 mb-1">
+                                <small><strong>{{ cons.type|upper }}</strong>: {{ cons.value }}</small>
+                                <a href="{{ url_for('delete_constraint', id=cons.id) }}" class="text-muted">x</a>
+                            </div>
+                            {% endfor %}
+                            <hr>
+                            <form action="{{ url_for('add_room_constraint', room_id=room.id) }}" method="POST">
+                                {{ cons_form.hidden_tag() }}
+                                <div class="input-group input-group-sm mb-2">
+                                    {{ cons_form.type(class="form-select") }}
+                                    {{ cons_form.value(class="form-control", placeholder="Value") }}
+                                </div>
+                                <div class="mb-2">
+                                    {% for subfield in cons_form.intensity %}
+                                    <div class="form-check form-check-inline small">
+                                        {{ subfield(class="form-check-input") }} {{ subfield.label(class="form-check-label") }}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {{ cons_form.submit(class="btn btn-sm btn-secondary w-100") }}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="finance-panel" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card mb-3">
+                        <div class="card-header bg-success text-white">New Transaction</div>
+                        <div class="card-body">
+                            <form action="{{ url_for('add_room_transaction', room_id=room.id) }}" method="POST">
+                                {{ trans_form.hidden_tag() }}
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold">Type</label>
+                                    {% for subfield in trans_form.type %}
+                                        <div class="form-check form-check-inline">
+                                            {{ subfield(class="form-check-input") }} {{ subfield.label(class="form-check-label small") }}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                <div class="mb-2">{{ trans_form.amount(class="form-control form-control-sm", placeholder="Amount") }}</div>
+                                <div class="mb-2">{{ trans_form.description(class="form-control form-control-sm", placeholder="Description") }}</div>
+                                
+                                <div class="form-check form-switch mb-2">
+                                    {{ trans_form.is_outside(class="form-check-input", id="switchOutside") }}
+                                    <label class="form-check-label small" for="switchOutside">Is Stranger?</label>
+                                </div>
+                                <div id="memberInput" class="mb-2">{{ trans_form.receiver(class="form-select form-select-sm") }}</div>
+                                <div id="outsiderInput" class="mb-2" style="display:none;">{{ trans_form.outsider_name(class="form-control form-control-sm", placeholder="Stranger Name") }}</div>
+                                
+                                {{ trans_form.submit(class="btn btn-success btn-sm w-100") }}
+                            </form>
+                        </div>
+                    </div>
+
+                    {% if pending_trans %}
+                    <div class="alert alert-warning p-2">
+                        <h6 class="alert-heading h6">Need Confirmation</h6>
+                        <ul class="list-unstyled mb-0 small">
+                        {% for p in pending_trans %}
+                            <li class="border-bottom py-1">
+                                <strong>{{ p.sender.username }}</strong>: {{ "{:,.0f}".format(p.amount) }}
+                                <form action="{{ url_for('confirm_transaction', trans_id=p.id) }}" method="POST" class="d-inline float-end">
+                                    <button class="btn btn-xs btn-outline-dark py-0 px-1">Confirm</button>
+                                </form>
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header d-flex justify-content-between">
+                            <span>Debt Network</span>
+                            <button onclick="loadGraph()" class="btn btn-sm btn-outline-primary">Refresh</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="finance-network" style="height: 500px; width: 100%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-    
     <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
 
     <script type="text/javascript">
+        // --- FINANCE GRAPH LOGIC ---
+        const switchOutside = document.getElementById('switchOutside');
+        const memberInput = document.getElementById('memberInput');
+        const outsiderInput = document.getElementById('outsiderInput');
+
+        if (switchOutside) {
+            switchOutside.addEventListener('change', function() {
+                if(this.checked) {
+                    memberInput.style.display = 'none';
+                    outsiderInput.style.display = 'block';
+                } else {
+                    memberInput.style.display = 'block';
+                    outsiderInput.style.display = 'none';
+                }
+            });
+        }
+
+        function loadGraph() {
+            // Pass the room ID to the API
+            fetch(`/api/finance_graph?room_id={{ room.id }}`)
+                .then(response => response.json())
+                .then(data => {
+                    var nodes = new vis.DataSet(data.nodes);
+                    var edges = new vis.DataSet(data.edges.map(e => ({
+                        from: e.from, to: e.to, label: e.label, 
+                        arrows: 'to', color: {color: '#dc3545'}, width: 2
+                    })));
+                    var container = document.getElementById('finance-network');
+                    var network = new vis.Network(container, { nodes: nodes, edges: edges }, {
+                        nodes: { font: { size: 16 }, borderWidth: 2, color: { background: '#fff', border: '#dc3545' } },
+                        physics: { stabilization: false, barnesHut: { gravitationalConstant: -3000 } }
+                    });
+                });
+        }
+
+        // --- CHAT LOGIC (Existing) ---
         document.addEventListener('DOMContentLoaded', (event) => {
             var socket = io();
             const roomName = '{{ room.name }}';
             const currentUsername = '{{ current_user.username }}';
-
             const messageContainer = document.getElementById('messages');
             const chatForm = document.getElementById('chat-form');
             const messageInput = document.getElementById('message-input');
@@ -189,133 +292,62 @@
             let typingTimer;
 
             function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
-            function addMessage(html) { messageContainer.appendChild(html); }
+            function isImageUrl(url) { return(url.match(/\.(jpeg|jpg|gif|png)$/) != null); }
 
-            // === HÀM NÂNG CẤP ĐỂ HIỂN THỊ GIF/ẢNH ===
-            function createMessageHtml(data) {
+            function addMessage(data) {
                 let isSelf = data.username === currentUsername;
                 let bubbleClass = isSelf ? 'message-self' : 'message-other';
-                let infoClass = isSelf ? 'message-info-self' : 'message-info-other';
-                let usernameDisplay = isSelf ? 'You' : data.username;
-
-                // Hàm kiểm tra URL ảnh/gif
-                function isImageUrl(url) {
-                    return(url.match(/\.(jpeg|jpg|gif|png)$/) != null);
-                }
-
-                let messageBodyHtml;
-                if (isImageUrl(data.msg)) {
-                    // Nếu là URL ảnh, hiển thị thẻ <img>
-                    messageBodyHtml = `<img src="${data.msg}" alt="User image">`;
-                } else {
-                    // Nếu là văn bản, chỉ hiển thị văn bản (an toàn)
-                    const bodyDiv = document.createElement('div');
-                    bodyDiv.textContent = data.msg;
-                    messageBodyHtml = bodyDiv.innerHTML; // Lấy HTML an toàn
-                }
-
+                let content = isImageUrl(data.msg) ? `<img src="${data.msg}" style="max-width:100%; border-radius:5px;">` : data.msg;
+                
                 const msgDiv = document.createElement('div');
                 msgDiv.classList.add('message-bubble', bubbleClass);
-
-                const infoDiv = document.createElement('div');
-                infoDiv.classList.add('message-info', infoClass);
-                infoDiv.innerHTML = `<strong>${usernameDisplay}</strong> <small class="ms-2">${data.timestamp}</small>`;
-                
-                // Thêm nội dung tin nhắn (văn bản hoặc ảnh)
-                const bodyContainer = document.createElement('div');
-                bodyContainer.classList.add('message-body');
-                bodyContainer.innerHTML = messageBodyHtml;
-
-                msgDiv.appendChild(infoDiv);
-                msgDiv.appendChild(bodyContainer);
-                return msgDiv;
-            }
-            // ===========================================
-
-            function createStatusHtml(data) {
-                const statusDiv = document.createElement('div');
-                statusDiv.classList.add('message-status');
-                statusDiv.innerHTML = `<em>${data.msg}</em>`;
-                return statusDiv;
+                msgDiv.innerHTML = `
+                    <div class="message-info text-${isSelf ? 'end text-white-50' : 'start'}"><strong>${isSelf ? 'You' : data.username}</strong> <small>${data.timestamp}</small></div>
+                    <div>${content}</div>
+                `;
+                messageContainer.appendChild(msgDiv);
+                scrollToBottom();
             }
 
-            // --- Logic cho Emoji Picker (không đổi) ---
-            emojiBtn.addEventListener('click', () => {
-                emojiPicker.style.display = (emojiPicker.style.display === 'none' || emojiPicker.style.display === '') ? 'block' : 'none';
-            });
-            emojiPicker.addEventListener('emoji-click', event => {
-                messageInput.value += event.detail.unicode;
-            });
+            emojiBtn.addEventListener('click', () => { emojiPicker.style.display = (emojiPicker.style.display === 'none') ? 'block' : 'none'; });
+            emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; });
 
-
-            // --- Logic cho "Đang gõ phím" (không đổi) ---
             messageInput.addEventListener('input', () => {
                 clearTimeout(typingTimer);
                 socket.emit('typing', { room: roomName });
-                typingTimer = setTimeout(() => {
-                    socket.emit('stopped_typing', { room: roomName });
-                }, 2000);
+                typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: roomName }); }, 2000);
             });
             socket.on('typing_status', (data) => {
-                if (data.isTyping) {
-                    typingStatus.textContent = `${data.username} is typing...`;
-                } else {
-                    if (typingStatus.textContent.includes(data.username)) {
-                         typingStatus.textContent = '';
-                    }
-                }
+                typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : '';
             });
 
-            // --- Trình xử lý sự kiện Socket.IO (không đổi) ---
-            socket.on('connect', function() {
-                socket.emit('join', { 'room': roomName });
+            socket.on('connect', () => socket.emit('join', { 'room': roomName }));
+            socket.on('load_history', msgs => { messageContainer.innerHTML=''; msgs.forEach(addMessage); });
+            socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
+            socket.on('status', data => {
+                const div = document.createElement('div');
+                div.className = 'text-center small text-muted my-1'; div.innerHTML = `<em>${data.msg}</em>`;
+                messageContainer.appendChild(div);
             });
-            
-            socket.on('load_history', function(messages) {
-                messageContainer.innerHTML = ''; 
-                messages.forEach(function(data) { addMessage(createMessageHtml(data)); });
-                scrollToBottom(); 
-            });
-
-            socket.on('receive_message', function(data) {
-                addMessage(createMessageHtml(data));
-                scrollToBottom(); 
-                if (typingStatus.textContent.includes(data.username)) {
-                    typingStatus.textContent = '';
-                }
-            });
-
-            socket.on('status', function(data) {
-                addMessage(createStatusHtml(data));
-                scrollToBottom(); 
-            });
-
-            socket.on('user_list', function(data) {
-                userList.innerHTML = '';
-                userCount.textContent = data.users.length;
-                data.users.forEach(function(username) {
-                    const li = document.createElement('li');
-                    li.classList.add('list-group-item');
-                    li.innerHTML = `<span class="online-dot"></span> ${username}`;
+            socket.on('user_list', data => {
+                userList.innerHTML = ''; userCount.textContent = data.users.length;
+                data.users.forEach(u => {
+                    const li = document.createElement('li'); li.className='list-group-item px-0 py-1 bg-transparent';
+                    li.innerHTML = `<span style="height:8px;width:8px;background:green;border-radius:50%;display:inline-block;"></span> ${u}`;
                     userList.appendChild(li);
                 });
             });
 
-            chatForm.addEventListener('submit', function(e) {
-                e.preventDefault(); 
+            chatForm.addEventListener('submit', e => {
+                e.preventDefault();
                 let msg = messageInput.value.trim();
                 if (msg) {
                     socket.emit('send_message', { 'msg': msg, 'room': roomName });
-                    clearTimeout(typingTimer);
-                    socket.emit('stopped_typing', { room: roomName });
-                    messageInput.value = '';
-                    emojiPicker.style.display = 'none';
+                    clearTimeout(typingTimer); socket.emit('stopped_typing', { room: roomName });
+                    messageInput.value = ''; emojiPicker.style.display = 'none';
                 }
             });
-
-            window.addEventListener('beforeunload', function() {
-                socket.emit('leave', { 'room': roomName });
-            });
+            window.addEventListener('beforeunload', () => socket.emit('leave', { 'room': roomName }));
         });
     </script>
 {% endblock %}

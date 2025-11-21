@@ -131,6 +131,11 @@ class Transaction(db.Model):
     receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     outsider_id = db.Column(db.Integer, db.ForeignKey('outsider.id'), nullable=True)
 
+    # --- [UPDATE] Link Transaction to Room ---
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=True)
+    room = db.relationship('Room', backref='transactions')
+    # -----------------------------------------
+
     # Relationships
     sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_transactions')
     receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_transactions')
@@ -170,4 +175,3 @@ class Constraint(db.Model):
 
     def __repr__(self):
         return f"<Constraint {self.type} {self.intensity}>"
-    
