@@ -329,16 +329,25 @@ def chat_room(room_name):
     act_form = ActivityForm()
     cons_form = ConstraintForm()
     activities = Activity.query.filter_by(room_id=room.id).all()
+    
+    # --- NEW: PREPARE TIMELINE DATA FOR JS ---
+    timeline_data = []
+    for act in activities:
+        timeline_data.append({
+            'name': act.name,
+            'start': act.start_time,
+            'end': act.end_time
+        })
+    # -----------------------------------------
+
     my_constraints = Constraint.query.filter_by(user_id=current_user.id, room_id=room.id).all()
     conflicts = check_conflicts(activities, my_constraints)
 
     # --- FINANCE DATA ---
     trans_form = TransactionForm()
-    # Limit choices to room members only
     trans_form.receiver.choices = [(m.id, m.username) for m in room.members if m.id != current_user.id]
     if not trans_form.receiver.choices: trans_form.receiver.choices = [(0, 'No other members')]
 
-    # Filter transactions by ROOM
     pending_trans = Transaction.query.filter_by(room_id=room.id, receiver_id=current_user.id, status='pending').all()
     history_trans = Transaction.query.filter(Transaction.room_id == room.id).filter(
         (Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)
@@ -346,13 +355,11 @@ def chat_room(room_name):
 
     return render_template('chat_room.html', title=f'Trip: {room.name}', 
                            room=room,
-                           # Planner
-                           act_form=act_form, cons_form=cons_form, activities=activities, 
+                           act_form=act_form, cons_form=cons_form, 
+                           activities=activities, 
+                           timeline_data=timeline_data, # <--- Pass this new variable
                            constraints=my_constraints, conflicts=conflicts,
-                           # Finance
                            trans_form=trans_form, pending_trans=pending_trans, history_trans=history_trans)
-
-# --- NEW ACTION ROUTES FOR CHAT FEATURES ---
 
 @app.route('/room/<int:room_id>/add_activity', methods=['POST'])
 @login_required
@@ -377,13 +384,24 @@ def add_room_activity(room_id):
 def add_room_constraint(room_id):
     room = Room.query.get_or_404(room_id)
     form = ConstraintForm()
+    
     if form.validate_on_submit():
         new_cons = Constraint(
-            type=form.type.data, intensity=form.intensity.data, value=form.value.data,
-            user=current_user, room_id=room.id
+            type=form.type.data, 
+            intensity=form.intensity.data, 
+            value=form.value.data,
+            user=current_user, 
+            room_id=room.id
         )
         db.session.add(new_cons)
         db.session.commit()
+        flash('Constraint added successfully.', 'success')
+    else:
+        # FIX: Show errors so you know why it failed
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {field}: {error}", 'danger')
+                
     return redirect(url_for('chat_room', room_name=room.name))
 
 @app.route('/room/<int:room_id>/add_transaction', methods=['POST'])
