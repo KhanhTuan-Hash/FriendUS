@@ -22,12 +22,19 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
 
     <style>
+        /* Logo Style */
+        .navbar-brand img {
+            height: 30px;
+            margin-right: 10px;
+            width: auto;
+        }
+
         #map { 
             height: 600px; 
             border-radius: 0.25rem; 
             border: 1px solid #dee2e6;
         }
-        /* ... [Keep existing styles for widget] ... */
+
         .scattered-toggle-btn {
             position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
             background-color: #4a90e2; color: white; border-radius: 50%; border: none;
@@ -76,10 +83,15 @@
     
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
       <div class="container">
-        <a class="navbar-brand" href="{{ url_for('index') }}">FriendUS</a>
+        <a class="navbar-brand" href="{{ url_for('index') }}">
+            <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Logo">
+            FriendUS
+        </a>
+        
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
+        
         <div class="collapse navbar-collapse" id="navbarNav">
           <ul class="navbar-nav ms-auto">
           {% if current_user.is_authenticated %}
@@ -148,6 +160,7 @@
         </div>
     </div>
     {% endif %}
+    
     {{ bootstrap.load_js() }}
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
@@ -155,7 +168,6 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
     
     <script>
-       /* Keep existing widget JS logic */
         const swWidget = document.getElementById('swWidget');
         const swModal = document.getElementById('swModal');
         const swList = document.getElementById('swList');

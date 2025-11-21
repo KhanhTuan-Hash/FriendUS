@@ -260,6 +260,28 @@ def location_detail(location_id):
     reviews = Review.query.filter_by(location=location).order_by(Review.timestamp.desc()).all()
     return render_template('location_detail.html', title=location.name, location=location, form=form, reviews=reviews, is_favorited=is_favorited)
 
+@app.route('/location/favorite/<int:location_id>', methods=['POST'])
+@login_required
+def add_favorite(location_id):
+    location = Location.query.get_or_404(location_id)
+    # Check if already favorited to avoid duplicates
+    if not current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.append(location)
+        db.session.commit()
+        flash(f'Added {location.name} to favorites!', 'success')
+    return redirect(url_for('location_detail', location_id=location_id))
+
+@app.route('/location/unfavorite/<int:location_id>', methods=['POST'])
+@login_required
+def remove_favorite(location_id):
+    location = Location.query.get_or_404(location_id)
+    # Check if it exists before removing
+    if current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.remove(location)
+        db.session.commit()
+        flash(f'Removed {location.name} from favorites.', 'info')
+    return redirect(url_for('location_detail', location_id=location_id))
+
 # --- CHAT & MERGED FEATURES ---
 
 # --- FIX FOR LEGACY NAVIGATION LINKS ---
