@@ -69,15 +69,16 @@ def populate_db():
         db.session.commit()
         print("Created 'general' room.")
 
-# --- FINANCE LOGIC (THUẬT TOÁN ĐỒ THỊ) ---
+# --- FINANCE LOGIC (REPLACED) ---
 def simplify_debts(transactions):
     """
-    Logic tối giản nợ:
-    - 'debt': Sender nợ Receiver -> Sender bị trừ tiền, Receiver được cộng tiền.
-    - 'repayment': Sender trả Receiver -> Sender được cộng tiền (bớt nợ), Receiver bị trừ tiền (bớt nhận).
+    UPDATED LOGIC: DIRECT OWE/LEND DISPLAY
+    - Removed the simplification algorithm.
+    - Calculates the net debt between specific pairs of users only.
+    - If A owes B, draws A -> B.
     """
-    balances = {}
-    
+    pair_balances = {} # Key: tuple(sorted(u1, u2)), Value: amount
+
     for t in transactions:
         s_name = t.sender.username
         
@@ -88,53 +89,61 @@ def simplify_debts(transactions):
         else:
             continue 
 
-        amount = t.amount
+        amount = float(t.amount)
+
+        # We sort names to ensure (Alice, Bob) is the same key as (Bob, Alice)
+        # This allows us to calculate the NET flow between two people.
+        p1, p2 = sorted((s_name, r_name))
+        key = (p1, p2)
+        
+        if key not in pair_balances:
+            pair_balances[key] = 0.0
+
+        # Logic: 
+        # Positive value means p1 owes p2.
+        # Negative value means p2 owes p1.
 
         if t.type == 'debt':
-            # A nợ B: A âm, B dương
-            balances[s_name] = balances.get(s_name, 0) - amount
-            balances[r_name] = balances.get(r_name, 0) + amount
+            # 'debt': Sender owes Receiver
+            if s_name == p1:
+                # p1 owes p2 -> Increase positive balance
+                pair_balances[key] += amount
+            else:
+                # p2 owes p1 -> Decrease balance (becomes more negative)
+                pair_balances[key] -= amount
         
         elif t.type == 'repayment':
-            # A trả B: A bớt âm, B bớt dương
-            balances[s_name] = balances.get(s_name, 0) + amount
-            balances[r_name] = balances.get(r_name, 0) - amount
+            # 'repayment': Sender pays Receiver (Reduces Debt)
+            if s_name == p1:
+                # p1 pays p2 -> Reduces the amount p1 owes
+                pair_balances[key] -= amount
+            else:
+                # p2 pays p1 -> Increases the balance (reduces p2's debt)
+                pair_balances[key] += amount
 
-    debtors = []
-    creditors = []
+    # Generate Direct Edges based on final pair balances
+    direct_edges = []
     
-    # Lọc những người có số dư khác 0
-    for person, bal in balances.items():
-        if bal < -1: debtors.append({'person': person, 'amount': bal})
-        elif bal > 1: creditors.append({'person': person, 'amount': bal})
+    for (p1, p2), bal in pair_balances.items():
+        if bal > 0:
+            # p1 owes p2
+            direct_edges.append({
+                'from': p1,
+                'to': p2,
+                'amount': bal,
+                'label': f"{bal:,.0f}" 
+            })
+        elif bal < 0:
+            # p2 owes p1 (balance is negative)
+            direct_edges.append({
+                'from': p2,
+                'to': p1,
+                'amount': abs(bal),
+                'label': f"{abs(bal):,.0f}" 
+            })
+        # If bal == 0, no debt exists, so no edge is drawn.
 
-    simplified_edges = []
-    debtors.sort(key=lambda x: x['amount'])       
-    creditors.sort(key=lambda x: x['amount'], reverse=True) 
-
-    i = 0
-    j = 0
-    while i < len(debtors) and j < len(creditors):
-        debtor = debtors[i]
-        creditor = creditors[j]
-        
-        amount = min(abs(debtor['amount']), creditor['amount'])
-        
-        # Cạnh: Debtor -> Creditor (Nghĩa là Nợ)
-        simplified_edges.append({
-            'from': debtor['person'],
-            'to': creditor['person'],
-            'amount': amount,
-            'label': f"{amount:,.0f}" 
-        })
-
-        debtor['amount'] += amount
-        creditor['amount'] -= amount
-
-        if abs(debtor['amount']) < 1: i += 1
-        if creditor['amount'] < 1: j += 1
-        
-    return simplified_edges
+    return direct_edges
 
 # --- PLANNER LOGIC (NEW) ---
 def check_conflicts(activities, constraints):
@@ -374,7 +383,7 @@ def get_street_network():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- FINANCE ROUTES (MỚI) ---
+# --- FINANCE ROUTES (NEW) ---
 
 @app.route('/finance', methods=['GET', 'POST'])
 @login_required
@@ -396,10 +405,10 @@ def finance_dashboard():
             sender_id=current_user.id, status='pending'
         )
 
-        # Xử lý Người lạ (Outsider)
+        # Handle Outsider
         if form.is_outside.data and form.outsider_name.data:
             o_name = form.outsider_name.data.strip()
-            # Tìm hoặc tạo Outsider (Node phụ)
+            # Find or create Outsider (Auxiliary Node)
             outsider = Outsider.query.filter_by(name=o_name, creator_id=current_user.id).first()
             
             if not outsider:
@@ -408,10 +417,10 @@ def finance_dashboard():
                 db.session.commit()
             
             new_trans.outsider_id = outsider.id
-            new_trans.status = 'confirmed' # Auto confirm cho người lạ
+            new_trans.status = 'confirmed' # Auto confirm for outsider
             flash(f'Recorded transaction with {o_name} (Outsider).', 'success')
         
-        # Xử lý Member
+        # Handle Member
         else:
             new_trans.receiver_id = form.receiver.data
             flash('Transaction sent! Waiting for confirmation.', 'info')
@@ -420,10 +429,10 @@ def finance_dashboard():
         db.session.commit()
         return redirect(url_for('finance_dashboard'))
 
-    # Lấy dữ liệu hiển thị
+    # Get Display Data
     pending = Transaction.query.filter_by(receiver_id=current_user.id, status='pending').all()
     
-    # History: Lấy cả giao dịch với User và Outsider
+    # History: Get transactions for both Users and Outsiders
     history = Transaction.query.filter(
         (Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)
     ).order_by(Transaction.timestamp.desc()).all()
@@ -448,15 +457,13 @@ def confirm_transaction(trans_id):
 def delete_transaction(trans_id):
     trans = Transaction.query.get_or_404(trans_id)
     
-    # Chỉ cho phép người tạo (sender) xóa
+    # Only allow creator (sender) to delete
     if trans.sender_id != current_user.id:
         flash('Permission denied.', 'danger')
         return redirect(url_for('finance_dashboard'))
     
-    # Chỉ cho phép xóa khi chưa confirm (để an toàn)
-    if trans.status == 'confirmed' and not trans.outsider_id: # Cho phép xóa người lạ vì auto-confirm
-         # Tùy chỉnh: Nếu bạn muốn cho phép xóa cả Confirmed, bỏ dòng check này
-         # Nhưng tốt nhất chỉ cho xóa Pending
+    # Check status if needed (optional)
+    if trans.status == 'confirmed' and not trans.outsider_id: 
          pass 
 
     db.session.delete(trans)
@@ -469,7 +476,7 @@ def delete_transaction(trans_id):
 def api_finance_graph():
     transactions = Transaction.query.filter(
         (Transaction.status == 'confirmed') | 
-        (Transaction.status == 'pending') # Hiển thị cả pending để thấy ngay thay đổi
+        (Transaction.status == 'pending') # Show pending to see changes immediately
     ).all()
     
     edges = simplify_debts(transactions)
