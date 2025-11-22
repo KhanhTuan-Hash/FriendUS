@@ -1,0 +1,85 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Server Banner -->
+    <div class="alert alert-danger text-center fw-bold shadow-sm" role="alert">
+        <i class="bi bi-hdd-rack-fill"></i> SERVER ADMIN MODE - FULL ACCESS GRANTED
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary mb-3 shadow">
+                <div class="card-header">Total Users</div>
+                <div class="card-body">
+                    <h1 class="card-title display-4">{{ user_count }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success mb-3 shadow">
+                <div class="card-header">Active Rooms</div>
+                <div class="card-body">
+                    <h1 class="card-title display-4">{{ room_count }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info mb-3 shadow">
+                <div class="card-header">Total Messages</div>
+                <div class="card-body">
+                    <h1 class="card-title display-4">{{ msg_count }}</h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning mb-3 shadow">
+                <div class="card-header">Transactions</div>
+                <div class="card-body">
+                    <h1 class="card-title display-4">{{ trans_count }}</h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-tools"></i> Debug Tools
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="{{ url_for('admin.debug_users') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people-fill"></i> View All Users / Promote Admins
+                    </a>
+                    <a href="{{ url_for('admin.debug_transactions') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-cash-stack"></i> View Global Transaction Ledger
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <i class="bi bi-clock-history"></i> Recently Joined Users
+                </div>
+                <ul class="list-group list-group-flush">
+                    {% for u in recent_users %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ u.username }} <small class="text-muted">({{ u.email }})</small></span>
+                            {% if u.is_admin %}
+                                <span class="badge bg-danger">ADMIN</span>
+                            {% else %}
+                                <span class="badge bg-secondary">USER</span>
+                            {% endif %}
+                        </li>
+                    {% else %}
+                        <li class="list-group-item text-muted">No users found.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

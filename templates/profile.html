@@ -1,0 +1,45 @@
+{% extends "layout.html" %}
+
+{% block content %}
+    <div class="p-4 mb-4 bg-light rounded-3">
+        <div class="container-fluid py-5">
+            <h1 class="display-5 fw-bold">{{ user.username }}</h1>
+            <p class="col-md-8 fs-4">Email: {{ user.email }}</p>
+            </div>
+    </div>
+
+    <h3>Posts by {{ user.username }}</h3>
+    <hr>
+    {% for post in posts %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <!-- FIX: Point to client.profile -->
+                <a href="{{ url_for('client.profile', username=post.author.username) }}">{{ post.author.username }}</a>
+                <small class="text-muted float-end">{{ post.timestamp.strftime('%Y-%m-%d %H:%M') }}</small>
+            </div>
+            <div class="card-body">
+                <p class="card-text">{{ post.body }}</p>
+                
+                {# --- START: Add this block to display Media --- #}
+                {% if post.media_filename %}
+                    <div class="mt-3">
+                        {% if post.media_filename.lower().endswith(('.mp4', '.mov', '.avi')) %}
+                            <video controls style="max-width: 100%; border-radius: 5px;">
+                                <source src="{{ url_for('static', filename='uploads/' + post.media_filename) }}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        {% else %}
+                            <img src="{{ url_for('static', filename='uploads/' + post.media_filename) }}" 
+                                 alt="Post media" 
+                                 style="max-width: 100%; border-radius: 5px;">
+                        {% endif %}
+                    </div>
+                {% endif %}
+                {# --- END: Media Block --- #}
+                
+            </div>
+        </div>
+    {% else %}
+        <p>{{ user.username }} has not posted anything yet.</p>
+    {% endfor %}
+{% endblock %}

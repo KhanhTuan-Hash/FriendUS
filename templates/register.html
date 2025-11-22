@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% from 'bootstrap5/form.html' import render_form %}
+
+{% block content %}
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <h2 class="mb-4">Register</h2>
+            {{ render_form(form) }}
+            <p class="mt-3">
+                <!-- KEEP: 'login' is correct as it is in app.py -->
+                Already have an account? <a href="{{ url_for('login') }}">Log In</a>
+            </p>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2><i class="bi bi-cash-coin"></i> Global Ledger</h2>
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body p-0">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Room</th>
+                        <th>Sender</th>
+                        <th>Receiver/Outsider</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in transactions %}
+                    <tr>
+                        <td>{{ t.id }}</td>
+                        <td>
+                            {% if t.room %}
+                                <a href="{{ url_for('client.chat_room', room_name=t.room.name) }}">{{ t.room.name }}</a>
+                            {% else %}
+                                <span class="text-muted">Deleted Room</span>
+                            {% endif %}
+                        </td>
+                        <td class="fw-bold">{{ t.sender.username }}</td>
+                        <td>
+                            {% if t.receiver %}
+                                {{ t.receiver.username }}
+                            {% elif t.outsider %}
+                                {{ t.outsider.name }} (Out)
+                            {% else %}
+                                <span class="text-danger">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if t.type == 'debt' %}
+                                <span class="text-danger">OWE</span>
+                            {% else %}
+                                <span class="text-success">PAID</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ "{:,.0f}".format(t.amount) }}</td>
+                        <td>
+                            {% if t.status == 'confirmed' %}
+                                <span class="badge bg-success">Confirmed</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ t.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No transactions found in the system.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
