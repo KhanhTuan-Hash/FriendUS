@@ -8,6 +8,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
 import osmnx as ox
 import geopandas as gpd
+import networkx as nx
 from sqlalchemy import func
 
 # Import extensions and models
@@ -614,6 +615,8 @@ def handle_typing(data):
 def handle_stopped_typing(data):
     if current_user.is_authenticated:
         emit('typing_status', {'username': current_user.username, 'isTyping': False}, to=data['room'], include_self=False)
+
+
 
 if __name__ == '__main__':
     with app.app_context():
