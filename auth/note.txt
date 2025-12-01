@@ -1,0 +1,2 @@
+pip install -U Flask Authlib requests
+https://github.com/authlib/demo-oauth-client/tree/master/flask-google-login
