@@ -5,7 +5,7 @@
     
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><span class="text-muted">Plan for:</span> {{ room.name }}</h2>
-        <a href="{{ url_for('chat_room', room_name=room.name) }}" class="btn btn-outline-secondary btn-sm">Back to Chat</a>
+        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="btn btn-outline-secondary btn-sm">Back to Chat</a>
     </div>
 
     <div class="card shadow-sm mb-5 border-primary">
@@ -20,7 +20,7 @@
                 <div class="card-body p-2 d-flex align-items-stretch">
                     
                     <div class="me-3 border-end pe-3 d-flex align-items-center">
-                        <a href="{{ url_for('delete_activity', id=act.id) }}" class="text-danger fw-bold text-decoration-none">[-]</a>
+                        <a href="{{ url_for('planner.delete_activity', id=act.id) }}" class="text-danger fw-bold text-decoration-none">[-]</a>
                     </div>
 
                     <div class="flex-grow-1">
@@ -108,7 +108,7 @@
                     {{ cons.value }}
                 </div>
 
-                <a href="{{ url_for('delete_constraint', id=cons.id) }}" class="ms-3 text-muted">x</a>
+                <a href="{{ url_for('planner.delete_constraint', id=cons.id) }}" class="ms-3 text-muted">x</a>
             </div>
             {% endfor %}
 

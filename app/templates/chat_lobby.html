@@ -21,7 +21,7 @@
                 <i class="bi bi-plus-lg me-2"></i>Create New Room
             </div>
             <div class="card-body">
-                {{ render_form(form, action=url_for('chat')) }}
+                {{ render_form(form, action=url_for('chat.chat')) }}
             </div>
         </div>
 
@@ -32,7 +32,7 @@
             <ul class="list-group list-group-flush">
                 {% for room in my_rooms %}
                     <li class="list-group-item d-flex justify-content-between align-items-center list-group-item-action">
-                        <a href="{{ url_for('chat_room', room_name=room.name) }}" class="text-decoration-none fw-bold">{{ room.name }}</a>
+                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none fw-bold">{{ room.name }}</a>
                         <span class="badge bg-primary rounded-pill">
                             <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }}
                         </span>
@@ -50,7 +50,7 @@
             {% for room in all_rooms %}
                 <div class="list-group-item list-group-item-action flex-column align-items-start mb-3 shadow-sm p-3">
                     <div class="d-flex w-100 justify-content-between">
-                        <a href="{{ url_for('chat_room', room_name=room.name) }}" class="text-decoration-none">
+                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none">
                             <h5 class="mb-1 text-primary">{{ room.name }}</h5>
                         </a>
                         
@@ -59,7 +59,7 @@
                                 <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }} member(s)
                             </small>
                             {% if room.creator == current_user %}
-                                <form action="{{ url_for('delete_chat_room', room_id=room.id) }}" method="POST" style="display: inline;" 
+                                <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" style="display: inline;" 
                                       onsubmit="return confirm('Are you sure you want to permanently delete this room and all its messages? This cannot be undone.');">
                                     <button type="submit" class="btn btn-danger btn-sm py-0 px-2"><i class="bi bi-trash"></i> Delete</button>
                                 </form>

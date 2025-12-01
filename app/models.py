@@ -1,6 +1,6 @@
-from ext import db
 from flask_login import UserMixin
 from datetime import datetime
+from app.extensions import db, login_manager
 
 # --- BẢNG QUAN HỆ MỚI CHO "YÊU THÍCH" ---
 user_favorites = db.Table('user_favorites',

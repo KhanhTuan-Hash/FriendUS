@@ -226,7 +226,8 @@
             viewBtn.onclick = function() {
                 viewBtn.disabled = true;
                 viewBtn.innerText = "Saving...";
-                fetch('/api/create_location_on_click', {
+                // FIXED URL HERE
+                fetch('{{ url_for("map.create_location_on_click") }}', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({lat: lat, lon: lon, name: name, address: address})

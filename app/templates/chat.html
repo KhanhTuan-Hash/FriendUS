@@ -2,19 +2,15 @@
 
 {% block content %}
 <div class="row">
-    <!-- Chat Interface Column -->
     <div class="col-md-10 offset-md-1 col-lg-8 offset-lg-2">
         <h2 class="mb-4 text-center">Group Chat</h2>
         
-        <!-- Message Display Area -->
         <div class="card mb-3">
             <div class="card-body" id="messages" style="height: 60vh; overflow-y: scroll; display: flex; flex-direction: column;">
-                <!-- Messages will be dynamically added here -->
                 <div class="text-muted text-center small my-2">Welcome to the chat!</div>
             </div>
         </div>
 
-        <!-- Message Input Form -->
         <form id="chat-form">
             <div class="input-group">
                 <input type="text" class="form-control" id="message-input" placeholder="Type your message..." autocomplete="off" aria-label="Message">
@@ -26,11 +22,8 @@
 {% endblock %}
 
 {% block scripts %}
-    <!-- FIX: Explicitly include Socket.IO library here to ensure io() is defined -->
-    <!-- This line is added to fix the "io is not defined" error. -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 
-    <!-- This script block is defined in layout.html -->
     <script type="text/javascript">
         document.addEventListener('DOMContentLoaded', (event) => {
             // 1. Connect to the Socket.IO server
@@ -96,4 +89,4 @@
             scrollToBottom();
         });
     </script>
-{% endblock %}
+{% endblock %} 
