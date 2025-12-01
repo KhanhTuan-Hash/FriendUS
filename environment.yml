@@ -1,6 +1,7 @@
 name: friendus-env
 channels:
   - conda-forge
+  - defaults  
 dependencies:
   # --- Core Python ---
   - python=3.10
@@ -24,3 +25,8 @@ dependencies:
 
   # --- Database ---
   - sqlalchemy
+
+  # --- Auth
+  - Authlib
+  - requests
+  - python-dotenv
