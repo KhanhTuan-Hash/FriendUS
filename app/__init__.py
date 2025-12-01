@@ -1,6 +1,5 @@
 from flask import Flask
 from config import Config
-# Added oauth to imports
 from app.extensions import db, login_manager, bootstrap, socketio, oauth
 from app.events import register_socketio_events
 
@@ -13,9 +12,9 @@ def create_app(config_class=Config):
     login_manager.init_app(app)
     bootstrap.init_app(app)
     socketio.init_app(app)
-    oauth.init_app(app)  # [New: Init OAuth]
+    oauth.init_app(app)
 
-    # [New: Register Google Provider]
+    # Register Google Provider
     CONF_URL = 'https://accounts.google.com/.well-known/openid-configuration'
     oauth.register(
         name='google',
@@ -36,7 +35,11 @@ def create_app(config_class=Config):
     from app.blueprints.finance import finance_bp
 
     app.register_blueprint(main_bp)
-    app.register_blueprint(auth_bp) # Note: url_prefix is likely set inside auth_bp definition or here
+    
+    # --- THIS IS THE CRITICAL FIX ---
+    app.register_blueprint(auth_bp, url_prefix='/auth') 
+    # --------------------------------
+    
     app.register_blueprint(map_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(planner_bp)

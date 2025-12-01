@@ -1,35 +1,52 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, current_user, login_required
-# Added oauth to imports
 from app.extensions import db, oauth
 from app.models import User, Post
 from app.forms import LoginForm, RegisterForm, UpdateAccountForm
-import secrets # [New Import] To generate random passwords for Google users
+import secrets
 
 auth_bp = Blueprint('auth', __name__)
 
 # --- Standard Login Routes ---
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    if current_user.is_authenticated: return redirect(url_for('main.index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
+        # [MODIFIED] Check DB by Username, not Email
+        user = User.query.filter_by(username=form.username.data).first()
+        
         if user and user.password == form.password.data:
             login_user(user, remember=form.remember.data)
             return redirect(url_for('main.index'))
-        else: flash('Login Unsuccessful.', 'danger')
+        else:
+            flash('Login Unsuccessful. Please check username and password', 'danger')
+            
     return render_template('login.html', title='Login', form=form)
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
-    if current_user.is_authenticated: return redirect(url_for('main.index'))
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    
     form = RegisterForm()
     if form.validate_on_submit():
-        user = User(username=form.username.data, email=form.email.data, password=form.password.data)
+        # [MODIFIED] Auto-generate fake email to satisfy Database requirement
+        fake_email = f"{form.username.data}@friendus.local"
+        
+        user = User(
+            username=form.username.data, 
+            email=fake_email, 
+            password=form.password.data
+        )
         db.session.add(user)
         db.session.commit()
+        
+        flash(f'Account created for {form.username.data}!', 'success')
         return redirect(url_for('auth.login'))
+        
     return render_template('register.html', title='Register', form=form)
 
 @auth_bp.route('/logout')
@@ -37,14 +54,14 @@ def logout():
     logout_user()
     return redirect(url_for('main.index'))
 
-# --- New Google OAuth Routes ---
+# --- Google OAuth Routes ---
 
 @auth_bp.route('/google')
 def google_login():
     """Redirects user to Google for authentication."""
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
-    # Ensure this matches the URI in Google Cloud Console: http://127.0.0.1:5000/auth/callback
+    # Redirect URI: http://127.0.0.1:5000/auth/callback
     redirect_uri = url_for('auth.google_callback', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
 
@@ -62,7 +79,7 @@ def google_callback():
     email = user_info.get('email')
     name = user_info.get('name')
     
-    # 1. Check if user already exists
+    # 1. Check if user already exists (by Email)
     user = User.query.filter_by(email=email).first()
 
     if user:
@@ -72,8 +89,7 @@ def google_callback():
         return redirect(url_for('main.index'))
     else:
         # 2. User does not exist, create new account
-        # We need a unique username. Using name from google, but might conflict.
-        # Simple fix: Check if username exists, if so, append random string
+        # Generate unique username based on Google name
         base_username = name.replace(" ", "")
         username = base_username
         if User.query.filter_by(username=username).first():
@@ -84,7 +100,7 @@ def google_callback():
         
         new_user = User(
             username=username, 
-            email=email, 
+            email=email,  # We use the REAL Google email here
             password=random_password 
         )
         db.session.add(new_user)
@@ -93,7 +109,6 @@ def google_callback():
         login_user(new_user)
         flash('Account created via Google!', 'success')
         return redirect(url_for('main.index'))
-
 
 # --- Account Routes ---
 
