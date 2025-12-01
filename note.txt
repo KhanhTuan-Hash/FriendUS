@@ -8,3 +8,12 @@ if __name__ == '__main__':
     # Whelxi note: when hosting, remember to set debug=False and binding host='0.0.0.0'
     socketio.run(app, host='0.0.0.0', port=5000, debug=False)
 """
+
+
+friendus.db
+note/
+uploads/
+environment.yml
+__pycache__/
+cache/
+debug/
