@@ -39,15 +39,17 @@ def map_search():
             'rating': float(rating)
         })
     
-    # --- FIX: Get Key from Config ---
     # Ensure you have VIETMAP_API_KEY in your .env or config.py
     vietmap_api_key = current_app.config.get('VIETMAP_API_KEY', '')
+    
+    # DEBUG: Uncomment this line to force the key if your .env file isn't working yet
+    # vietmap_api_key = "YOUR_REAL_API_KEY_HERE"
 
     return render_template('map.html', title='Map Search', 
                            query=query_name, query_type=query_type,
                            query_price=query_price, query_rating=query_rating,
                            locations_data=locations_data, default_lat=lat, default_lon=lon,
-                           vietmap_api_key=vietmap_api_key) # Pass it to the template
+                           vietmap_api_key=vietmap_api_key)
 
 @map_bp.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required

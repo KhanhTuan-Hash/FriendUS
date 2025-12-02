@@ -1,475 +1,244 @@
 {% extends "layout.html" %}
-{% set full_width = true %}
+
+{% set full_width = True %}
 
 {% block content %}
 <style>
-    /* --- FULL SCREEN MAP CONTAINER --- */
-    .map-wrapper {
-        position: relative;
-        width: 100%;
+    /* Map Interface Styles */
+    #map-container {
+        display: flex;
+        flex: 1;
         height: 100%;
+        position: relative;
         overflow: hidden;
     }
 
-    #map {
-        width: 100%;
+    #sidebar {
+        width: 350px;
+        min-width: 350px;
         height: 100%;
-        position: absolute;
-        top: 0; 
-        left: 0;
-    }
-
-    /* --- SEARCH BAR --- */
-    .search-container {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        z-index: 1000;
-        width: 380px;
-        max-width: 85vw;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        font-family: 'Segoe UI', sans-serif;
-    }
-
-    .search-box {
-        display: flex;
-        align-items: center;
-        padding: 5px 15px;
-    }
-
-    .search-box input {
-        border: none;
-        flex: 1;
-        padding: 10px;
-        font-size: 16px;
-        outline: none;
-    }
-
-    .search-results {
-        border-top: 1px solid #eee;
-        max-height: 350px;
         overflow-y: auto;
-        display: none;
-        border-radius: 0 0 8px 8px;
         background: white;
-    }
-
-    .result-item {
-        padding: 12px 15px;
-        cursor: pointer;
-        border-bottom: 1px solid #f8f9fa;
-        transition: background 0.2s;
-    }
-    .result-item:hover { background-color: #f1f3f5; }
-    .result-item .name { font-weight: 600; color: #212529; font-size: 14px; display: block; }
-    .result-item .address { color: #6c757d; font-size: 12px; display: block; margin-top: 2px; }
-
-    /* --- FLOATING CONTROLS --- */
-    .floating-controls {
-        position: absolute;
-        bottom: 30px;
-        right: 20px;
         z-index: 1000;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
         display: flex;
         flex-direction: column;
-        gap: 10px;
     }
 
-    .control-btn {
-        width: 40px;
-        height: 40px;
-        background: white;
-        border-radius: 6px;
-        border: none;
-        box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 18px;
-        color: #333;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    .control-btn:hover { background: #f8f9fa; }
-
-    /* --- POPUP STYLES --- */
-    .vietmapgl-popup-content {
-        padding: 15px;
-        border-radius: 8px;
-        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
-        max-width: 300px;
-    }
-    .vietmapgl-popup-close-button {
-        padding: 5px;
-        right: 5px;
-        top: 5px;
-        font-size: 18px;
-    }
-    .popup-btn {
-        display: block; 
-        width: 100%; 
-        margin-top: 8px; 
-        border-radius: 4px; 
-        font-size: 13px; 
-        padding: 6px;
-    }
-
-    /* Fix for Bootstrap image conflict with Map markers */
-    img.vietmapgl-marker-icon, 
-    .vietmapgl-marker { 
-        max-width: none !important; 
-    }
-
-    /* Map canvas fix */
-    .vietmapgl-canvas {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 100%;
+    #map {
+        flex-grow: 1;
         height: 100%;
+        width: 100%;
     }
 
-    /* Override main-wrapper overflow for map page */
-    #main-wrapper {
-        overflow: hidden !important;
+    /* Result Card Styles */
+    .result-card {
+        cursor: pointer;
+        transition: background 0.2s;
+        border-left: 4px solid transparent;
+    }
+    .result-card:hover {
+        background-color: #f8f9fa;
+        border-left: 4px solid #0d6efd;
+    }
+    .result-card small {
+        display: block;
+        color: #6c757d;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    @media (max-width: 768px) {
+        #sidebar {
+            width: 100%;
+            height: 40%;
+            position: absolute;
+            bottom: 0;
+            top: auto;
+            border-top: 2px solid #ddd;
+        }
+        #map-container {
+            flex-direction: column;
+        }
     }
 </style>
 
-<div class="map-wrapper">
-    <div class="search-container">
-        <div class="search-box">
-            <i class="bi bi-search"></i>
-            <input type="text" id="vm-search-input" placeholder="Search VietMap (e.g., Cafe)..." autocomplete="off">
-            <i class="bi bi-x-circle-fill text-secondary" id="clear-search" style="cursor: pointer; display: none; font-size: 16px;"></i>
+<div id="map-container">
+    
+    <div id="sidebar" class="border-end">
+        <div class="p-3 border-bottom bg-light">
+            <h5 class="mb-3"><i class="bi bi-search"></i> VietMap Search</h5>
+            
+            <form id="search-form" onsubmit="event.preventDefault(); handleSearch();">
+                <div class="input-group mb-2">
+                    <input type="text" id="search-input" class="form-control" placeholder="Search address, place...">
+                    <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
+                </div>
+            </form>
+            <small class="text-muted">Searching VietMap Database</small>
         </div>
-        <div id="vm-search-results" class="search-results"></div>
+
+        <div class="flex-grow-1 overflow-auto">
+            <div class="list-group list-group-flush" id="api-results">
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-globe-asia-australia fs-1"></i>
+                    <p>Search for a place or click the map to see the address.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="floating-controls">
-        <button class="control-btn" id="btn-locate" title="Find My Location">
-            <i class="bi bi-crosshair"></i>
-        </button>
-    </div>
+    <div id="map"></div>
 
-    <div id="map" 
-         data-apikey="{{ vietmap_api_key }}"
-         data-default-lat="{{ default_lat if default_lat is defined and default_lat is not none else '' }}"
-         data-default-lon="{{ default_lon if default_lon is defined and default_lon is not none else '' }}"
-         data-locations='{{ locations_data|tojson|safe if locations_data is defined else "[]" }}'
-    ></div>
 </div>
+
+<script id="map-config" type="application/json">
+{
+    "apiKey": "{{ vietmap_api_key }}",
+    "defaultLat": {{ default_lat or 10.762622 }},
+    "defaultLon": {{ default_lon or 106.660172 }},
+    "savedLocations": {{ locations_data | tojson }}
+}
+</script>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Wait for both DOM and vietmapgl library to be ready
-    function initializeMap() {
-        const mapEl = document.getElementById('map');
+    // 1. Load Config
+    const configData = document.getElementById('map-config').textContent;
+    const CONFIG = JSON.parse(configData);
+
+    // 2. Initialize Map
+    const map = new vietmapgl.Map({
+        container: 'map',
+        style: `https://maps.vietmap.vn/maps/styles/tm/style.json?apikey=${CONFIG.apiKey}`,
+        center: [CONFIG.defaultLon, CONFIG.defaultLat],
+        zoom: 13,
+        pitch: 0
+    });
+
+    map.addControl(new vietmapgl.NavigationControl(), 'top-right');
+    map.addControl(new vietmapgl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true
+    }), 'top-right');
+
+    // 3. Render Saved Database Locations (Optional: keep them visible)
+    CONFIG.savedLocations.forEach(loc => {
+        const popup = new vietmapgl.Popup({ offset: 25 })
+            .setHTML(`<strong>${loc.name}</strong><br><a href="${loc.url}">View Details</a>`);
         
-        // Check if vietmapgl is loaded
-        if (typeof vietmapgl === 'undefined') {
-            console.error('VietMap GL JS not loaded!');
-            mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;"><div class="text-center p-4"><p class="text-danger fs-5">Map library failed to load</p><p class="text-muted">Please check your internet connection and refresh the page.</p></div></div>';
-            return;
-        }
+        new vietmapgl.Marker({ color: "#198754" }) // Green for saved locations
+            .setLngLat([loc.lon, loc.lat])
+            .setPopup(popup)
+            .addTo(map);
+    });
 
-        const apiKey = (mapEl.dataset.apikey || "").trim();
-        
-        if (!apiKey) {
-            console.error('VietMap API key is missing!');
-            mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;"><p class="text-danger">API key is missing!</p></div>';
-            return;
-        }
-        
-        console.log('Initializing VietMap GL...');
-        
-        // Default View
-        let defLat = parseFloat(mapEl.dataset.defaultLat) || 10.762622;
-        let defLon = parseFloat(mapEl.dataset.defaultLon) || 106.660172;
-        let defZoom = (mapEl.dataset.defaultLat) ? 16 : 13;
+    // ---------------------------------------------------------
+    // FEATURE 1: SEARCH (Geocoding / Autocomplete API)
+    // ---------------------------------------------------------
+    async function handleSearch() {
+        const query = document.getElementById('search-input').value;
+        if (!query) return;
 
-        // --- 1. INITIALIZE VIETMAP GL ---
-        const map = new vietmapgl.Map({
-            container: 'map',
-            style: `https://maps.vietmap.vn/api/maps/light/styles.json?apikey=${apiKey}`,
-            center: [defLon, defLat], 
-            zoom: defZoom,
-            pitch: 0,
-            bearing: 0
-        });
+        const resultsContainer = document.getElementById('api-results');
+        resultsContainer.innerHTML = '<div class="p-3 text-center"><div class="spinner-border text-primary" role="status"></div></div>';
 
-        map.addControl(new vietmapgl.NavigationControl(), 'bottom-right');
+        try {
+            // Call VietMap Autocomplete API
+            const url = `https://maps.vietmap.vn/api/autocomplete/v3?apikey=${CONFIG.apiKey}&text=${encodeURIComponent(query)}`;
+            const res = await fetch(url);
+            const data = await res.json();
 
-        let currentSearchMarker = null;
-        let clickMarker = null;
-        let routeLayerId = 'route-line';
-        let routeSourceId = 'route-source';
+            resultsContainer.innerHTML = ''; // Clear spinner
 
-        map.on('load', () => {
-            console.log("VietMap GL Loaded Successfully");
-            
-            map.addSource(routeSourceId, {
-                'type': 'geojson',
-                'data': { 'type': 'Feature', 'properties': {}, 'geometry': { 'type': 'LineString', 'coordinates': [] } }
-            });
-            
-            map.addLayer({
-                'id': routeLayerId,
-                'type': 'line',
-                'source': routeSourceId,
-                'layout': { 'line-join': 'round', 'line-cap': 'round' },
-                'paint': { 'line-color': '#0d6efd', 'line-width': 6, 'line-opacity': 0.8 }
-            });
-
-            loadDBLocations();
-        });
-
-        map.on('error', (e) => {
-            console.error('Map error:', e);
-            mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#f8f9fa;"><div class="text-center p-4"><p class="text-danger fs-5">Map Error</p><p class="text-muted">' + (e.error ? e.error.message : 'Failed to load map') + '</p></div></div>';
-        });
-
-        // --- 2. SEARCH FUNCTIONALITY ---
-        const searchInput = document.getElementById('vm-search-input');
-        const searchResults = document.getElementById('vm-search-results');
-        const clearBtn = document.getElementById('clear-search');
-        let searchTimeout;
-
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(searchTimeout);
-            const query = e.target.value.trim();
-            
-            if (query.length > 0) clearBtn.style.display = 'block';
-            else { 
-                clearBtn.style.display = 'none'; 
-                searchResults.style.display = 'none'; 
-                return; 
-            }
-
-            searchTimeout = setTimeout(() => {
-                if (query.length < 2) return;
-                
-                const searchUrl = `https://maps.vietmap.vn/api/search/v3?apikey=${apiKey}&text=${encodeURIComponent(query)}`;
-
-                fetch(searchUrl)
-                    .then(r => r.json())
-                    .then(data => {
-                        searchResults.innerHTML = '';
-                        let places = Array.isArray(data) ? data : (data.data || []);
+            if (data && data.length > 0) {
+                data.forEach(place => {
+                    // Create Result Item
+                    const item = document.createElement('div');
+                    item.className = 'list-group-item result-card p-3';
+                    
+                    // Format output safely
+                    const name = place.name || place.address || "Unknown Place";
+                    const address = place.address || "";
+                    
+                    item.innerHTML = `
+                        <h6 class="mb-1 text-primary fw-bold">${name}</h6>
+                        <small>${address}</small>
+                    `;
+                    
+                    // On Click: Fly to location
+                    item.onclick = () => {
+                        const lat = place.lat;
+                        const lng = place.lng; // Note: API usually returns 'lng' or 'lon'
                         
-                        if (places.length > 0) {
-                            searchResults.style.display = 'block';
-                            places.forEach(place => {
-                                const div = document.createElement('div');
-                                div.className = 'result-item';
-                                div.innerHTML = `<span class="name">${place.name}</span><span class="address">${place.address}</span>`;
-                                div.onclick = () => {
-                                    let lat, lng;
-                                    if (place.location) { lat = place.location.lat; lng = place.location.lng; }
-                                    else { lat = place.lat; lng = place.lng; }
-                                    selectLocation(lat, lng, place.name, place.address);
-                                };
-                                searchResults.appendChild(div);
-                            });
-                        } else {
-                            searchResults.style.display = 'none';
-                        }
-                    })
-                    .catch(e => console.error("Search Error:", e));
-            }, 400);
-        });
+                        // Fly to
+                        map.flyTo({ center: [lng, lat], zoom: 16 });
 
-        clearBtn.addEventListener('click', () => {
-            searchInput.value = '';
-            searchResults.style.display = 'none';
-            clearBtn.style.display = 'none';
-            if (currentSearchMarker) currentSearchMarker.remove();
-            clearRoute();
-        });
+                        // Add Temporary Marker
+                        new vietmapgl.Marker({ color: "#0d6efd" })
+                            .setLngLat([lng, lat])
+                            .setPopup(new vietmapgl.Popup().setHTML(`<b>${name}</b><br>${address}`))
+                            .addTo(map)
+                            .togglePopup();
+                    };
 
-        function selectLocation(lat, lng, name, address) {
-            searchResults.style.display = 'none';
-            searchInput.value = name;
-            map.flyTo({ center: [lng, lat], zoom: 16 });
-
-            if (currentSearchMarker) currentSearchMarker.remove();
-            
-            const popupHTML = createPopupContent(lat, lng, name, address);
-            const popup = new vietmapgl.Popup({ offset: 25 }).setHTML(popupHTML.outerHTML);
-
-            currentSearchMarker = new vietmapgl.Marker({ color: "#d9534f" })
-                .setLngLat([lng, lat])
-                .setPopup(popup)
-                .addTo(map)
-                .togglePopup();
-        }
-
-        // --- 3. REVERSE GEOCODE ON CLICK ---
-        map.on('click', (e) => {
-            const { lng, lat } = e.lngLat;
-            if (clickMarker) clickMarker.remove();
-
-            const loadingPopup = new vietmapgl.Popup({ offset: 25 })
-                .setHTML('<div class="text-center p-2"><div class="spinner-border spinner-border-sm text-primary"></div><br>Fetching address...</div>');
-
-            clickMarker = new vietmapgl.Marker({ color: "#0d6efd" })
-                .setLngLat([lng, lat])
-                .setPopup(loadingPopup)
-                .addTo(map)
-                .togglePopup();
-
-            fetch(`https://maps.vietmap.vn/api/reverse/v3?apikey=${apiKey}&lat=${lat}&lng=${lng}`)
-                .then(r => r.json())
-                .then(data => {
-                    let name = "Selected Location";
-                    let address = "Unknown Address";
-                    if (Array.isArray(data) && data[0]) {
-                        address = data[0].address;
-                        name = data[0].name || name;
-                    } else if (data.address) {
-                        address = data.address;
-                    }
-                    clickMarker.getPopup().setHTML(createPopupContent(lat, lng, name, address).outerHTML);
-                })
-                .catch(err => {
-                    clickMarker.getPopup().setHTML(createPopupContent(lat, lng, "Location", `${lat.toFixed(5)}, ${lng.toFixed(5)}`).outerHTML);
+                    resultsContainer.appendChild(item);
                 });
-        });
-
-        // --- 4. ROUTING ---
-        window.routeHere = function(destLat, destLon) {
-            if (!navigator.geolocation) return alert("Geolocation not supported.");
-            
-            navigator.geolocation.getCurrentPosition(pos => {
-                const userLat = pos.coords.latitude;
-                const userLon = pos.coords.longitude;
-                const url = `https://maps.vietmap.vn/api/route?api-version=1.1&apikey=${apiKey}&point=${userLat},${userLon}&point=${destLat},${destLon}&vehicle=car`;
-
-                fetch(url)
-                    .then(r => r.json())
-                    .then(data => {
-                        if (!data.paths || data.paths.length === 0) return alert("No route found.");
-                        
-                        const path = data.paths[0];
-                        const points = decodePolyline(path.points);
-                        
-                        const geojson = {
-                            'type': 'Feature',
-                            'properties': {},
-                            'geometry': { 'type': 'LineString', 'coordinates': points }
-                        };
-                        map.getSource(routeSourceId).setData(geojson);
-                        
-                        const bounds = new vietmapgl.LngLatBounds();
-                        points.forEach(pt => bounds.extend(pt));
-                        map.fitBounds(bounds, { padding: 50 });
-                    })
-                    .catch(e => console.error("Routing Error:", e));
-            }, err => alert("Location access denied."));
-        };
-
-        function clearRoute() {
-            if(map.getSource(routeSourceId)) {
-                map.getSource(routeSourceId).setData({
-                    'type': 'Feature', 'properties': {}, 'geometry': { 'type': 'LineString', 'coordinates': [] }
-                });
+            } else {
+                resultsContainer.innerHTML = '<div class="p-3 text-center text-muted">No results found.</div>';
             }
-        }
-
-        // --- 5. UTILS ---
-        function decodePolyline(str, precision) {
-            var index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, latitude_change, longitude_change, factor = Math.pow(10, precision || 5);
-            while (index < str.length) {
-                byte = null; shift = 0; result = 0;
-                do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
-                latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-                shift = result = 0;
-                do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
-                longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
-                lat += latitude_change; lng += longitude_change;
-                coordinates.push([lng / factor, lat / factor]); 
-            }
-            return coordinates;
-        }
-
-        function createPopupContent(lat, lng, name, address) {
-            const safeName = (name || "Location").replace(/'/g, "&apos;");
-            const safeAddr = (address || "").replace(/'/g, "&apos;");
-
-            const div = document.createElement('div');
-            div.innerHTML = `
-                <div class="text-center">
-                    <h6 class="mb-1 text-primary fw-bold">${safeName}</h6>
-                    <p class="small text-muted mb-2">${safeAddr}</p>
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-primary btn-sm popup-btn" onclick="saveLocation(${lat}, ${lng}, '${safeName}', '${safeAddr}')">
-                            <i class="bi bi-bookmark-plus"></i> Save Location
-                        </button>
-                        <button class="btn btn-outline-success btn-sm popup-btn" onclick="routeHere(${lat}, ${lng})">
-                            <i class="bi bi-sign-turn-right"></i> Directions Here
-                        </button>
-                    </div>
-                </div>
-            `;
-            return div;
-        }
-
-        window.saveLocation = function(lat, lon, name, addr) {
-            fetch('{{ url_for("map.create_location_on_click") }}', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ lat, lon, name, address: addr })
-            })
-            .then(r => r.json())
-            .then(data => { if (data.url) window.location.href = data.url; })
-            .catch(err => alert("Error saving location"));
-        };
-
-        document.getElementById('btn-locate').addEventListener('click', () => {
-            if (!navigator.geolocation) return alert("Geolocation not supported.");
-            navigator.geolocation.getCurrentPosition(pos => {
-                map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 });
-                new vietmapgl.Marker({ color: "#198754" })
-                    .setLngLat([pos.coords.longitude, pos.coords.latitude])
-                    .setPopup(new vietmapgl.Popup().setHTML("<b>You are here</b>"))
-                    .addTo(map);
-            });
-        });
-
-        function loadDBLocations() {
-            try {
-                const dbLocations = JSON.parse(mapEl.dataset.locations);
-                if (dbLocations.length > 0) {
-                    dbLocations.forEach(loc => {
-                        if(loc.lat && loc.lon) {
-                            const stars = '★'.repeat(Math.round(loc.rating)) + '☆'.repeat(5 - Math.round(loc.rating));
-                            const popupHTML = `
-                                <div style="min-width:180px">
-                                    <h6 class="fw-bold mb-1">${loc.name}</h6>
-                                    <div class="text-warning small mb-1">${stars}</div>
-                                    <p class="small text-muted text-truncate" style="max-width:180px">${loc.desc || ''}</p>
-                                    <a href="${loc.url}" class="btn btn-sm btn-outline-primary w-100">Details</a>
-                                </div>
-                            `;
-                            new vietmapgl.Marker()
-                                .setLngLat([loc.lon, loc.lat])
-                                .setPopup(new vietmapgl.Popup({ offset: 25 }).setHTML(popupHTML))
-                                .addTo(map);
-                        }
-                    });
-                }
-            } catch(e) { console.error("Error parsing DB locations", e); }
+        } catch (err) {
+            console.error(err);
+            resultsContainer.innerHTML = '<div class="p-3 text-center text-danger">Error searching map.</div>';
         }
     }
 
-    // Initialize when DOM and scripts are ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeMap);
-    } else {
-        // DOM already loaded, initialize immediately
-        initializeMap();
-    }
+    // ---------------------------------------------------------
+    // FEATURE 2: REVERSE GEOCODING (Click Map -> Show Info)
+    // ---------------------------------------------------------
+    let clickMarker = null; // Store reference to remove old click markers
+
+    map.on('click', async (e) => {
+        // Ignore clicks on existing markers
+        if (e.originalEvent.target.closest('.mapboxgl-marker')) return;
+
+        const { lng, lat } = e.lngLat;
+
+        // Remove previous click marker if exists
+        if (clickMarker) clickMarker.remove();
+
+        // 1. Add Visual Marker immediately
+        clickMarker = new vietmapgl.Marker({ color: "#dc3545" }) // Red for click
+            .setLngLat([lng, lat])
+            .addTo(map);
+
+        // 2. Call Reverse Geocode API
+        try {
+            const url = `https://maps.vietmap.vn/api/reverse/v3?apikey=${CONFIG.apiKey}&lng=${lng}&lat=${lat}`;
+            const res = await fetch(url);
+            const data = await res.json();
+
+            let displayMsg = "Lat: " + lat.toFixed(5) + ", Lng: " + lng.toFixed(5);
+            
+            if (data && data[0]) {
+                const addr = data[0].address || "Unknown Address";
+                const name = data[0].name || "";
+                displayMsg = name ? `<b>${name}</b><br>${addr}` : addr;
+            }
+
+            // 3. Show Popup
+            const popup = new vietmapgl.Popup({ offset: 25 })
+                .setHTML(displayMsg);
+            
+            clickMarker.setPopup(popup).togglePopup();
+
+        } catch (err) {
+            console.error("Reverse geocode failed", err);
+        }
+    });
+
 </script>
 {% endblock %}

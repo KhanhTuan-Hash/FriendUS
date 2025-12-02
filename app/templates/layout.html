@@ -8,35 +8,44 @@
     {{ bootstrap.load_css() }}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     
-    <link href="https://cdn.jsdelivr.net/npm/vietmap-gl-js@4.2.0/vietmap-gl.css" rel="stylesheet" />
+    <link href="https://unpkg.com/@vietmap/vietmap-gl-js@6.0.0/dist/vietmap-gl.css" rel="stylesheet" />
 
     <style>
-        /* --- LAYOUT FIX: Flexbox Column --- */
         html, body {
             height: 100%;
             margin: 0;
             display: flex;
             flex-direction: column;
-            overflow: hidden; /* Prevent body scroll, let inner divs scroll */
+            overflow: hidden;
         }
         
-        /* Navbar stays at top, natural height */
         .navbar {
             flex: 0 0 auto; 
-            margin-bottom: 0 !important; /* Remove bottom margin to touch map */
+            margin-bottom: 0 !important;
             z-index: 1050;
         }
 
-        /* Main Content Fills Remaining Space */
         #main-wrapper {
             flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
             position: relative;
-            overflow-y: auto; /* Allow scrolling for normal pages */
+            overflow-y: auto;
             overflow-x: hidden;
             background: #f8f9fa;
         }
 
-        /* --- SCATTERED WIDGET STYLES --- */
+        /* FIXED: New class to replace the inline style causing errors */
+        .full-width-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+        }
+
+        /* Scattered Widget Styles */
         .scattered-toggle-btn {
             position: fixed; bottom: 20px; left: 20px; width: 60px; height: 60px;
             background-color: #4a90e2; color: white; border-radius: 50%; border: none;
@@ -92,8 +101,7 @@
             {% endif %}
         {% endwith %}
 
-        {# Dynamic wrapper: Applies 'container' class only if NOT full_width #}
-        <div class="{{ '' if full_width else 'container mt-4' }}">
+        <div class="{{ 'full-width-wrapper' if full_width else 'container mt-4' }}">
             {% block content %}{% endblock %}
         </div>
     </div>
@@ -120,10 +128,10 @@
 
     {{ bootstrap.load_js() }}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vietmap-gl-js@4.2.0/vietmap-gl.js"></script>
+    
+    <script src="https://unpkg.com/@vietmap/vietmap-gl-js@6.0.0/dist/vietmap-gl.js"></script>
 
     <script>
-        // Widget Scripts
         const swWidget = document.getElementById('swWidget');
         const swModal = document.getElementById('swModal');
         const swList = document.getElementById('swList');
