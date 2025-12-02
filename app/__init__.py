@@ -19,6 +19,9 @@ def create_app(config_class=Config):
     oauth.register(
         name='google',
         server_metadata_url=CONF_URL,
+        # --- ADDED THIS LINE ---
+        api_base_url='https://www.googleapis.com/oauth2/v3/',
+        # -----------------------
         client_id=app.config.get('GOOGLE_CLIENT_ID'),
         client_secret=app.config.get('GOOGLE_CLIENT_SECRET'),
         client_kwargs={

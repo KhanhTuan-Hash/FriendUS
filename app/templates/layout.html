@@ -91,13 +91,10 @@
             {% endif %}
         {% endwith %}
 
-        {% if full_width %}
+        {# Dynamic wrapper: Applies 'container' class only if NOT full_width #}
+        <div class="{{ '' if full_width else 'container mt-4' }}">
             {% block content %}{% endblock %}
-        {% else %}
-            <div class="container mt-4">
-                {% block content %}{% endblock %}
-            </div>
-        {% endif %}
+        </div>
     </div>
 
     {% if current_user.is_authenticated %}

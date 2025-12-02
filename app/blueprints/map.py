@@ -17,28 +17,37 @@ def map():
 def map_search():
     query_name = request.args.get('query')
     query_type = request.args.get('type')
+    query_price = request.args.get('price', type=int)
+    query_rating = request.args.get('rating', type=int)
     lat = request.args.get('lat', type=float)
     lon = request.args.get('lon', type=float)
     
-    query = db.session.query(Location)
+    avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
+    query = db.session.query(Location, avg_rating).outerjoin(Review, Location.id == Review.location_id).group_by(Location.id)
+
     if query_name: query = query.filter(Location.name.ilike(f'%{query_name}%'))
     if query_type: query = query.filter(Location.type == query_type)
+    if query_price: query = query.filter(Location.price_range == query_price)
+    if query_rating: query = query.having(avg_rating >= query_rating)
 
     locations_data = []
-    for loc in query.all():
+    for loc, rating in query.all():
         locations_data.append({
-            'id': loc.id, 'name': loc.name, 'lat': loc.latitude, 'lon': loc.longitude,
-            'url': url_for('map.location_detail', location_id=loc.id)
+            'id': loc.id, 'name': loc.name, 'desc': loc.description,
+            'lat': loc.latitude, 'lon': loc.longitude,
+            'url': url_for('map.location_detail', location_id=loc.id),
+            'rating': float(rating)
         })
     
+    # --- FIX: Get Key from Config ---
+    # Ensure you have VIETMAP_API_KEY in your .env or config.py
     vietmap_api_key = current_app.config.get('VIETMAP_API_KEY', '')
 
-    # We pass full_width=True to the layout to disable the container wrapper
-    return render_template('map.html', title='Map', 
-                           locations_data=locations_data, 
-                           default_lat=lat, default_lon=lon,
-                           vietmap_api_key=vietmap_api_key,
-                           full_width=True)
+    return render_template('map.html', title='Map Search', 
+                           query=query_name, query_type=query_type,
+                           query_price=query_price, query_rating=query_rating,
+                           locations_data=locations_data, default_lat=lat, default_lon=lon,
+                           vietmap_api_key=vietmap_api_key) # Pass it to the template
 
 @map_bp.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required
@@ -60,12 +69,23 @@ def location_detail(location_id):
 @login_required
 def create_location_on_click():
     data = request.json
+    existing = Location.query.filter(
+        Location.latitude.between(data['lat'] - 0.0001, data['lat'] + 0.0001),
+        Location.longitude.between(data['lon'] - 0.0001, data['lon'] + 0.0001)
+    ).first()
+    
+    if existing:
+        return jsonify({'url': url_for('map.location_detail', location_id=existing.id)})
+
     new_loc = Location(
-        name=data.get('name', "Dropped Pin"),
-        description=f"Address: {data.get('address')}",
-        latitude=data['lat'], longitude=data['lon'],
-        type="Custom", price_range=0
+        name=data['name'] if data['name'] else "Dropped Pin",
+        description=f"Address: {data['address']}",
+        latitude=data['lat'],
+        longitude=data['lon'],
+        type="Custom",
+        price_range=0
     )
+    
     db.session.add(new_loc)
     db.session.commit()
     return jsonify({'url': url_for('map.location_detail', location_id=new_loc.id)})
@@ -73,17 +93,19 @@ def create_location_on_click():
 @map_bp.route('/location/favorite/<int:location_id>', methods=['POST'])
 @login_required
 def add_favorite(location_id):
-    loc = Location.query.get_or_404(location_id)
-    if loc not in current_user.favorite_locations:
-        current_user.favorite_locations.append(loc)
+    location = Location.query.get_or_404(location_id)
+    if not current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.append(location)
         db.session.commit()
+        flash(f'Added {location.name} to favorites!', 'success')
     return redirect(url_for('map.location_detail', location_id=location_id))
 
 @map_bp.route('/location/unfavorite/<int:location_id>', methods=['POST'])
 @login_required
 def remove_favorite(location_id):
-    loc = Location.query.get_or_404(location_id)
-    if loc in current_user.favorite_locations:
-        current_user.favorite_locations.remove(loc)
+    location = Location.query.get_or_404(location_id)
+    if current_user.favorite_locations.filter(Location.id == location.id).count() > 0:
+        current_user.favorite_locations.remove(location)
         db.session.commit()
+        flash(f'Removed {location.name} from favorites.', 'info')
     return redirect(url_for('map.location_detail', location_id=location_id))
