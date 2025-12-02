@@ -70,7 +70,7 @@ def google_callback():
     """Handles the return from Google."""
     try:
         token = oauth.google.authorize_access_token()
-        resp = oauth.google.get('https://www.googleapis.com/oauth2/v3/userinfo')
+        resp = oauth.google.get('userinfo')
         user_info = resp.json()
     except Exception as e:
         flash(f'Google authentication failed: {str(e)}', 'danger')
