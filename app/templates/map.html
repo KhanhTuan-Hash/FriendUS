@@ -4,101 +4,116 @@
 
 {% block content %}
 <style>
-    /* Map Interface Styles */
-    #map-container {
-        display: flex;
-        flex: 1;
-        height: 100%;
-        position: relative;
-        overflow: hidden;
-    }
+    #map-container { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    #map { width: 100%; height: 100%; }
 
-    #sidebar {
-        width: 350px;
-        min-width: 350px;
-        height: 100%;
-        overflow-y: auto;
+    /* --- SEARCH BAR --- */
+    #search-widget {
+        position: absolute; top: 15px; left: 15px; width: 340px; z-index: 1000;
+    }
+    .search-box {
+        background: white; border-radius: 8px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        padding: 0 12px; height: 45px;
+        display: flex; align-items: center;
+    }
+    .search-box input {
+        border: none; outline: none; height: 100%; width: 100%; font-size: 15px;
+    }
+    .search-btn { background: transparent; border: none; color: #0d6efd; cursor: pointer; }
+    
+    #search-results {
+        background: white; margin-top: 8px; border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15); max-height: 350px; overflow-y: auto; display: none; 
+    }
+    .result-item { padding: 12px 15px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+    .result-item:hover { background-color: #f8f9fa; }
+    .result-name { font-weight: 600; font-size: 14px; display: block; color: #333; }
+    .result-addr { font-size: 13px; color: #666; display: block; margin-top: 2px; }
+
+    /* --- BOTTOM INFO CARD (Like Reference Image) --- */
+    #bottom-card {
+        position: absolute;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 500px;
         background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        padding: 15px 20px;
         z-index: 1000;
-        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        display: flex;
-        flex-direction: column;
+        display: none; /* Hidden by default */
+        display: flex; /* Flex when visible (overridden by JS) */
+        justify-content: space-between;
+        align-items: center;
+        animation: slideUp 0.3s ease-out;
     }
 
-    #map {
-        flex-grow: 1;
-        height: 100%;
-        width: 100%;
+    @keyframes slideUp {
+        from { transform: translate(-50%, 100%); opacity: 0; }
+        to { transform: translate(-50%, 0); opacity: 1; }
     }
 
-    /* Result Card Styles */
-    .result-card {
+    .card-info { flex: 1; padding-right: 15px; }
+    .card-title { font-size: 16px; font-weight: 700; color: #333; margin-bottom: 4px; display: block;}
+    .card-addr { font-size: 13px; color: #666; line-height: 1.4; display: block;}
+    .card-coords { font-size: 11px; color: #0d6efd; margin-top: 5px; display: block; }
+    
+    .card-actions { display: flex; gap: 10px; }
+    .action-btn {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: #f1f3f4;
+        color: #0d6efd;
+        display: flex; align-items: center; justify-content: center;
         cursor: pointer;
         transition: background 0.2s;
-        border-left: 4px solid transparent;
+        font-size: 18px;
     }
-    .result-card:hover {
-        background-color: #f8f9fa;
-        border-left: 4px solid #0d6efd;
-    }
-    .result-card small {
-        display: block;
-        color: #6c757d;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    @media (max-width: 768px) {
-        #sidebar {
-            width: 100%;
-            height: 40%;
-            position: absolute;
-            bottom: 0;
-            top: auto;
-            border-top: 2px solid #ddd;
-        }
-        #map-container {
-            flex-direction: column;
-        }
-    }
+    .action-btn:hover { background: #e1e3e4; }
+    .btn-primary-action { background: #0d6efd; color: white; }
+    .btn-primary-action:hover { background: #0b5ed7; }
 </style>
 
 <div id="map-container">
     
-    <div id="sidebar" class="border-end">
-        <div class="p-3 border-bottom bg-light">
-            <h5 class="mb-3"><i class="bi bi-search"></i> VietMap Search</h5>
-            
-            <form id="search-form" onsubmit="event.preventDefault(); handleSearch();">
-                <div class="input-group mb-2">
-                    <input type="text" id="search-input" class="form-control" placeholder="Search address, place...">
-                    <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
-                </div>
-            </form>
-            <small class="text-muted">Searching VietMap Database</small>
-        </div>
-
-        <div class="flex-grow-1 overflow-auto">
-            <div class="list-group list-group-flush" id="api-results">
-                <div class="p-4 text-center text-muted">
-                    <i class="bi bi-globe-asia-australia fs-1"></i>
-                    <p>Search for a place or click the map to see the address.</p>
-                </div>
+    <div id="search-widget">
+        <form id="search-form" onsubmit="event.preventDefault(); handleSearch();">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search location..." autocomplete="off" onkeyup="debounceSearch()">
+                <button type="submit" class="search-btn"><i class="bi bi-search"></i></button>
             </div>
+        </form>
+        <div id="search-results"></div>
+    </div>
+
+    <div id="bottom-card" style="display: none;">
+        <div class="card-info">
+            <span class="card-title" id="info-name">Loading...</span>
+            <span class="card-addr" id="info-addr">Fetching address details...</span>
+            <span class="card-coords" id="info-coords"></span>
+        </div>
+        <div class="card-actions">
+            <button class="action-btn" title="Save Location" onclick="triggerSave()">
+                <i class="bi bi-bookmark-plus"></i>
+            </button>
+            <button class="action-btn btn-primary-action" title="Navigate">
+                <i class="bi bi-cursor-fill"></i>
+            </button>
         </div>
     </div>
 
     <div id="map"></div>
-
 </div>
 
 <script id="map-config" type="application/json">
 {
     "apiKey": "{{ vietmap_api_key }}",
-    "defaultLat": {{ default_lat or 10.762622 }},
-    "defaultLon": {{ default_lon or 106.660172 }},
-    "savedLocations": {{ locations_data | tojson }}
+    "savedLocations": {{ locations_data | tojson }},
+    "urls": { "search": "{{ url_for('map.api_search') }}", "reverse": "{{ url_for('map.api_reverse') }}", "create": "{{ url_for('map.create_location_on_click') }}" }
 }
 </script>
 
@@ -106,139 +121,138 @@
 
 {% block scripts %}
 <script>
-    // 1. Load Config
-    const configData = document.getElementById('map-config').textContent;
-    const CONFIG = JSON.parse(configData);
+    const CONFIG = JSON.parse(document.getElementById('map-config').textContent);
+    let searchTimeout = null;
+    let activeMarker = null;
+    let currentSelection = { lat: 0, lon: 0, name: '', address: '' };
 
-    // 2. Initialize Map
     const map = new vietmapgl.Map({
         container: 'map',
         style: `https://maps.vietmap.vn/maps/styles/tm/style.json?apikey=${CONFIG.apiKey}`,
-        center: [CONFIG.defaultLon, CONFIG.defaultLat],
-        zoom: 13,
-        pitch: 0
+        center: [106.660172, 10.762622], zoom: 13, pitch: 0
     });
 
-    map.addControl(new vietmapgl.NavigationControl(), 'top-right');
-    map.addControl(new vietmapgl.GeolocateControl({
-        positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true
-    }), 'top-right');
+    map.addControl(new vietmapgl.NavigationControl(), 'bottom-right');
+    map.addControl(new vietmapgl.GeolocateControl({ enableHighAccuracy: true }), 'bottom-right');
 
-    // 3. Render Saved Database Locations (Optional: keep them visible)
+    // Load Saved Pins
     CONFIG.savedLocations.forEach(loc => {
-        const popup = new vietmapgl.Popup({ offset: 25 })
-            .setHTML(`<strong>${loc.name}</strong><br><a href="${loc.url}">View Details</a>`);
-        
-        new vietmapgl.Marker({ color: "#198754" }) // Green for saved locations
-            .setLngLat([loc.lon, loc.lat])
-            .setPopup(popup)
-            .addTo(map);
+        const popup = new vietmapgl.Popup({ offset: 25 }).setHTML(`<b>${loc.name}</b><br><a href="${loc.url}">View Details</a>`);
+        new vietmapgl.Marker({ color: "#198754" }).setLngLat([loc.lon, loc.lat]).setPopup(popup).addTo(map);
     });
 
-    // ---------------------------------------------------------
-    // FEATURE 1: SEARCH (Geocoding / Autocomplete API)
-    // ---------------------------------------------------------
-    async function handleSearch() {
-        const query = document.getElementById('search-input').value;
-        if (!query) return;
-
-        const resultsContainer = document.getElementById('api-results');
-        resultsContainer.innerHTML = '<div class="p-3 text-center"><div class="spinner-border text-primary" role="status"></div></div>';
-
-        try {
-            // Call VietMap Autocomplete API
-            const url = `https://maps.vietmap.vn/api/autocomplete/v3?apikey=${CONFIG.apiKey}&text=${encodeURIComponent(query)}`;
-            const res = await fetch(url);
-            const data = await res.json();
-
-            resultsContainer.innerHTML = ''; // Clear spinner
-
-            if (data && data.length > 0) {
-                data.forEach(place => {
-                    // Create Result Item
-                    const item = document.createElement('div');
-                    item.className = 'list-group-item result-card p-3';
-                    
-                    // Format output safely
-                    const name = place.name || place.address || "Unknown Place";
-                    const address = place.address || "";
-                    
-                    item.innerHTML = `
-                        <h6 class="mb-1 text-primary fw-bold">${name}</h6>
-                        <small>${address}</small>
-                    `;
-                    
-                    // On Click: Fly to location
-                    item.onclick = () => {
-                        const lat = place.lat;
-                        const lng = place.lng; // Note: API usually returns 'lng' or 'lon'
-                        
-                        // Fly to
-                        map.flyTo({ center: [lng, lat], zoom: 16 });
-
-                        // Add Temporary Marker
-                        new vietmapgl.Marker({ color: "#0d6efd" })
-                            .setLngLat([lng, lat])
-                            .setPopup(new vietmapgl.Popup().setHTML(`<b>${name}</b><br>${address}`))
-                            .addTo(map)
-                            .togglePopup();
-                    };
-
-                    resultsContainer.appendChild(item);
-                });
-            } else {
-                resultsContainer.innerHTML = '<div class="p-3 text-center text-muted">No results found.</div>';
-            }
-        } catch (err) {
-            console.error(err);
-            resultsContainer.innerHTML = '<div class="p-3 text-center text-danger">Error searching map.</div>';
-        }
+    // --- SEARCH LOGIC ---
+    function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(handleSearch, 500);
     }
 
-    // ---------------------------------------------------------
-    // FEATURE 2: REVERSE GEOCODING (Click Map -> Show Info)
-    // ---------------------------------------------------------
-    let clickMarker = null; // Store reference to remove old click markers
+    async function handleSearch() {
+        const query = document.getElementById('search-input').value;
+        const resultsDiv = document.getElementById('search-results');
+        
+        if (!query || query.length < 2) { resultsDiv.style.display = 'none'; return; }
 
-    map.on('click', async (e) => {
-        // Ignore clicks on existing markers
-        if (e.originalEvent.target.closest('.mapboxgl-marker')) return;
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = '<div class="p-3 text-center text-muted">Searching...</div>';
 
-        const { lng, lat } = e.lngLat;
-
-        // Remove previous click marker if exists
-        if (clickMarker) clickMarker.remove();
-
-        // 1. Add Visual Marker immediately
-        clickMarker = new vietmapgl.Marker({ color: "#dc3545" }) // Red for click
-            .setLngLat([lng, lat])
-            .addTo(map);
-
-        // 2. Call Reverse Geocode API
         try {
-            const url = `https://maps.vietmap.vn/api/reverse/v3?apikey=${CONFIG.apiKey}&lng=${lng}&lat=${lat}`;
-            const res = await fetch(url);
+            const res = await fetch(`${CONFIG.urls.search}?query=${encodeURIComponent(query)}`);
+            const rawData = await res.json();
+            const data = Array.isArray(rawData) ? rawData : (rawData.data || []);
+            
+            resultsDiv.innerHTML = '';
+            
+            if (data && data.length > 0) {
+                data.forEach(place => {
+                    const item = document.createElement('div');
+                    item.className = 'result-item';
+                    const name = place.name || place.display_name || "Location";
+                    const addr = place.address || "";
+
+                    item.innerHTML = `<span class="result-name">${name}</span><span class="result-addr">${addr}</span>`;
+                    item.onclick = () => {
+                        const lat = place.lat; const lng = place.lng || place.lon;
+                        map.flyTo({ center: [lng, lat], zoom: 16 });
+                        updateBottomCard(lat, lng, name, addr);
+                        resultsDiv.style.display = 'none';
+                        document.getElementById('search-input').value = name;
+                    };
+                    resultsDiv.appendChild(item);
+                });
+            } else { resultsDiv.innerHTML = '<div class="p-3 text-center text-muted">No results found</div>'; }
+        } catch (err) { console.error(err); resultsDiv.innerHTML = '<div class="p-3 text-center text-danger">Search error</div>'; }
+    }
+
+    // --- MAP CLICK LOGIC ---
+    map.on('click', async (e) => {
+        if (e.originalEvent.target.closest('.mapboxgl-marker')) return; // Ignore marker clicks
+        
+        const { lng, lat } = e.lngLat;
+        let name = "Selected Location";
+        let addr = "";
+
+        // 1. Show card immediately (loading state)
+        updateBottomCard(lat, lng, "Loading...", "Fetching address...");
+
+        // 2. Check Map POI (Vector features)
+        const features = map.queryRenderedFeatures(e.point);
+        const poi = features.find(f => f.properties && (f.properties.name || f.properties.name_en));
+        if (poi) name = poi.properties.name || poi.properties.name_en;
+
+        // 3. Reverse Geocode API
+        try {
+            const res = await fetch(`${CONFIG.urls.reverse}?lat=${lat}&lon=${lng}`);
             const data = await res.json();
-
-            let displayMsg = "Lat: " + lat.toFixed(5) + ", Lng: " + lng.toFixed(5);
-            
             if (data && data[0]) {
-                const addr = data[0].address || "Unknown Address";
-                const name = data[0].name || "";
-                displayMsg = name ? `<b>${name}</b><br>${addr}` : addr;
+                if (data[0].name) name = data[0].name;
+                addr = data[0].address || "Unknown Address";
             }
-
-            // 3. Show Popup
-            const popup = new vietmapgl.Popup({ offset: 25 })
-                .setHTML(displayMsg);
-            
-            clickMarker.setPopup(popup).togglePopup();
-
+            updateBottomCard(lat, lng, name, addr); // Update card with real data
         } catch (err) {
-            console.error("Reverse geocode failed", err);
+            updateBottomCard(lat, lng, name, "Address unavailable");
         }
     });
 
+    // --- UI UPDATER ---
+    function updateBottomCard(lat, lng, name, addr) {
+        // Update global selection
+        currentSelection = { lat, lon: lng, name, address: addr };
+
+        // Update Text
+        document.getElementById('info-name').innerText = name;
+        document.getElementById('info-addr').innerText = addr;
+        document.getElementById('info-coords').innerText = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        
+        // Show Card
+        document.getElementById('bottom-card').style.display = 'flex';
+
+        // Move Red Marker
+        if (activeMarker) activeMarker.remove();
+        activeMarker = new vietmapgl.Marker({ color: "#ea4335" })
+            .setLngLat([lng, lat])
+            .addTo(map);
+    }
+
+    // --- SAVE ACTION ---
+    window.triggerSave = async () => {
+        if(!confirm(`Save "${currentSelection.name}" to your list?`)) return;
+        
+        try {
+            const res = await fetch(CONFIG.urls.create, {
+                method: "POST", headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(currentSelection)
+            });
+            const data = await res.json();
+            if(data.url) window.location.href = data.url;
+        } catch(e) { alert("Failed to save location."); }
+    };
+
+    // Hide dropdown on click outside
+    document.addEventListener('click', (e) => {
+        if (!document.getElementById('search-widget').contains(e.target)) {
+            document.getElementById('search-results').style.display = 'none';
+        }
+    });
 </script>
 {% endblock %}
