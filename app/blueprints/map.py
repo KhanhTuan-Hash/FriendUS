@@ -28,58 +28,71 @@ def map_search():
             'rating': 5.0 
         })
     
-    vietmap_api_key = current_app.config.get('VIETMAP_API_KEY', '')
+    # [FIX] Get the TILE KEY (safe for browser)
+    tile_key = current_app.config.get('VIETMAP_TILE_KEY', '')
+    
+    # [NOTE] We pass it as 'vietmap_api_key' because your map.html 
+    # already uses {{ vietmap_api_key }} in the template.
     return render_template('map.html', title='Map', 
                            locations_data=locations_data, 
-                           vietmap_api_key=vietmap_api_key)
+                           vietmap_api_key=tile_key)
 
-# --- HELPER: REAL BROWSER HEADERS (CRITICAL FOR SEARCH) ---
+# --- HELPER: HEADERS ---
 def get_headers():
     return {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://maps.vietmap.vn/' # Spoof referer to look authorized
+        'User-Agent': 'Mozilla/5.0 (compatible; MyMapApp/1.0)',
+        'Accept': 'application/json'
     }
-
-# --- PROXY ROUTES ---
 
 @map_bp.route('/map/api/search')
 @login_required
 def api_search():
     query = request.args.get('query', '')
-    api_key = current_app.config.get('VIETMAP_API_KEY', '')
+    
+    # [FIX] Get the SERVICE KEY (for backend search)
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
+    
+    if not service_key:
+        print("ERROR: VIETMAP_SERVICE_KEY is missing in config.")
+        return jsonify({"error": "Missing Service Key"}), 500
     
     if not query: return jsonify([])
 
     url = "https://maps.vietmap.vn/api/autocomplete/v3"
-    params = {'apikey': api_key, 'text': query}
+    params = {
+        'apikey': service_key,  # Use Service Key here
+        'text': query
+    }
     
     try:
-        # Use headers to bypass firewall
         resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
         
-        # Debugging: If it fails, print the raw text to see why
         if resp.status_code != 200:
-            print(f"API Error {resp.status_code}: {resp.text}")
-            return jsonify([])
+            print(f"VietMap API Error [{resp.status_code}]: {resp.text}")
+            return jsonify({"error": f"API Error {resp.status_code}"}), resp.status_code
 
         return jsonify(resp.json())
     except Exception as e:
         print(f"Search Exception: {e}")
-        return jsonify([])
+        return jsonify({"error": str(e)}), 500
 
 @map_bp.route('/map/api/reverse')
 @login_required
 def api_reverse():
     lat = request.args.get('lat')
     lon = request.args.get('lon')
-    api_key = current_app.config.get('VIETMAP_API_KEY', '')
+    
+    # [FIX] Get the SERVICE KEY (for backend reverse geocoding)
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
 
     if not lat or not lon: return jsonify([])
 
     url = "https://maps.vietmap.vn/api/reverse/v3"
-    params = {'apikey': api_key, 'lat': lat, 'lng': lon}
+    params = {
+        'apikey': service_key, # Use Service Key here
+        'lat': lat, 
+        'lng': lon
+    }
     
     try:
         resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
@@ -88,7 +101,7 @@ def api_reverse():
         print(f"Reverse Exception: {e}")
         return jsonify([])
 
-# --- EXISTING ROUTES (Keep as is) ---
+# ... (Remaining routes like location_detail keep existing logic) ...
 @map_bp.route('/location/<int:location_id>', methods=['GET', 'POST'])
 @login_required
 def location_detail(location_id):
@@ -107,7 +120,6 @@ def location_detail(location_id):
 @login_required
 def create_location_on_click():
     data = request.json
-    # Logic to save to DB (optional usage)
     new_loc = Location(
         name=data['name'] or "Dropped Pin", description=f"Address: {data['address']}",
         latitude=data['lat'], longitude=data['lon'], type="Custom", price_range=0
