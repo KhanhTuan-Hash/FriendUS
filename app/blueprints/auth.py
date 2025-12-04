@@ -3,6 +3,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from app.extensions import db, oauth
 from app.models import User, Post
 from app.forms import LoginForm, RegisterForm, UpdateAccountForm
+from app.utils import save_picture  # [NEW] Import this to handle image saving
 import secrets
 
 auth_bp = Blueprint('auth', __name__)
@@ -110,20 +111,54 @@ def google_callback():
         flash('Account created via Google!', 'success')
         return redirect(url_for('main.index'))
 
-# --- Account Routes ---
+# --- Account / Profile Routes ---
 
-@auth_bp.route('/profile/<username>')
+@auth_bp.route('/profile/<string:username>', methods=['GET', 'POST'])
 @login_required
 def profile(username):
     user = User.query.filter_by(username=username).first_or_404()
     posts = Post.query.filter_by(author=user).order_by(Post.timestamp.desc()).all()
-    return render_template('profile.html', title='Profile', user=user, posts=posts)
+    
+    # [NEW] Form Logic for "Edit Profile"
+    form = UpdateAccountForm()
+    
+    # Only allow editing if the current user owns this profile
+    # Only allow editing if the current user owns this profile
+    if user == current_user:
+        if form.validate_on_submit():
+            # 1. Handle Picture Upload
+            if form.picture.data:
+                picture_file = save_picture(form.picture.data)
+                current_user.image_file = picture_file
+            
+            # 2. Update Info
+            current_user.username = form.username.data
+            
+            # [REMOVED] Do not update email! 
+            # current_user.email = form.email.data  <-- DELETE OR COMMENT THIS LINE
+            
+            db.session.commit()
+            
+            flash('Your account has been updated!', 'success')
+            return redirect(url_for('auth.profile', username=current_user.username))
+        
+        elif request.method == 'GET':
+            # Pre-fill form with current data
+            form.username.data = current_user.username
+            form.email.data = current_user.email
 
+    return render_template('profile.html', title='Profile', user=user, posts=posts, form=form)
+
+# [NOTE] You can remove this 'account' route now if you want, 
+# since its features are moved to 'profile', but I left it here just in case.
 @auth_bp.route('/account', methods=['GET', 'POST'])
 @login_required
 def account():
     form = UpdateAccountForm()
     if form.validate_on_submit():
+        if form.picture.data:
+            picture_file = save_picture(form.picture.data)
+            current_user.image_file = picture_file
         current_user.username = form.username.data
         current_user.email = form.email.data
         db.session.commit()
@@ -132,4 +167,5 @@ def account():
     elif request.method == 'GET':
         form.username.data = current_user.username
         form.email.data = current_user.email
-    return render_template('account.html', title='Account', form=form)
+    image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
+    return render_template('account.html', title='Account', image_file=image_file, form=form)

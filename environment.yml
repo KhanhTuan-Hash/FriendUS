@@ -30,3 +30,13 @@ dependencies:
   - Authlib
   - requests
   - python-dotenv
+
+  # Utilities
+  - Pillow
+  - markdown
+  - bleach
+
+  # AI
+  - fastapi
+  - uvicorn
+  - pydantic

@@ -10,6 +10,8 @@
     
     <link href="https://unpkg.com/@vietmap/vietmap-gl-js@6.0.0/dist/vietmap-gl.css" rel="stylesheet" />
 
+    <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+
     <style>
         html, body {
             height: 100%;
@@ -35,7 +37,6 @@
             background: #f8f9fa;
         }
 
-        /* FIXED: New class to replace the inline style causing errors */
         .full-width-wrapper {
             flex: 1;
             display: flex;
@@ -64,6 +65,11 @@
             z-index: 2100; display: none; justify-content: center; align-items: center;
         }
         .sw-modal-box { background: white; padding: 20px; border-radius: 10px; width: 300px; }
+        
+        /* [NEW] Style adjustments for the Headless Editor */
+        .ck-editor__editable_inline {
+            min-height: 100px;
+        }
     </style>
   </head>
   <body>
@@ -165,6 +171,43 @@
             localStorage.setItem('scattered_info', JSON.stringify(data));
             loadSwItems();
         }
+
+        // [MODIFIED] Initialize "Headless" CKEditor (Discord-style)
+        document.addEventListener("DOMContentLoaded", function() {
+            const postBody = document.querySelector('#body');
+            
+            if (postBody) {
+                ClassicEditor
+                    .create(postBody, {
+                        // 1. Hide the toolbar (Clean look)
+                        toolbar: [],
+                        
+                        // 2. Placeholder text
+                        placeholder: "What's on your mind?"
+                    })
+                    .then(editor => {
+                        // 3. FIX: Sync data so the "Post" button works
+                        editor.model.document.on('change:data', () => {
+                            postBody.value = editor.getData();
+                        });
+
+                        // 4. CSS Tweak: Hide the empty toolbar border completely
+                        const toolbarElement = editor.ui.view.toolbar.element;
+                        toolbarElement.style.display = 'none';
+
+                        // 5. CSS Tweak: Style the input box to look like a text area
+                        editor.editing.view.change(writer => {
+                            const root = editor.editing.view.document.getRoot();
+                            writer.setStyle('padding', '15px', root);
+                            writer.setStyle('border-radius', '8px', root);
+                            writer.setStyle('background-color', '#fff', root);
+                        });
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            }
+        });
     </script>
 
     {% block scripts %}{% endblock %}

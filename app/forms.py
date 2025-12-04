@@ -6,7 +6,6 @@ from flask_login import current_user
 from app.models import User, Room
 
 class RegisterForm(FlaskForm):
-    # [MODIFIED] No email field here anymore
     username = StringField('Username',
                            validators=[DataRequired(), Length(min=2, max=20)])
     password = PasswordField('Password', validators=[DataRequired()])
@@ -20,14 +19,13 @@ class RegisterForm(FlaskForm):
             raise ValidationError('That username is taken. Please choose another.')
 
 class LoginForm(FlaskForm):
-    # [MODIFIED] Login with Username now, not Email
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
     password = PasswordField('Password', validators=[DataRequired()])
     remember = BooleanField('Remember Me')
     submit = SubmitField('Login')
 
 class PostForm(FlaskForm):
-    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=140)])
+    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=1000)]) # Increased Max Length for HTML
     media = FileField('Upload Image/Video', validators=[
         FileAllowed(['jpg', 'png', 'jpeg', 'gif', 'mp4', 'mov', 'avi'], 'Images and Videos only!')
     ])
@@ -38,6 +36,8 @@ class UpdateAccountForm(FlaskForm):
                            validators=[DataRequired(), Length(min=2, max=20)])
     email = StringField('Email',
                         validators=[DataRequired(), Email()])
+    # [NEW] Profile Picture Upload
+    picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
     submit = SubmitField('Update Account')
 
     def validate_username(self, username):

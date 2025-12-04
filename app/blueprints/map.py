@@ -75,6 +75,32 @@ def api_search():
     except Exception as e:
         print(f"Search Exception: {e}")
         return jsonify({"error": str(e)}), 500
+    
+@map_bp.route('/map/api/route')
+@login_required
+def api_route():
+    p1 = request.args.get('point1') 
+    p2 = request.args.get('point2')
+    
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
+    
+    if not p1 or not p2:
+        return jsonify({"error": "Missing coordinates"}), 400
+
+    url = "https://maps.vietmap.vn/api/route"
+    params = {
+        'api-version': '1.1',
+        'apikey': service_key,
+        'point': [p1, p2], 
+        'vehicle': 'car',
+        'points_encoded': False  # [CRITICAL FIX] Request raw GeoJSON coordinates
+    }
+    
+    try:
+        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @map_bp.route('/map/api/reverse')
 @login_required

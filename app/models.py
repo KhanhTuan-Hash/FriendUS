@@ -18,6 +18,8 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
+    # [NEW] Profile Picture
+    image_file = db.Column(db.String(20), nullable=False, default='default.jpg')
     password = db.Column(db.String(60), nullable=False) 
     
     # Relationships
@@ -106,7 +108,6 @@ class Message(db.Model):
 class Outsider(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    # Người tạo ra contact người lạ này
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     creator = db.relationship('User', backref='outsiders')
 
@@ -118,25 +119,13 @@ class Transaction(db.Model):
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(200))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Type: 'debt' (Ghi nợ) hoặc 'repayment' (Trả nợ)
     type = db.Column(db.String(20), default='debt') 
-    
     status = db.Column(db.String(20), default='pending') 
-
-    # Người tạo giao dịch (Sender)
     sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    
-    # Người nhận: Có thể là User HOẶC Outsider
     receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     outsider_id = db.Column(db.Integer, db.ForeignKey('outsider.id'), nullable=True)
-
-    # --- [UPDATE] Link Transaction to Room ---
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=True)
     room = db.relationship('Room', backref='transactions')
-    # -----------------------------------------
-
-    # Relationships
     sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_transactions')
     receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_transactions')
     outsider = db.relationship('Outsider', backref='transactions')
@@ -147,13 +136,11 @@ class Transaction(db.Model):
 class Activity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    location = db.Column(db.String(100)) # Could be linked to Location model later
+    location = db.Column(db.String(100))
     price = db.Column(db.Float, nullable=False, default=0.0)
-    start_time = db.Column(db.String(20)) # keeping simple string for HH:MM
+    start_time = db.Column(db.String(20)) 
     end_time = db.Column(db.String(20))
     rating = db.Column(db.Float, default=0.0)
-    
-    # Link to a specific Room (The Group)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
     room = db.relationship('Room', backref='activities')
 
@@ -162,15 +149,12 @@ class Activity(db.Model):
 
 class Constraint(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    type = db.Column(db.String(20), nullable=False) # 'price', 'time', 'location'
-    intensity = db.Column(db.String(10), nullable=False) # 'soft', 'rough'
-    value = db.Column(db.String(50), nullable=False) # e.g. "25", "08:00"
-    operator = db.Column(db.String(5), default="<") # '<', '>', 'after', etc.
-    
-    # Link to User (Personal View) AND Room (Context)
+    type = db.Column(db.String(20), nullable=False)
+    intensity = db.Column(db.String(10), nullable=False)
+    value = db.Column(db.String(50), nullable=False) 
+    operator = db.Column(db.String(5), default="<") 
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
-    
     user = db.relationship('User', backref='constraints')
 
     def __repr__(self):
