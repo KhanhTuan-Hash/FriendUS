@@ -1,23 +1,20 @@
-# base.py
+# core/base.py
 
 import re
 from abc import ABC, abstractmethod
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Tuple
 from dataclasses import dataclass
 from enum import Enum
-
-from cost import get_payment_system
-from info_hub import get_info_hub
 
 
 # ==================== DATA MODELS & CONSTANTS ====================
 
 class ActionType(Enum):
-    """Loại hành động để xử lý phản hồi."""
-    AI_RESPONSE = "ai_response"
+    """Phân loại hành động để FE xử lý hiển thị."""
     PAYMENT = "payment"
     INFO = "information"
     ERROR = "error"
+    FALLBACK = "fallback"
 
 
 @dataclass
@@ -28,25 +25,23 @@ class CommandResponse:
     action_type: ActionType
 
 
-# Các mô hình dữ liệu PaymentAction, InfoAction giữ nguyên như code cũ
-# ... (Giả định các dataclass PaymentAction, InfoAction được giữ nguyên)
-
 # ==================== ABSTRACT HANDLERS ====================
 
 class BaseCommandHandler(ABC):
     """
-    Lớp cơ sở cho tất cả các Command Handler.
-    Mỗi Handler cần định nghĩa:
-    - COMMAND_PREFIX: Lệnh bắt đầu (ví dụ: "/pay", "/info-add")
-    - REGEX_PATTERN: Mẫu Regex để trích xuất tham số cụ thể.
+    Lớp cơ sở cho mọi Command Handler.
+    Mọi Handler mới phải kế thừa lớp này.
     """
     COMMAND_PREFIX: str = None
     REGEX_PATTERN: str = None
-    ACTION_TYPE: ActionType = ActionType.AI_RESPONSE
+    ACTION_TYPE: ActionType = ActionType.FALLBACK
 
     @abstractmethod
-    def execute(self, params: Dict[str, Any]) -> CommandResponse:
-        """Logic nghiệp vụ thực thi lệnh."""
+    def execute(self, params: Dict[str, Any], group_id: int) -> CommandResponse:
+        """
+        Logic nghiệp vụ thực thi lệnh.
+        Nhận group_id để đảm bảo tính Group-Specific.
+        """
         pass
 
 
@@ -55,11 +50,7 @@ class PaymentBaseHandler(BaseCommandHandler):
     ACTION_TYPE = ActionType.PAYMENT
 
     def _parse_amount(self, amount_str: str) -> float:
-        """
-        Phân tích chuỗi số tiền sang float, hỗ trợ k, K, nghìn, triệu.
-        Ví dụ: "20k" -> 20000.0, "50.000" -> 50000.0
-        """
-        # Loại bỏ các ký tự không phải số và đơn vị
+        """Phân tích chuỗi số tiền sang float, hỗ trợ k, K, nghìn, tr, triệu."""
         clean_amount = amount_str.lower().replace('.', '').replace(',', '')
         multiplier = 1.0
 
@@ -77,12 +68,8 @@ class PaymentBaseHandler(BaseCommandHandler):
             raise ValueError(f"Không thể phân tích số tiền từ chuỗi: {amount_str}")
 
     def _parse_debt_content(self, raw_text: str) -> Tuple[str, str]:
-        """
-        Trích xuất số tiền và nội dung (content) từ chuỗi thô.
-        Ví dụ: "t nợ B 20k tiền ăn sáng" -> amount_str: "20k", content: "tiền ăn sáng"
-        """
-        # Regex tìm số tiền và phần còn lại
-        # Tìm một số lượng (có thể có dấu chấm/phẩy) + tùy chọn đơn vị (k, K, nghìn, tr, triệu)
+        """Trích xuất số tiền và nội dung (content)."""
+        # Mẫu: [số tiền] [tùy chọn 'tiền'] [nội dung còn lại]
         pattern = r'(\d[\d\.,]*\s*(?:[kK]|nghìn|tr|triệu|))(?:\s+tiền)?\s*(.*)'
         match = re.search(pattern, raw_text, re.IGNORECASE)
 
@@ -91,6 +78,4 @@ class PaymentBaseHandler(BaseCommandHandler):
             content = match.group(2).strip()
             return amount_str, content
 
-        return "", raw_text  # Trả về số tiền rỗng nếu không tìm thấy
-
-
+        return "", raw_text

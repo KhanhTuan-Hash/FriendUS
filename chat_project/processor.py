@@ -2,7 +2,7 @@
 
 import re
 from typing import List, Dict, Any, Tuple
-from base import BaseCommandHandler, CommandResponse, ActionType
+from chat_project.core.base import BaseCommandHandler, CommandResponse, ActionType
 import handlers  # Import module chứa tất cả Handlers
 
 
@@ -13,35 +13,33 @@ class CommandProcessor:
         self.handlers: Dict[str, BaseCommandHandler] = {}
         self.regex_map: List[Tuple[re.Pattern, BaseCommandHandler]] = []
         self._register_handlers()
+        print("✅ Command Processor đã khởi động và đăng ký Handlers.")
 
     def _register_handlers(self):
-        """
-        Tự động đăng ký tất cả các Handler từ module 'handlers'.
-        Cách này tối giản hóa việc thêm handler mới.
-        """
+        """Tự động đăng ký tất cả các Handler từ module 'handlers'."""
         for name, obj in handlers.__dict__.items():
             if (isinstance(obj, type) and
                     issubclass(obj, BaseCommandHandler) and
                     obj is not BaseCommandHandler and
                     obj.COMMAND_PREFIX and
                     obj.REGEX_PATTERN):
+                # Khởi tạo instance và đăng ký
                 handler_instance = obj()
                 self.handlers[obj.COMMAND_PREFIX] = handler_instance
 
-                # Biểu mẫu Regex đã biên dịch
                 pattern = re.compile(obj.REGEX_PATTERN, re.IGNORECASE)
                 self.regex_map.append((pattern, handler_instance))
-                print(f"[DEBUG] Registered: {obj.COMMAND_PREFIX}")
+                print(f"  -> Đăng ký lệnh: {obj.COMMAND_PREFIX}")
 
-    def process(self, input_text: str) -> CommandResponse:
+    def process(self, input_text: str, group_id: str = "default") -> CommandResponse:
         """
-        Xử lý input và trả về CommandResponse.
+        Xử lý input và điều phối lệnh đến Handler.
         """
         input_text = input_text.strip()
 
         if not input_text.startswith('/'):
             return CommandResponse(
-                message="Vui lòng bắt đầu bằng lệnh '/'",
+                message="Xin chào! Bạn có thể dùng các lệnh bắt đầu bằng /",
                 objects=[],
                 action_type=ActionType.FALLBACK
             )
@@ -51,16 +49,15 @@ class CommandProcessor:
             match = pattern.match(input_text)
 
             if match:
-                # Trích xuất tham số từ nhóm tên (named groups) trong regex
                 params = match.groupdict()
 
                 try:
-                    # 2. Thực thi Handler với tham số đã trích xuất
-                    return handler_instance.execute(params)
+                    # 2. Thực thi Handler (truyền group_id vào)
+                    return handler_instance.execute(params, group_id)
                 except Exception as e:
-                    print(f"[ERROR] Handler failed: {type(handler_instance).__name__} - {e}")
+                    print(f"[ERROR] Handler {type(handler_instance).__name__} failed: {e}")
                     return CommandResponse(
-                        message=f"Lỗi khi xử lý lệnh: {e}",
+                        message=f"Lỗi xử lý nghiệp vụ: {e}",
                         objects=[],
                         action_type=ActionType.ERROR
                     )
@@ -68,29 +65,7 @@ class CommandProcessor:
         # Không tìm thấy Handler phù hợp
         available_commands = ', '.join(self.handlers.keys())
         return CommandResponse(
-            message=f"Lệnh không xác định. Các lệnh: {available_commands}",
+            message=f"Lệnh không xác định. Các lệnh khả dụng: {available_commands}",
             objects=[],
             action_type=ActionType.ERROR
         )
-
-
-# ==================== USAGE EXAMPLE ====================
-
-if __name__ == "__main__":
-    processor = CommandProcessor()
-
-    test_cases = [
-        "/pay Alice pays Bob 50.000",
-        "/owe Bob owes Charlie 25.000",
-        "/info-add Python Programming | Python is a great language",
-        "/info-find python basics",
-        "/unknown-command"
-    ]
-
-    print("\n--- TEST RUN ---")
-    for test in test_cases:
-        print(f"\n> INPUT: {test}")
-        response = processor.process(test)
-        print(f"  MESSAGE: {response.message}")
-        print(f"  ACTION: {response.action_type.value}")
-        print(f"  OBJECTS: {len(response.objects)}")
