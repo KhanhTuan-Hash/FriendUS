@@ -9,19 +9,35 @@
     #map-container { position: relative; width: 100%; height: calc(100vh - 56px); font-family: 'Roboto', 'Segoe UI', sans-serif; }
     #map { width: 100%; height: 100%; }
 
+<<<<<<< HEAD
     /* --- Floating Search Bar (State A) --- */
     #floating-search-bar {
         position: absolute; top: 16px; left: 16px; z-index: 1000;
         display: flex; gap: 8px; align-items: center;
         transition: opacity 0.2s ease;
+=======
+    /* --- Component: Search Widget --- */
+    #search-widget {
+        position: absolute; top: 20px; left: 20px; width: 360px; z-index: 1000;
+        display: flex; flex-direction: column; gap: 8px;
+>>>>>>> parent of ba4bf68 (Save point)
     }
     
+<<<<<<< HEAD
     .search-container-pill {
         background: white; border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 -1px 0px rgba(0,0,0,0.02);
         display: flex; align-items: center;
         width: 392px; height: 48px; padding: 0 12px;
         transition: box-shadow 0.2s;
+=======
+    /* --- Component: Search Results Dropdown --- */
+    #search-results {
+        background: white; border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12); 
+        max-height: 400px; overflow-y: auto; 
+        display: none; /* Hidden by default */
+>>>>>>> parent of ba4bf68 (Save point)
     }
     .search-container-pill:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
 
@@ -82,7 +98,7 @@
     .summary-time { font-size: 24px; color: #188038; font-weight: 500; }
     .summary-dist { color: #5f6368; font-size: 15px; margin-left: 8px; }
 
-    /* --- Bottom Info Card --- */
+    /* --- Component: Bottom Info Card --- */
     #bottom-card {
         position: absolute; bottom: 24px; left: 50%; transform: translate(-50%, 150%);
         width: 95%; max-width: 400px;
@@ -192,9 +208,13 @@
     "savedLocations": {{ locations_data | tojson }},
     "urls": { 
         "search": "{{ url_for('map.api_search') }}", 
+<<<<<<< HEAD
         "detail": "{{ url_for('map.api_detail') }}",
         "reverse": "{{ url_for('map.api_reverse') }}",
         "route": "{{ url_for('map.api_route') }}",
+=======
+        "reverse": "{{ url_for('map.api_reverse') }}", 
+>>>>>>> parent of ba4bf68 (Save point)
         "create": "{{ url_for('map.create_location_on_click') }}" 
     }
 }
@@ -209,10 +229,14 @@ class MapManager {
         this.map = null;
         this.markers = { start: null, end: null, search: null, user: null }; // Track markers
         this.searchTimeout = null;
+<<<<<<< HEAD
         this.mode = 'search'; 
         this.activeInput = 'main'; 
         this.locations = { start: null, end: null };
         this.currentSelection = null;
+=======
+        this.currentSelection = null; // Stores {lat, lon, name, address}
+>>>>>>> parent of ba4bf68 (Save point)
 
         this.dom = {
             searchBar: document.getElementById('floating-search-bar'),
@@ -234,16 +258,26 @@ class MapManager {
     }
 
     init() {
+        // 1. Initialize Map
         this.map = new vietmapgl.Map({
             container: 'map',
             style: `https://maps.vietmap.vn/maps/styles/tm/style.json?apikey=${this.config.apiKey}`,
+<<<<<<< HEAD
             center: [106.660172, 10.762622], zoom: 13
         });
         
+=======
+            center: [106.660172, 10.762622], // Default: Ho Chi Minh City
+            zoom: 13, pitch: 0
+        });
+
+        // 2. Add Controls
+>>>>>>> parent of ba4bf68 (Save point)
         this.map.addControl(new vietmapgl.NavigationControl(), 'bottom-right');
         const geolocate = new vietmapgl.GeolocateControl({enableHighAccuracy: true});
         this.map.addControl(geolocate, 'bottom-right');
 
+<<<<<<< HEAD
         this.setupListeners();
     }
 
@@ -256,6 +290,47 @@ class MapManager {
                 this.setMode('route');
                 this.selectLocation(this.currentSelection, 'end');
                 this.dom.inputs.start.focus();
+=======
+        // 3. Load Saved Pins
+        this.loadSavedLocations();
+
+        // 4. Setup Event Listeners
+        this.setupListeners();
+    }
+
+    loadSavedLocations() {
+        this.config.savedLocations.forEach(loc => {
+            const popup = new vietmapgl.Popup({ offset: 25 })
+                .setHTML(`<b>${loc.name}</b><br><a href="${loc.url}">View Details</a>`);
+            
+            new vietmapgl.Marker({ color: "#198754" }) // Green for saved
+                .setLngLat([loc.lon, loc.lat])
+                .setPopup(popup)
+                .addTo(this.map);
+        });
+    }
+
+    setupListeners() {
+        // Search Input Debounce
+        this.dom.input.addEventListener('keyup', () => {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => this.performSearch(), 500);
+        });
+
+        // Prevent Form Submit
+        document.getElementById('search-form').addEventListener('submit', (e) => e.preventDefault());
+
+        // Map Click
+        this.map.on('click', (e) => this.handleMapClick(e));
+
+        // Save Button Click
+        this.dom.btnSave.addEventListener('click', () => this.saveCurrentLocation());
+
+        // Close Dropdown on Outside Click
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('search-widget').contains(e.target)) {
+                this.dom.results.style.display = 'none';
+>>>>>>> parent of ba4bf68 (Save point)
             }
         };
 
@@ -358,6 +433,7 @@ class MapManager {
         });
     }
 
+<<<<<<< HEAD
     // --- SEARCH ---
     async performSearch(query) {
         if (!query || query.length < 2) { this.dom.results.style.display = 'none'; return; }
@@ -366,6 +442,28 @@ class MapManager {
             const data = await res.json();
             this.renderResults(data);
         } catch (e) { console.error(e); }
+=======
+    // --- SEARCH FUNCTIONALITY ---
+    async performSearch() {
+        const query = this.dom.input.value.trim();
+        if (query.length < 2) {
+            this.dom.results.style.display = 'none';
+            return;
+        }
+
+        this.renderSearchResults([], true); // Show loading state
+
+        try {
+            const response = await fetch(`${this.config.urls.search}?query=${encodeURIComponent(query)}`);
+            const rawData = await response.json();
+            // Robust check: Is it an array? Or an object with a .data property?
+            const data = Array.isArray(rawData) ? rawData : (rawData.data || []);
+            this.renderSearchResults(data);
+        } catch (error) {
+            console.error("Search Error:", error);
+            this.dom.results.innerHTML = '<div class="p-3 text-center text-danger">Error fetching results</div>';
+        }
+>>>>>>> parent of ba4bf68 (Save point)
     }
 
     renderResults(data) {
@@ -392,6 +490,7 @@ class MapManager {
                     <span class="result-addr">${place.address || ""}</span>
                 </div>`;
             
+<<<<<<< HEAD
             item.onclick = async () => {
                 let lat = place.lat || place.latitude;
                 let lng = place.lng || place.lon;
@@ -410,11 +509,29 @@ class MapManager {
                 } else {
                     this.selectLocation(loc, this.activeInput);
                 }
+=======
+            // Handle different API response structures
+            const name = place.name || place.display_name || "Unknown Location";
+            const addr = place.address || "";
+            const lat = place.lat;
+            const lng = place.lng || place.lon;
+
+            item.innerHTML = `
+                <span class="result-name">${name}</span>
+                <span class="result-addr">${addr}</span>
+            `;
+
+            item.onclick = () => {
+                this.selectLocation(lat, lng, name, addr);
+                this.dom.results.style.display = 'none';
+                this.dom.input.value = name;
+>>>>>>> parent of ba4bf68 (Save point)
             };
             this.dom.results.appendChild(item);
         });
     }
 
+<<<<<<< HEAD
     selectLocation(loc, inputType) {
         this.dom.results.style.display = 'none';
         this.dom.inputs[inputType].value = loc.name;
@@ -442,12 +559,72 @@ class MapManager {
     async calculateRoute() {
         const p1 = `${this.locations.start.lat},${this.locations.start.lon}`;
         const p2 = `${this.locations.end.lat},${this.locations.end.lon}`;
+=======
+    // --- SELECTION LOGIC ---
+    async handleMapClick(e) {
+        // Ignore clicks on existing markers
+        if (e.originalEvent.target.closest('.mapboxgl-marker')) return;
+
+        const { lng, lat } = e.lngLat;
+        
+        // 1. Initial temporary UI update (Loading state)
+        this.selectLocation(lat, lng, "Loading...", "Fetching address...");
+
+        // 2. Fetch real address (Reverse Geocoding)
+        try {
+            const res = await fetch(`${this.config.urls.reverse}?lat=${lat}&lon=${lng}`);
+            const data = await res.json();
+            
+            let finalName = "Dropped Pin";
+            let finalAddr = "Address not found";
+
+            if (data && data[0]) {
+                if (data[0].name) finalName = data[0].name;
+                if (data[0].address) finalAddr = data[0].address;
+            } else if (data && data.address) {
+                 finalAddr = data.address; // Handle alternative API format
+            }
+
+            // Update UI with real data
+            this.selectLocation(lat, lng, finalName, finalAddr);
+
+        } catch (err) {
+            console.error("Reverse Geocode Error:", err);
+            this.selectLocation(lat, lng, "Selected Location", "Address unavailable");
+        }
+    }
+
+    selectLocation(lat, lng, name, address) {
+        // 1. Update Internal State
+        this.currentSelection = { lat, lon: lng, name, address };
+
+        // 2. Move Camera
+        this.map.flyTo({ center: [lng, lat], zoom: 16, essential: true });
+
+        // 3. Update Marker
+        if (this.activeMarker) this.activeMarker.remove();
+        this.activeMarker = new vietmapgl.Marker({ color: "#ea4335" }) // Red for active
+            .setLngLat([lng, lat])
+            .addTo(this.map);
+
+        // 4. Update Bottom Card UI
+        this.dom.infoName.innerText = name;
+        this.dom.infoAddr.innerText = address;
+        this.dom.infoCoords.innerText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        this.dom.card.style.display = 'flex'; // Show card
+    }
+
+    // --- SAVE LOGIC ---
+    async saveCurrentLocation() {
+        if (!this.currentSelection) return;
+>>>>>>> parent of ba4bf68 (Save point)
         
         this.dom.routePanel.innerHTML = '<div class="p-4 text-center text-muted">Calculatng route...</div>';
 
         try {
             const res = await fetch(`${this.config.urls.route}?point1=${p1}&point2=${p2}`);
             const data = await res.json();
+<<<<<<< HEAD
 
             if (data.paths && data.paths[0]) {
                 const path = data.paths[0];
@@ -464,6 +641,13 @@ class MapManager {
             }
         } catch (e) {
             this.dom.routePanel.innerHTML = '<div class="p-4 text-danger">Error calculating route.</div>';
+=======
+            if (data.url) {
+                window.location.href = data.url; // Redirect to detail page
+            }
+        } catch (e) {
+            alert("Failed to save location. Check console.");
+>>>>>>> parent of ba4bf68 (Save point)
             console.error(e);
         }
     }
@@ -538,6 +722,13 @@ class MapManager {
     }
 }
 
+<<<<<<< HEAD
 document.addEventListener('DOMContentLoaded', () => new MapManager());
+=======
+// Initialize App when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    new MapManager();
+});
+>>>>>>> parent of ba4bf68 (Save point)
 </script>
 {% endblock %}
