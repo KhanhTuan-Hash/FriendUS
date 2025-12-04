@@ -1,0 +1,341 @@
+{% extends "layout.html" %}
+
+{% set full_width = True %}
+
+{% block content %}
+<style>
+    /* --- Base Layout --- */
+    #map-container { position: relative; width: 100%; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    #map { width: 100%; height: 100%; }
+
+    /* --- Component: Search Widget --- */
+    #search-widget {
+        position: absolute; top: 20px; left: 20px; width: 360px; z-index: 1000;
+        display: flex; flex-direction: column; gap: 8px;
+    }
+    .search-box {
+        background: white; border-radius: 12px; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        padding: 0 16px; height: 50px;
+        display: flex; align-items: center; transition: box-shadow 0.2s;
+    }
+    .search-box:focus-within { box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2); }
+    .search-box input {
+        border: none; outline: none; height: 100%; width: 100%; font-size: 16px; background: transparent;
+    }
+    .search-btn { background: transparent; border: none; color: #0d6efd; font-size: 18px; cursor: pointer; }
+    
+    /* --- Component: Search Results Dropdown --- */
+    #search-results {
+        background: white; border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12); 
+        max-height: 400px; overflow-y: auto; 
+        display: none; /* Hidden by default */
+    }
+    .result-item { padding: 12px 16px; border-bottom: 1px solid #f8f9fa; cursor: pointer; transition: background 0.1s; }
+    .result-item:last-child { border-bottom: none; }
+    .result-item:hover { background-color: #f1f3f4; }
+    .result-name { font-weight: 600; font-size: 15px; display: block; color: #202124; }
+    .result-addr { font-size: 13px; color: #5f6368; display: block; margin-top: 2px; }
+
+    /* --- Component: Bottom Info Card --- */
+    #bottom-card {
+        position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+        width: 95%; max-width: 480px;
+        background: white; border-radius: 16px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+        padding: 20px; z-index: 1000;
+        display: none; align-items: center; justify-content: space-between;
+        animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideUp {
+        from { transform: translate(-50%, 100%); opacity: 0; }
+        to { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .card-info { flex: 1; margin-right: 15px; }
+    .card-title { font-size: 18px; font-weight: 700; color: #202124; margin-bottom: 4px; display: block;}
+    .card-addr { font-size: 14px; color: #5f6368; line-height: 1.4; display: block;}
+    .card-coords { font-size: 12px; color: #0d6efd; margin-top: 6px; display: block; font-family: monospace; }
+    
+    .card-actions { display: flex; gap: 12px; }
+    .action-btn {
+        width: 44px; height: 44px; border-radius: 50%; border: none;
+        background: #f1f3f4; color: #0d6efd; font-size: 20px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: all 0.2s;
+    }
+    .action-btn:hover { background: #e8eaed; transform: scale(1.05); }
+    .btn-primary-action { background: #0d6efd; color: white; }
+    .btn-primary-action:hover { background: #0b5ed7; }
+</style>
+
+<div id="map-container">
+    
+    <div id="search-widget">
+        <form id="search-form">
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search for places..." autocomplete="off">
+                <button type="submit" class="search-btn"><i class="bi bi-search"></i></button>
+            </div>
+        </form>
+        <div id="search-results"></div>
+    </div>
+
+    <div id="bottom-card">
+        <div class="card-info">
+            <span class="card-title" id="info-name">Loading...</span>
+            <span class="card-addr" id="info-addr">Fetching details...</span>
+            <span class="card-coords" id="info-coords"></span>
+        </div>
+        <div class="card-actions">
+            <button class="action-btn" id="btn-save" title="Save Location">
+                <i class="bi bi-bookmark-plus"></i>
+            </button>
+            <button class="action-btn btn-primary-action" title="Navigate">
+                <i class="bi bi-cursor-fill"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="map"></div>
+</div>
+
+<script id="map-config" type="application/json">
+{
+    "apiKey": "{{ vietmap_api_key }}",
+    "savedLocations": {{ locations_data | tojson }},
+    "urls": { 
+        "search": "{{ url_for('map.api_search') }}", 
+        "reverse": "{{ url_for('map.api_reverse') }}", 
+        "create": "{{ url_for('map.create_location_on_click') }}" 
+    }
+}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+class MapManager {
+    constructor() {
+        this.config = JSON.parse(document.getElementById('map-config').textContent);
+        this.map = null;
+        this.activeMarker = null;
+        this.searchTimeout = null;
+        this.currentSelection = null; // Stores {lat, lon, name, address}
+
+        // DOM Elements
+        this.dom = {
+            input: document.getElementById('search-input'),
+            results: document.getElementById('search-results'),
+            card: document.getElementById('bottom-card'),
+            infoName: document.getElementById('info-name'),
+            infoAddr: document.getElementById('info-addr'),
+            infoCoords: document.getElementById('info-coords'),
+            btnSave: document.getElementById('btn-save')
+        };
+
+        this.init();
+    }
+
+    init() {
+        // 1. Initialize Map
+        this.map = new vietmapgl.Map({
+            container: 'map',
+            style: `https://maps.vietmap.vn/maps/styles/tm/style.json?apikey=${this.config.apiKey}`,
+            center: [106.660172, 10.762622], // Default: Ho Chi Minh City
+            zoom: 13, pitch: 0
+        });
+
+        // 2. Add Controls
+        this.map.addControl(new vietmapgl.NavigationControl(), 'bottom-right');
+        this.map.addControl(new vietmapgl.GeolocateControl({ enableHighAccuracy: true }), 'bottom-right');
+
+        // 3. Load Saved Pins
+        this.loadSavedLocations();
+
+        // 4. Setup Event Listeners
+        this.setupListeners();
+    }
+
+    loadSavedLocations() {
+        this.config.savedLocations.forEach(loc => {
+            const popup = new vietmapgl.Popup({ offset: 25 })
+                .setHTML(`<b>${loc.name}</b><br><a href="${loc.url}">View Details</a>`);
+            
+            new vietmapgl.Marker({ color: "#198754" }) // Green for saved
+                .setLngLat([loc.lon, loc.lat])
+                .setPopup(popup)
+                .addTo(this.map);
+        });
+    }
+
+    setupListeners() {
+        // Search Input Debounce
+        this.dom.input.addEventListener('keyup', () => {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = setTimeout(() => this.performSearch(), 500);
+        });
+
+        // Prevent Form Submit
+        document.getElementById('search-form').addEventListener('submit', (e) => e.preventDefault());
+
+        // Map Click
+        this.map.on('click', (e) => this.handleMapClick(e));
+
+        // Save Button Click
+        this.dom.btnSave.addEventListener('click', () => this.saveCurrentLocation());
+
+        // Close Dropdown on Outside Click
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('search-widget').contains(e.target)) {
+                this.dom.results.style.display = 'none';
+            }
+        });
+    }
+
+    // --- SEARCH FUNCTIONALITY ---
+    async performSearch() {
+        const query = this.dom.input.value.trim();
+        if (query.length < 2) {
+            this.dom.results.style.display = 'none';
+            return;
+        }
+
+        this.renderSearchResults([], true); // Show loading state
+
+        try {
+            const response = await fetch(`${this.config.urls.search}?query=${encodeURIComponent(query)}`);
+            const rawData = await response.json();
+            // Robust check: Is it an array? Or an object with a .data property?
+            const data = Array.isArray(rawData) ? rawData : (rawData.data || []);
+            this.renderSearchResults(data);
+        } catch (error) {
+            console.error("Search Error:", error);
+            this.dom.results.innerHTML = '<div class="p-3 text-center text-danger">Error fetching results</div>';
+        }
+    }
+
+    renderSearchResults(data, isLoading = false) {
+        this.dom.results.style.display = 'block';
+        this.dom.results.innerHTML = '';
+
+        if (isLoading) {
+            this.dom.results.innerHTML = '<div class="p-3 text-center text-muted">Searching...</div>';
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            this.dom.results.innerHTML = '<div class="p-3 text-center text-muted">No results found</div>';
+            return;
+        }
+
+        data.forEach(place => {
+            const item = document.createElement('div');
+            item.className = 'result-item';
+            
+            // Handle different API response structures
+            const name = place.name || place.display_name || "Unknown Location";
+            const addr = place.address || "";
+            const lat = place.lat;
+            const lng = place.lng || place.lon;
+
+            item.innerHTML = `
+                <span class="result-name">${name}</span>
+                <span class="result-addr">${addr}</span>
+            `;
+
+            item.onclick = () => {
+                this.selectLocation(lat, lng, name, addr);
+                this.dom.results.style.display = 'none';
+                this.dom.input.value = name;
+            };
+
+            this.dom.results.appendChild(item);
+        });
+    }
+
+    // --- SELECTION LOGIC ---
+    async handleMapClick(e) {
+        // Ignore clicks on existing markers
+        if (e.originalEvent.target.closest('.mapboxgl-marker')) return;
+
+        const { lng, lat } = e.lngLat;
+        
+        // 1. Initial temporary UI update (Loading state)
+        this.selectLocation(lat, lng, "Loading...", "Fetching address...");
+
+        // 2. Fetch real address (Reverse Geocoding)
+        try {
+            const res = await fetch(`${this.config.urls.reverse}?lat=${lat}&lon=${lng}`);
+            const data = await res.json();
+            
+            let finalName = "Dropped Pin";
+            let finalAddr = "Address not found";
+
+            if (data && data[0]) {
+                if (data[0].name) finalName = data[0].name;
+                if (data[0].address) finalAddr = data[0].address;
+            } else if (data && data.address) {
+                 finalAddr = data.address; // Handle alternative API format
+            }
+
+            // Update UI with real data
+            this.selectLocation(lat, lng, finalName, finalAddr);
+
+        } catch (err) {
+            console.error("Reverse Geocode Error:", err);
+            this.selectLocation(lat, lng, "Selected Location", "Address unavailable");
+        }
+    }
+
+    selectLocation(lat, lng, name, address) {
+        // 1. Update Internal State
+        this.currentSelection = { lat, lon: lng, name, address };
+
+        // 2. Move Camera
+        this.map.flyTo({ center: [lng, lat], zoom: 16, essential: true });
+
+        // 3. Update Marker
+        if (this.activeMarker) this.activeMarker.remove();
+        this.activeMarker = new vietmapgl.Marker({ color: "#ea4335" }) // Red for active
+            .setLngLat([lng, lat])
+            .addTo(this.map);
+
+        // 4. Update Bottom Card UI
+        this.dom.infoName.innerText = name;
+        this.dom.infoAddr.innerText = address;
+        this.dom.infoCoords.innerText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        this.dom.card.style.display = 'flex'; // Show card
+    }
+
+    // --- SAVE LOGIC ---
+    async saveCurrentLocation() {
+        if (!this.currentSelection) return;
+        
+        const confirmed = confirm(`Save "${this.currentSelection.name}" to your list?`);
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch(this.config.urls.create, {
+                method: "POST",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.currentSelection)
+            });
+
+            const data = await res.json();
+            if (data.url) {
+                window.location.href = data.url; // Redirect to detail page
+            }
+        } catch (e) {
+            alert("Failed to save location. Check console.");
+            console.error(e);
+        }
+    }
+}
+
+// Initialize App when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    new MapManager();
+});
+</script>
+{% endblock %}

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 affine @ file:///home/conda/feedstock_root/build_artifacts/affine_1733762038348/work
 attrs @ file:///home/conda/feedstock_root/build_artifacts/attrs_1759762205280/work
 bidict @ file:///home/conda/feedstock_root/build_artifacts/bidict_1734272627465/work
@@ -79,3 +80,16 @@ WTForms @ file:///home/conda/feedstock_root/build_artifacts/wtforms_173306148743
 xyzservices @ file:///home/conda/feedstock_root/build_artifacts/xyzservices_1761842184123/work
 zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1749421620841/work
 zstandard==0.25.0
+=======
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Flask-WTF
+bootstrap-flask
+Flask-SocketIO
+email_validator
+osmnx
+geopandas
+sqlalchemy
+werkzeug
+>>>>>>> origin/Review2
