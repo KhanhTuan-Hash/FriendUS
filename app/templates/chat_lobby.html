@@ -1,81 +1,127 @@
-{% extends "layout.html" %}
-{% from 'bootstrap5/form.html' import render_form %}
+from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask_login import current_user, login_required
+from app.extensions import db
+from app.models import Room, Message, Activity, Constraint, Transaction
+from app.forms import CreateRoomForm, ActivityForm, ConstraintForm, TransactionForm
+from app.utils import check_conflicts
 
-{% block content %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+chat_bp = Blueprint('chat', __name__)
 
-<style>
-    /* Thêm hiệu ứng hover mượt mà cho danh sách phòng */
-    .list-group-item-action:hover {
-        background-color: #f8f9fa;
-        transform: translateY(-2px);
-        transition: all 0.2s ease-out;
-    }
-</style>
-
-<div class="row">
-    <div class="col-lg-4">
+@chat_bp.route('/chat', methods=['GET', 'POST'])
+@login_required
+def chat():
+    form = CreateRoomForm()
+    if form.validate_on_submit():
+        new_room = Room(name=form.name.data, description=form.description.data, creator=current_user)
         
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header h5">
-                <i class="bi bi-plus-lg me-2"></i>Create New Room
-            </div>
-            <div class="card-body">
-                {{ render_form(form, action=url_for('chat.chat')) }}
-            </div>
-        </div>
+        # Handle Password
+        if form.password.data:
+            new_room.set_password(form.password.data)
+            
+        new_room.members.append(current_user)
+        db.session.add(new_room)
+        db.session.commit()
+        return redirect(url_for('chat.chat_room', room_name=new_room.name))
 
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header h5">
-                <i class="bi bi-person-video me-2"></i>My Rooms
-            </div>
-            <ul class="list-group list-group-flush">
-                {% for room in my_rooms %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center list-group-item-action">
-                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none fw-bold">{{ room.name }}</a>
-                        <span class="badge bg-primary rounded-pill">
-                            <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }}
-                        </span>
-                    </li>
-                {% else %}
-                    <li class="list-group-item text-muted">You haven't joined any rooms.</li>
-                {% endfor %}
-            </ul>
-        </div>
-    </div>
+    all_rooms = Room.query.all()
+    my_rooms = current_user.rooms.all()
+    return render_template('chat_lobby.html', title='Chat Lobby', form=form, all_rooms=all_rooms, my_rooms=my_rooms)
 
-    <div class="col-lg-8">
-        <h2 class="mb-4"><i class="bi bi-globe me-2"></i>All Rooms</h2>
-        <div class="list-group">
-            {% for room in all_rooms %}
-                <div class="list-group-item list-group-item-action flex-column align-items-start mb-3 shadow-sm p-3">
-                    <div class="d-flex w-100 justify-content-between">
-                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none">
-                            <h5 class="mb-1 text-primary">{{ room.name }}</h5>
-                        </a>
-                        
-                        <div>
-                            <small class="text-muted me-3">
-                                <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }} member(s)
-                            </small>
-                            {% if room.creator == current_user %}
-                                <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" style="display: inline;" 
-                                      onsubmit="return confirm('Are you sure you want to permanently delete this room and all its messages? This cannot be undone.');">
-                                    <button type="submit" class="btn btn-danger btn-sm py-0 px-2"><i class="bi bi-trash"></i> Delete</button>
-                                </form>
-                            {% endif %}
-                        </div>
-                        
-                    </div>
-                    <p class="mb-1">{{ room.description or "No description." }}</p>
-                    <small class="text-muted">Created by: {{ room.creator.username if room.creator else 'System' }}</small>
-                </div>
-            {% else %}
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle-fill me-2"></i>No rooms found. Why not create one?
-                </div>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-{% endblock %}
+@chat_bp.route('/chat/join_private', methods=['POST'])
+@login_required
+def join_private_room():
+    """Route to handle password submission from the Lobby Modal"""
+    room_id = request.form.get('room_id')
+    password = request.form.get('password')
+    
+    room = Room.query.get_or_404(room_id)
+    
+    if room.check_password(password):
+        if current_user not in room.members:
+            room.members.append(current_user)
+            db.session.commit()
+            flash(f'Successfully joined {room.name}!', 'success')
+        return redirect(url_for('chat.chat_room', room_name=room.name))
+    else:
+        flash('Incorrect password.', 'danger')
+        return redirect(url_for('chat.chat'))
+
+@chat_bp.route('/chat/<string:room_name>', methods=['GET'])
+@login_required
+def chat_room(room_name):
+    room = Room.query.filter_by(name=room_name).first_or_404()
+    
+    # --- JOINING LOGIC ---
+    if current_user not in room.members:
+        if room.password_hash:
+            # If private and not a member, deny direct access
+            flash('This room is private. Please enter the password in the lobby.', 'warning')
+            return redirect(url_for('chat.chat'))
+        else:
+            # If public, auto-join
+            room.members.append(current_user)
+            db.session.commit()
+            flash(f'Joined room: {room.name}', 'info')
+
+    # --- PLANNER DATA ---
+    act_form = ActivityForm()
+    cons_form = ConstraintForm()
+    activities = Activity.query.filter_by(room_id=room.id).all()
+    
+    timeline_data = []
+    for act in activities:
+        timeline_data.append({
+            'name': act.name,
+            'start': act.start_time,
+            'end': act.end_time
+        })
+
+    my_constraints = Constraint.query.filter_by(user_id=current_user.id, room_id=room.id).all()
+    conflicts = check_conflicts(activities, my_constraints)
+
+    # --- FINANCE DATA ---
+    trans_form = TransactionForm()
+    # Filter choices to only existing members
+    trans_form.receiver.choices = [(m.id, m.username) for m in room.members if m.id != current_user.id]
+    if not trans_form.receiver.choices: 
+        trans_form.receiver.choices = [(0, 'No other members')]
+
+    pending_trans = Transaction.query.filter_by(room_id=room.id, receiver_id=current_user.id, status='pending').all()
+    
+    history_trans = Transaction.query.filter(Transaction.room_id == room.id).filter(
+        (Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)
+    ).order_by(Transaction.timestamp.desc()).all()
+
+    return render_template('chat_room.html', title=f'Trip: {room.name}', 
+                           room=room,
+                           act_form=act_form, cons_form=cons_form, 
+                           activities=activities, 
+                           timeline_data=timeline_data,
+                           constraints=my_constraints, conflicts=conflicts,
+                           trans_form=trans_form, pending_trans=pending_trans, history_trans=history_trans)
+
+@chat_bp.route('/chat/delete/<int:room_id>', methods=['POST'])
+@login_required
+def delete_chat_room(room_id):
+    room_to_delete = Room.query.get_or_404(room_id)
+    
+    if room_to_delete.name == 'general':
+          flash('The general room cannot be deleted.', 'danger')
+          return redirect(url_for('chat.chat'))
+    
+    if room_to_delete.creator != current_user:
+        flash('You do not have permission to delete this room.', 'danger')
+        return redirect(url_for('chat.chat'))
+        
+    try:
+        # Note: Depending on your cascade settings in models.py, 
+        # you might not need to manually delete messages, but it's safe to keep.
+        Message.query.filter_by(room=room_to_delete.name).delete()
+        db.session.delete(room_to_delete)
+        db.session.commit()
+        flash(f'Room "{room_to_delete.name}" has been deleted.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting room: {e}', 'danger')
+        
+    return redirect(url_for('chat.chat'))

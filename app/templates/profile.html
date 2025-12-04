@@ -52,16 +52,18 @@
                             {% endif %}
                         </div>
 
-                        <div class="mb-3">
-                            {{ form.email.label(class="form-label") }}
-                            
-                            {# [MODIFIED] Render as Read-Only with gray background #}
-                            {{ form.email(class="form-control", readonly=True, style="background-color: #e9ecef; cursor: not-allowed;") }}
-                            
-                            <div class="form-text text-muted">
-                                <i class="bi bi-lock-fill"></i> Email is linked to your Google account and cannot be changed.
+                        {% if '@friendus.local' in user.email %}
+                            {{ form.email(type="hidden") }}
+                        
+                        {% else %}
+                            <div class="mb-3">
+                                {{ form.email.label(class="form-label") }}
+                                {{ form.email(class="form-control", readonly=True, style="background-color: #e9ecef; cursor: not-allowed;") }}
+                                <div class="form-text text-muted">
+                                    <i class="bi bi-lock-fill"></i> Email is linked to your Google account.
+                                </div>
                             </div>
-                        </div>
+                        {% endif %}
 
                         <div class="mb-3">
                             {{ form.picture.label(class="form-label") }}

@@ -25,7 +25,7 @@ class LoginForm(FlaskForm):
     submit = SubmitField('Login')
 
 class PostForm(FlaskForm):
-    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=1000)]) # Increased Max Length for HTML
+    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=1000)]) 
     media = FileField('Upload Image/Video', validators=[
         FileAllowed(['jpg', 'png', 'jpeg', 'gif', 'mp4', 'mov', 'avi'], 'Images and Videos only!')
     ])
@@ -36,7 +36,6 @@ class UpdateAccountForm(FlaskForm):
                            validators=[DataRequired(), Length(min=2, max=20)])
     email = StringField('Email',
                         validators=[DataRequired(), Email()])
-    # [NEW] Profile Picture Upload
     picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
     submit = SubmitField('Update Account')
 
@@ -64,6 +63,10 @@ class CreateRoomForm(FlaskForm):
                          validators=[DataRequired(), Length(min=3, max=50)])
     description = TextAreaField('Description', 
                                 validators=[Optional(), Length(max=200)])
+    
+    # [NEW] Optional Password Field
+    password = PasswordField('Room Password (Optional)', description='Leave empty for a public room')
+    
     submit = SubmitField('Create Room')
 
     def validate_name(self, name):

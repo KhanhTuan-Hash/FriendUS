@@ -32,3 +32,4 @@ def index():
     avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
     suggestions = db.session.query(Location, avg_rating).outerjoin(Review, Location.id == Review.location_id).group_by(Location.id).order_by(avg_rating.desc()).limit(5).all() 
     return render_template('index.html', title='Home', form=form, posts=posts, suggestions=suggestions)
+
