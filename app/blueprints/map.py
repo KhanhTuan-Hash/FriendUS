@@ -127,3 +127,27 @@ def create_location_on_click():
     db.session.add(new_loc)
     db.session.commit()
     return jsonify({'url': url_for('map.location_detail', location_id=new_loc.id)})
+
+# ... inside map.py ...
+
+@map_bp.route('/map/api/detail')
+@login_required
+def api_detail():
+    ref_id = request.args.get('ref_id')
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
+    
+    if not ref_id: return jsonify({"error": "No Ref ID"}), 400
+
+    # Documentation: https://maps.vietmap.vn/api/place/v3
+    url = "https://maps.vietmap.vn/api/place/v3"
+    params = {
+        'apikey': service_key, 
+        'refid': ref_id
+    }
+    
+    try:
+        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
+        return jsonify(resp.json())
+    except Exception as e:
+        print(f"Detail API Exception: {e}")
+        return jsonify({"error": str(e)}), 500

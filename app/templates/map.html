@@ -8,7 +8,7 @@
     #map-container { position: relative; width: 100%; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
     #map { width: 100%; height: 100%; }
 
-    /* --- Component: Search Widget --- */
+    /* --- Search Widget --- */
     #search-widget {
         position: absolute; top: 20px; left: 20px; width: 360px; z-index: 1000;
         display: flex; flex-direction: column; gap: 8px;
@@ -25,12 +25,12 @@
     }
     .search-btn { background: transparent; border: none; color: #0d6efd; font-size: 18px; cursor: pointer; }
     
-    /* --- Component: Search Results Dropdown --- */
+    /* --- Search Results Dropdown --- */
     #search-results {
         background: white; border-radius: 12px;
         box-shadow: 0 8px 24px rgba(0,0,0,0.12); 
         max-height: 400px; overflow-y: auto; 
-        display: none; /* Hidden by default */
+        display: none; 
     }
     .result-item { padding: 12px 16px; border-bottom: 1px solid #f8f9fa; cursor: pointer; transition: background 0.1s; }
     .result-item:last-child { border-bottom: none; }
@@ -38,7 +38,7 @@
     .result-name { font-weight: 600; font-size: 15px; display: block; color: #202124; }
     .result-addr { font-size: 13px; color: #5f6368; display: block; margin-top: 2px; }
 
-    /* --- Component: Bottom Info Card --- */
+    /* --- Bottom Info Card --- */
     #bottom-card {
         position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
         width: 95%; max-width: 480px;
@@ -107,6 +107,7 @@
     "urls": { 
         "search": "{{ url_for('map.api_search') }}", 
         "reverse": "{{ url_for('map.api_reverse') }}", 
+        "detail": "{{ url_for('map.api_detail') }}",
         "create": "{{ url_for('map.create_location_on_click') }}" 
     }
 }
@@ -121,7 +122,7 @@ class MapManager {
         this.map = null;
         this.activeMarker = null;
         this.searchTimeout = null;
-        this.currentSelection = null; // Stores {lat, lon, name, address}
+        this.currentSelection = null; 
 
         // DOM Elements
         this.dom = {
@@ -138,22 +139,17 @@ class MapManager {
     }
 
     init() {
-        // 1. Initialize Map
         this.map = new vietmapgl.Map({
             container: 'map',
             style: `https://maps.vietmap.vn/maps/styles/tm/style.json?apikey=${this.config.apiKey}`,
-            center: [106.660172, 10.762622], // Default: Ho Chi Minh City
+            center: [106.660172, 10.762622], 
             zoom: 13, pitch: 0
         });
 
-        // 2. Add Controls
         this.map.addControl(new vietmapgl.NavigationControl(), 'bottom-right');
         this.map.addControl(new vietmapgl.GeolocateControl({ enableHighAccuracy: true }), 'bottom-right');
 
-        // 3. Load Saved Pins
         this.loadSavedLocations();
-
-        // 4. Setup Event Listeners
         this.setupListeners();
     }
 
@@ -162,7 +158,7 @@ class MapManager {
             const popup = new vietmapgl.Popup({ offset: 25 })
                 .setHTML(`<b>${loc.name}</b><br><a href="${loc.url}">View Details</a>`);
             
-            new vietmapgl.Marker({ color: "#198754" }) // Green for saved
+            new vietmapgl.Marker({ color: "#198754" })
                 .setLngLat([loc.lon, loc.lat])
                 .setPopup(popup)
                 .addTo(this.map);
@@ -170,22 +166,15 @@ class MapManager {
     }
 
     setupListeners() {
-        // Search Input Debounce
         this.dom.input.addEventListener('keyup', () => {
             clearTimeout(this.searchTimeout);
             this.searchTimeout = setTimeout(() => this.performSearch(), 500);
         });
 
-        // Prevent Form Submit
         document.getElementById('search-form').addEventListener('submit', (e) => e.preventDefault());
-
-        // Map Click
         this.map.on('click', (e) => this.handleMapClick(e));
-
-        // Save Button Click
         this.dom.btnSave.addEventListener('click', () => this.saveCurrentLocation());
 
-        // Close Dropdown on Outside Click
         document.addEventListener('click', (e) => {
             if (!document.getElementById('search-widget').contains(e.target)) {
                 this.dom.results.style.display = 'none';
@@ -193,7 +182,7 @@ class MapManager {
         });
     }
 
-    // --- SEARCH FUNCTIONALITY ---
+    // --- SEARCH LOGIC ---
     async performSearch() {
         const query = this.dom.input.value.trim();
         if (query.length < 2) {
@@ -201,12 +190,11 @@ class MapManager {
             return;
         }
 
-        this.renderSearchResults([], true); // Show loading state
+        this.renderSearchResults([], true); 
 
         try {
             const response = await fetch(`${this.config.urls.search}?query=${encodeURIComponent(query)}`);
             const rawData = await response.json();
-            // Robust check: Is it an array? Or an object with a .data property?
             const data = Array.isArray(rawData) ? rawData : (rawData.data || []);
             this.renderSearchResults(data);
         } catch (error) {
@@ -233,21 +221,48 @@ class MapManager {
             const item = document.createElement('div');
             item.className = 'result-item';
             
-            // Handle different API response structures
             const name = place.name || place.display_name || "Unknown Location";
             const addr = place.address || "";
-            const lat = place.lat;
-            const lng = place.lng || place.lon;
+            // Capture the reference ID for the Place API
+            const refId = place.ref_id || place.place_id; 
 
-            item.innerHTML = `
-                <span class="result-name">${name}</span>
-                <span class="result-addr">${addr}</span>
-            `;
+            item.innerHTML = `<span class="result-name">${name}</span><span class="result-addr">${addr}</span>`;
 
-            item.onclick = () => {
-                this.selectLocation(lat, lng, name, addr);
-                this.dom.results.style.display = 'none';
-                this.dom.input.value = name;
+            item.onclick = async () => {
+                // 1. Try to get coords from the search result directly
+                let lat = place.lat || place.latitude;
+                let lng = place.lng || place.lon;
+
+                // 2. If coords are missing, fetch detailed info using ref_id
+                if ((!lat || !lng) && refId) {
+                    try {
+                        document.body.style.cursor = 'wait'; // Show loading cursor
+                        
+                        const res = await fetch(`${this.config.urls.detail}?ref_id=${refId}`);
+                        const detailData = await res.json();
+                        
+                        if (detailData.lat && detailData.lng) {
+                            lat = detailData.lat;
+                            lng = detailData.lng;
+                        }
+                    } catch (err) {
+                        console.error("Detail Fetch Error:", err);
+                    } finally {
+                        document.body.style.cursor = 'default';
+                    }
+                }
+
+                // 3. Move Map (Parsing ensures they are numbers)
+                lat = parseFloat(lat);
+                lng = parseFloat(lng);
+
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    this.selectLocation(lat, lng, name, addr);
+                    this.dom.results.style.display = 'none';
+                    this.dom.input.value = name;
+                } else {
+                    alert("Unable to find coordinates for this location.");
+                }
             };
 
             this.dom.results.appendChild(item);
@@ -256,15 +271,11 @@ class MapManager {
 
     // --- SELECTION LOGIC ---
     async handleMapClick(e) {
-        // Ignore clicks on existing markers
         if (e.originalEvent.target.closest('.mapboxgl-marker')) return;
 
         const { lng, lat } = e.lngLat;
-        
-        // 1. Initial temporary UI update (Loading state)
         this.selectLocation(lat, lng, "Loading...", "Fetching address...");
 
-        // 2. Fetch real address (Reverse Geocoding)
         try {
             const res = await fetch(`${this.config.urls.reverse}?lat=${lat}&lon=${lng}`);
             const data = await res.json();
@@ -276,36 +287,28 @@ class MapManager {
                 if (data[0].name) finalName = data[0].name;
                 if (data[0].address) finalAddr = data[0].address;
             } else if (data && data.address) {
-                 finalAddr = data.address; // Handle alternative API format
+                 finalAddr = data.address;
             }
 
-            // Update UI with real data
             this.selectLocation(lat, lng, finalName, finalAddr);
-
         } catch (err) {
-            console.error("Reverse Geocode Error:", err);
             this.selectLocation(lat, lng, "Selected Location", "Address unavailable");
         }
     }
 
     selectLocation(lat, lng, name, address) {
-        // 1. Update Internal State
         this.currentSelection = { lat, lon: lng, name, address };
-
-        // 2. Move Camera
         this.map.flyTo({ center: [lng, lat], zoom: 16, essential: true });
 
-        // 3. Update Marker
         if (this.activeMarker) this.activeMarker.remove();
-        this.activeMarker = new vietmapgl.Marker({ color: "#ea4335" }) // Red for active
+        this.activeMarker = new vietmapgl.Marker({ color: "#ea4335" })
             .setLngLat([lng, lat])
             .addTo(this.map);
 
-        // 4. Update Bottom Card UI
         this.dom.infoName.innerText = name;
         this.dom.infoAddr.innerText = address;
         this.dom.infoCoords.innerText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-        this.dom.card.style.display = 'flex'; // Show card
+        this.dom.card.style.display = 'flex';
     }
 
     // --- SAVE LOGIC ---
@@ -324,16 +327,15 @@ class MapManager {
 
             const data = await res.json();
             if (data.url) {
-                window.location.href = data.url; // Redirect to detail page
+                window.location.href = data.url;
             }
         } catch (e) {
-            alert("Failed to save location. Check console.");
+            alert("Failed to save location.");
             console.error(e);
         }
     }
 }
 
-// Initialize App when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     new MapManager();
 });
