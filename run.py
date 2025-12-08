@@ -1,4 +1,4 @@
-from app import create_app, socketio
+from backend import create_app, socketio
 import os
 from dotenv import load_dotenv
 
