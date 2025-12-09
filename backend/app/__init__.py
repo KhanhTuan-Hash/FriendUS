@@ -1,4 +1,5 @@
 from flask import Flask
+from flask_cors import CORS  # [NEW] Import CORS
 from config import Config
 from app.extensions import db, login_manager, bootstrap, socketio, oauth
 from app.events import register_socketio_events
@@ -6,6 +7,18 @@ from app.events import register_socketio_events
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # [NEW] Configure CORS
+    # This allows your React app (running on localhost:5173) to send credentials (cookies) to Flask.
+    # CHECK: If your React app runs on port 3000, change 5173 to 3000 below.
+    CORS(app, 
+         resources={r"/*": {"origins": "http://localhost:5173"}}, 
+         supports_credentials=True)
+
+    # [NEW] Configure Session Cookies for OAuth Redirects
+    # 'Lax' allows cookies to be sent on top-level navigations (redirects from Google).
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' 
+    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS in production
 
     # Initialize Extensions
     db.init_app(app)
@@ -19,9 +32,7 @@ def create_app(config_class=Config):
     oauth.register(
         name='google',
         server_metadata_url=CONF_URL,
-        # --- ADDED THIS LINE ---
         api_base_url='https://www.googleapis.com/oauth2/v3/',
-        # -----------------------
         client_id=app.config.get('GOOGLE_CLIENT_ID'),
         client_secret=app.config.get('GOOGLE_CLIENT_SECRET'),
         client_kwargs={
@@ -38,11 +49,7 @@ def create_app(config_class=Config):
     from app.blueprints.finance import finance_bp
 
     app.register_blueprint(main_bp)
-    
-    # --- THIS IS THE CRITICAL FIX ---
     app.register_blueprint(auth_bp, url_prefix='/auth') 
-    # --------------------------------
-    
     app.register_blueprint(map_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(planner_bp)

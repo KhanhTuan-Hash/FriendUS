@@ -40,3 +40,5 @@ dependencies:
   - fastapi
   - uvicorn
   - pydantic
+
+  - flask-cors
