@@ -10,7 +10,7 @@ auth_bp = Blueprint('auth', __name__)
 
 # [NEW] Constants for Redirects
 # This is where your React App lives. Change port if needed.
-FRONTEND_URL = "http://localhost:5173" 
+FRONTEND_URL = "http://localhost:3000"
 
 # --- Standard Login Routes ---
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -54,8 +54,10 @@ def register():
 
 @auth_bp.route('/logout')
 def logout():
-    logout_user()
-    return redirect(url_for('main.index'))
+    logout_user()  # <--- This destroys the backend session/cookie
+    
+    # [FIX] Redirect back to the React Login page
+    return redirect(f"{FRONTEND_URL}/login")
 
 # --- Google OAuth Routes ---
 
@@ -63,12 +65,12 @@ def logout():
 def google_login():
     """Redirects user to Google for authentication."""
     if current_user.is_authenticated:
-        # If already logged in, send them back to React dashboard
         return redirect(f"{FRONTEND_URL}/dashboard")
         
-    # Redirect URI: http://127.0.0.1:5000/auth/callback
     redirect_uri = url_for('auth.google_callback', _external=True)
-    return oauth.google.authorize_redirect(redirect_uri)
+    
+    # [FIX] The 'prompt' parameter forces Google to show the account picker
+    return oauth.google.authorize_redirect(redirect_uri, prompt='select_account')
 
 @auth_bp.route('/callback')
 def google_callback():

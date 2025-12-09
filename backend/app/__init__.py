@@ -1,29 +1,26 @@
 from flask import Flask
-from flask_cors import CORS  # [NEW] Import CORS
+from flask_cors import CORS
 from config import Config
-from app.extensions import db, login_manager, bootstrap, socketio, oauth
+# [REMOVED] bootstrap import
+from app.extensions import db, login_manager, socketio, oauth
 from app.events import register_socketio_events
 
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # [NEW] Configure CORS
-    # This allows your React app (running on localhost:5173) to send credentials (cookies) to Flask.
-    # CHECK: If your React app runs on port 3000, change 5173 to 3000 below.
+    # Allow React to talk to Flask
     CORS(app, 
-         resources={r"/*": {"origins": "http://localhost:5173"}}, 
+         resources={r"/*": {"origins": "http://localhost:3000"}}, 
          supports_credentials=True)
 
-    # [NEW] Configure Session Cookies for OAuth Redirects
-    # 'Lax' allows cookies to be sent on top-level navigations (redirects from Google).
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' 
-    app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS in production
+    app.config['SESSION_COOKIE_SECURE'] = False
 
     # Initialize Extensions
     db.init_app(app)
     login_manager.init_app(app)
-    bootstrap.init_app(app)
+    # [REMOVED] bootstrap.init_app(app)  <-- DELETED
     socketio.init_app(app)
     oauth.init_app(app)
 
@@ -67,10 +64,5 @@ def create_app(config_class=Config):
     # Create DB and Populate if empty
     with app.app_context():
         db.create_all()
-        if not Room.query.filter_by(name='general').first():
-            general_room = Room(name='general', description='A general chat room for all users.')
-            db.session.add(general_room)
-            db.session.commit()
-            print("Created 'general' room.")
 
     return app

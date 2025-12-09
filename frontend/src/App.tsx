@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Map, MessageCircle, CloudSun, User, Moon, Sun } from 'lucide-react';
 import { Homepage } from './components/Homepage';
 import { MapView } from './components/MapView';
@@ -8,82 +8,47 @@ import { Profile } from './components/Profile';
 import { Login } from './components/Login';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 
-function AppContent() {
-  const [activeTab, setActiveTab] = useState<'home' | 'map' | 'chat' | 'weather' | 'profile'>('home');
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+// Navigation Config
+const NAV_ITEMS = [
+  { path: '/dashboard', icon: Home, label: 'Home' },
+  { path: '/map', icon: Map, label: 'Map' },
+  { path: '/chat', icon: MessageCircle, label: 'Chat' },
+  { path: '/weather', icon: CloudSun, label: 'Weather' },
+  { path: '/profile', icon: User, label: 'Profile' },
+];
+
+function MainLayout() {
   const { theme, toggleTheme } = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Check localStorage for login state on mount
-  useEffect(() => {
-    const loginState = localStorage.getItem('friendus_logged_in');
-    if (loginState === 'true') {
-      setIsLoggedIn(true);
-    }
-  }, []);
-
-  // Handle login
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-    localStorage.setItem('friendus_logged_in', 'true');
-  };
-
-  // Handle logout
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    localStorage.removeItem('friendus_logged_in');
-    setActiveTab('home');
+    // Force browser to go to Backend Logout to clear cookies
+    window.location.href = "http://127.0.0.1:5000/auth/logout";
   };
-
-  // Show login page if not logged in
-  if (!isLoggedIn) {
-    return <Login onLogin={handleLogin} />;
-  }
-
-  const navItems = [
-    { id: 'home' as const, icon: Home, label: 'Home' },
-    { id: 'map' as const, icon: Map, label: 'Map' },
-    { id: 'chat' as const, icon: MessageCircle, label: 'Chat' },
-    { id: 'weather' as const, icon: CloudSun, label: 'Weather' },
-    { id: 'profile' as const, icon: User, label: 'Profile' },
-  ];
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      {/* Header with Navigation */}
+      {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm transition-colors duration-300 relative z-[200]">
         <div className="max-w-full px-4 sm:px-6">
           <div className="flex items-center justify-between h-16">
-            {/* Logo and Brand */}
-            <div className="flex items-center gap-3 flex-shrink-0">
+            
+            {/* --- RESTORED LOGO --- */}
+            <div 
+              className="flex items-center gap-3 flex-shrink-0 cursor-pointer"
+              onClick={() => navigate('/dashboard')}
+            >
               <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                
-                {/* Simple, Clean Logo */}
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  
-                  {/* Simple Location Pin Shape */}
-                  <path 
-                    d="M11 1C8 1 6 3 6 5.5C6 8 11 13 11 13C11 13 16 8 16 5.5C16 3 14 1 11 1Z" 
-                    fill="white"
-                  />
-                  
-                  {/* Airplane inside pin - super simple side view */}
+                  <path d="M11 1C8 1 6 3 6 5.5C6 8 11 13 11 13C11 13 16 8 16 5.5C16 3 14 1 11 1Z" fill="white" />
                   <g transform="translate(11, 5.5)">
-                    {/* Plane pointing up-right (45 degrees) */}
                     <g transform="rotate(-45)">
                       <rect x="-4" y="-0.5" width="8" height="1" fill="#3B82F6" rx="0.5"/>
                       <polygon points="-1,-2.5 1,-2.5 1,-0.5 -1,-0.5" fill="#3B82F6"/>
                     </g>
                   </g>
-                  
-                  {/* Simple curved trail */}
-                  <path 
-                    d="M5 15C7 13 9 10 11 7" 
-                    stroke="#FFD700" 
-                    strokeWidth="1.5" 
-                    strokeLinecap="round" 
-                    strokeDasharray="1 2"
-                  />
-                  
+                  <path d="M5 15C7 13 9 10 11 7" stroke="#FFD700" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="1 2"/>
                 </svg>
               </div>
               <div className="hidden sm:block">
@@ -94,15 +59,16 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Navigation Tabs */}
+            {/* Navigation Tabs (Working with Router) */}
             <nav className="flex items-center gap-1 sm:gap-2 flex-1 justify-center max-w-2xl mx-4">
-              {navItems.map((item) => {
+              {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeTab === item.id;
+                const isActive = location.pathname.startsWith(item.path);
+                
                 return (
                   <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
                     className={`
                       relative flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all duration-300
                       ${isActive
@@ -118,7 +84,7 @@ function AppContent() {
               })}
             </nav>
 
-            {/* Theme Toggle */}
+            {/* --- RESTORED SLIDING THEME TOGGLE --- */}
             <div className="flex-shrink-0">
               <button
                 onClick={toggleTheme}
@@ -148,11 +114,14 @@ function AppContent() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        {activeTab === 'home' && <Homepage />}
-        {activeTab === 'map' && <MapView />}
-        {activeTab === 'chat' && <Chat />}
-        {activeTab === 'weather' && <Weather />}
-        {activeTab === 'profile' && <Profile onLogout={handleLogout} />}
+        <Routes>
+          <Route path="/dashboard" element={<Homepage />} />
+          <Route path="/map" element={<MapView />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/weather" element={<Weather />} />
+          <Route path="/profile" element={<Profile onLogout={handleLogout} />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
       </main>
     </div>
   );
@@ -161,7 +130,17 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginWrapper />} />
+          <Route path="/*" element={<MainLayout />} />
+        </Routes>
+      </BrowserRouter>
     </ThemeProvider>
   );
+}
+
+function LoginWrapper() {
+  const navigate = useNavigate();
+  return <Login onLogin={() => navigate('/dashboard')} />;
 }

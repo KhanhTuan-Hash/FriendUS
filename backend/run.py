@@ -1,8 +1,10 @@
-from backend import create_app, socketio
+from app import create_app, socketio
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
+# [CRITICAL FIX] Allow OAuth over HTTP (non-secure) for localhost
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = create_app()
 

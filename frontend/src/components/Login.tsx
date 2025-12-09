@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
-import { MapPin, MessageCircle, Calendar, DollarSign, Cloud } from 'lucide-react';
+import { MapPin, MessageCircle, Calendar, DollarSign } from 'lucide-react';
 
 interface LoginProps {
   onLogin: () => void;
 }
+
+// [NEW] Define your Backend URL
+const BACKEND_URL = "http://127.0.0.1:5000";
 
 export function Login({ onLogin }: LoginProps) {
   const [isAnimated, setIsAnimated] = useState(false);
@@ -12,17 +15,21 @@ export function Login({ onLogin }: LoginProps) {
     setIsAnimated(true);
   }, []);
 
+  // [NEW] Handler for Google Login
+  const handleGoogleLogin = () => {
+    // Redirect the browser window to the Flask Backend
+    window.location.href = `${BACKEND_URL}/auth/google`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 dark:from-blue-900 dark:via-purple-900 dark:to-pink-900 flex items-center justify-center p-4 overflow-hidden relative transition-colors duration-300">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Floating circles */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-400/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
         <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-pink-400/10 rounded-full blur-2xl animate-pulse delay-500"></div>
       </div>
 
-      {/* Main Login Card */}
       <div
         className={`relative z-10 w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center transition-all duration-1000 ${
           isAnimated ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
@@ -30,7 +37,6 @@ export function Login({ onLogin }: LoginProps) {
       >
         {/* Left Side - Branding & Info */}
         <div className="text-white space-y-6 px-4 lg:px-8">
-          {/* Logo */}
           <div className="flex items-center gap-4 mb-8">
             <div className="relative w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl transform hover:rotate-12 transition-transform duration-300">
               <MapPin className="w-10 h-10 text-blue-600 absolute" />
@@ -46,7 +52,6 @@ export function Login({ onLogin }: LoginProps) {
             </div>
           </div>
 
-          {/* Welcome Text */}
           <div className="space-y-4">
             <h2 className="text-4xl lg:text-5xl leading-tight">
               Connect, Travel &
@@ -61,7 +66,6 @@ export function Login({ onLogin }: LoginProps) {
             </p>
           </div>
 
-          {/* Feature Highlights */}
           <div className="grid grid-cols-2 gap-4 pt-4">
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20 hover:bg-white/20 transition-all duration-300 transform hover:scale-105">
               <MapPin className="w-8 h-8 mb-2 text-yellow-300" />
@@ -88,7 +92,6 @@ export function Login({ onLogin }: LoginProps) {
 
         {/* Right Side - Login Form */}
         <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-8 lg:p-12 space-y-8 backdrop-blur-xl border border-white/20 transform hover:scale-[1.02] transition-all duration-300">
-          {/* Login Header */}
           <div className="text-center space-y-3">
             <div className="w-20 h-20 mx-auto bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center shadow-lg mb-4">
               <span className="text-4xl">👋</span>
@@ -99,7 +102,6 @@ export function Login({ onLogin }: LoginProps) {
             </p>
           </div>
 
-          {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
@@ -111,9 +113,9 @@ export function Login({ onLogin }: LoginProps) {
             </div>
           </div>
 
-          {/* Google OAuth Button */}
+          {/* Google OAuth Button - UPDATED */}
           <button
-            onClick={onLogin}
+            onClick={handleGoogleLogin}
             className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-2 border-gray-300 dark:border-gray-600 rounded-xl px-6 py-4 flex items-center justify-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-600 transition-all duration-300 shadow-md hover:shadow-xl transform hover:scale-105 group"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">
@@ -137,10 +139,9 @@ export function Login({ onLogin }: LoginProps) {
             <span className="text-lg">Continue with Google</span>
           </button>
 
-          {/* Alternative Login Options (Placeholder) */}
+          {/* Alternative Login Options */}
           <div className="space-y-3">
             <button
-              onClick={onLogin}
               className="w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl px-6 py-3 flex items-center justify-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300 opacity-50 cursor-not-allowed"
               disabled
             >
@@ -149,7 +150,6 @@ export function Login({ onLogin }: LoginProps) {
               <span className="text-xs bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full">Soon</span>
             </button>
             <button
-              onClick={onLogin}
               className="w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl px-6 py-3 flex items-center justify-center gap-3 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300 opacity-50 cursor-not-allowed"
               disabled
             >
@@ -159,7 +159,6 @@ export function Login({ onLogin }: LoginProps) {
             </button>
           </div>
 
-          {/* Footer */}
           <div className="text-center pt-6 border-t border-gray-200 dark:border-gray-700">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               By continuing, you agree to FriendUS's
@@ -170,7 +169,6 @@ export function Login({ onLogin }: LoginProps) {
             </p>
           </div>
 
-          {/* Demo Badge */}
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 rounded-xl p-4 border-2 border-blue-200 dark:border-blue-800">
             <p className="text-center text-sm text-gray-700 dark:text-gray-300">
               <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
@@ -180,7 +178,6 @@ export function Login({ onLogin }: LoginProps) {
         </div>
       </div>
 
-      {/* Bottom Decoration */}
       <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-black/20 to-transparent pointer-events-none"></div>
     </div>
   );
