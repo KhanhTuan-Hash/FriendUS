@@ -1,0 +1,182 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Browse All Public Chats</h2>
+    
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <input type="text" class="form-control" id="filterInput" placeholder="Filter by topic (e.g., coffee, hiking)...">
+                <button class="btn btn-outline-secondary" type="button" onclick="filterChats()">Search</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row" id="chats-container">
+        <div class="col-12">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    </div>
+    
+    <nav aria-label="Page navigation" class="mt-4" id="pagination-nav" style="display: none;">
+        <ul class="pagination">
+            <li class="page-item" id="prev-btn" style="display: none;">
+                <a class="page-link" href="#" onclick="previousPage()">Previous</a>
+            </li>
+            <li class="page-item active" id="current-page">
+                <span class="page-link">Page 1</span>
+            </li>
+            <li class="page-item" id="next-btn" style="display: none;">
+                <a class="page-link" href="#" onclick="nextPage()">Next</a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<script>
+    let currentPage = 1;
+    let currentFilter = '';
+    
+    function loadChats(page = 1, filter = '') {
+        currentPage = page;
+        currentFilter = filter;
+        
+        const params = new URLSearchParams({
+            page: page,
+            limit: 6,
+            filter: filter
+        });
+        
+        fetch(`/public-chat/browse?${params}`)
+            .then(res => res.json())
+            .then(data => {
+                const container = document.getElementById('chats-container');
+                container.innerHTML = '';
+                
+                if (data.success && data.chats.length > 0) {
+                    data.chats.forEach(chat => {
+                        const card = document.createElement('div');
+                        card.className = 'col-md-6 mb-4';
+                        card.innerHTML = `
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title">${chat.name}</h5>
+                                    <p class="card-text">${chat.description || 'No description'}</p>
+                                    <p class="text-muted small">
+                                        <strong>📍 Location:</strong> ${chat.location_name || 'Virtual'}<br>
+                                        <strong>🕐 When:</strong> ${new Date(chat.scheduled_date).toLocaleString()}<br>
+                                        <strong>👥 Members:</strong> ${chat.member_count}/${chat.max_members}<br>
+                                        <strong>🔐 Mode:</strong> ${chat.is_anonymous ? 'Anonymous' : 'Visible'}
+                                    </p>
+                                    <div class="alert alert-light p-2 mb-2">
+                                        <strong>Summary:</strong><br>
+                                        ${chat.summary ? chat.summary.substring(0, 100) + '...' : 'No summary yet'}
+                                    </div>
+                                    <button class="btn btn-sm btn-success" onclick="joinChat(${chat.id}, true)">
+                                        Join (Anonymous)
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" onclick="joinChat(${chat.id}, false)">
+                                        Join (Visible)
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="rejectChat(${chat.id})">
+                                        Not Interested
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                    
+                    updatePagination(data);
+                } else {
+                    container.innerHTML = '<div class="col-12"><div class="alert alert-info">No public chats available.</div></div>';
+                }
+            })
+            .catch(err => {
+                console.error('Error loading chats:', err);
+                document.getElementById('chats-container').innerHTML = '<div class="col-12"><div class="alert alert-danger">Error loading chats.</div></div>';
+            });
+    }
+    
+    function updatePagination(data) {
+        const nav = document.getElementById('pagination-nav');
+        if (data.total > data.limit) {
+            nav.style.display = 'block';
+            document.getElementById('current-page').textContent = `Page ${data.page}`;
+            
+            if (data.page > 1) {
+                document.getElementById('prev-btn').style.display = 'block';
+            } else {
+                document.getElementById('prev-btn').style.display = 'none';
+            }
+            
+            if (data.page * data.limit < data.total) {
+                document.getElementById('next-btn').style.display = 'block';
+            } else {
+                document.getElementById('next-btn').style.display = 'none';
+            }
+        } else {
+            nav.style.display = 'none';
+        }
+    }
+    
+    function filterChats() {
+        const filter = document.getElementById('filterInput').value;
+        loadChats(1, filter);
+    }
+    
+    function previousPage() {
+        if (currentPage > 1) {
+            loadChats(currentPage - 1, currentFilter);
+        }
+    }
+    
+    function nextPage() {
+        loadChats(currentPage + 1, currentFilter);
+    }
+    
+    function joinChat(chatId, isAnonymous) {
+        fetch(`/public-chat/${chatId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_anonymous: isAnonymous})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`✅ Joined! You are ${isAnonymous ? 'anonymous' : 'visible'}.`);
+                loadChats(currentPage, currentFilter);
+            } else {
+                alert('❌ Error: ' + data.error);
+            }
+        })
+        .catch(err => alert('Error joining chat'));
+    }
+    
+    function rejectChat(chatId) {
+        if (confirm('Mark this chat as "Not Interested"?')) {
+            fetch(`/public-chat/${chatId}/reject`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({reason: 'Not interested'})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('❌ Chat marked as not interested.');
+                    loadChats(currentPage, currentFilter);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(err => alert('Error rejecting chat'));
+        }
+    }
+    
+    // Load chats on page load
+    loadChats(1, '');
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Recommended Public Chats for You</h2>
+    <p class="text-muted">Top 5 matches based on your interests and preferences</p>
+    
+    {% if recommendations %}
+    <div class="row" id="recommendations-container">
+        <!-- Loaded via JS from /public-chat/recommended API -->
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No recommendations available right now. Try browsing all public chats!
+    </div>
+    {% endif %}
+    
+    <a href="{{ url_for('public_chat.browse_public_chats') }}" class="btn btn-primary mt-3">Browse All Public Chats</a>
+</div>
+
+<script>
+    fetch('/public-chat/recommended?limit=5')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.recommendations.length > 0) {
+                const container = document.getElementById('recommendations-container');
+                data.recommendations.forEach((chat, idx) => {
+                    const card = document.createElement('div');
+                    card.className = 'col-md-6 mb-4';
+                    card.innerHTML = `
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">${chat.name}</h5>
+                                <p class="card-text">${chat.description || ''}</p>
+                                <p class="text-muted small">
+                                    <strong>When:</strong> ${new Date(chat.scheduled_date).toLocaleString()}<br>
+                                    <strong>Where:</strong> ${chat.location_name || 'TBD'}<br>
+                                    <strong>Members:</strong> ${chat.member_count}/${chat.max_members}
+                                </p>
+                                <div class="badge bg-success mb-2">
+                                    Match Score: ${(chat.match_score * 100).toFixed(0)}%
+                                </div>
+                                <br>
+                                <button class="btn btn-sm btn-primary" onclick="joinChat(${chat.id}, true)">
+                                    Join (Anonymous)
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="joinChat(${chat.id}, false)">
+                                    Join (Visible)
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+        })
+        .catch(err => console.error('Error loading recommendations:', err));
+    
+    function joinChat(chatId, isAnonymous) {
+        fetch(`/public-chat/${chatId}/join`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_anonymous: isAnonymous})
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Joined chat! You are ${isAnonymous ? 'anonymous' : 'visible to others'}.`);
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(err => alert('Error joining chat'));
+    }
+</script>
+{% endblock %}
