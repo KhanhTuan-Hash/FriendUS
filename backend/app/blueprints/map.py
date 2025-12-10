@@ -1,170 +1,84 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify, current_app
-from flask_login import current_user, login_required
+from flask import Blueprint, request, jsonify, current_app
 import requests
-from app.extensions import db
-from app.models import Location, Review
-from app.forms import ReviewForm
 
+# Khởi tạo Blueprint
 map_bp = Blueprint('map', __name__)
-
-@map_bp.route('/map')
-@login_required
-def map():
-    return redirect(url_for('map.map_search'))
-
-@map_bp.route('/map/search')
-@login_required
-def map_search():
-    saved_locations = Location.query.all()
-    locations_data = []
-    for loc in saved_locations:
-        locations_data.append({
-            'id': loc.id, 
-            'name': loc.name, 
-            'desc': loc.description,
-            'lat': loc.latitude, 
-            'lon': loc.longitude,
-            'url': url_for('map.location_detail', location_id=loc.id),
-            'rating': 5.0 
-        })
-    
-    # [FIX] Get the TILE KEY (safe for browser)
-    tile_key = current_app.config.get('VIETMAP_TILE_KEY', '')
-    
-    # [NOTE] We pass it as 'vietmap_api_key' because your map.html 
-    # already uses {{ vietmap_api_key }} in the template.
-    return render_template('map.html', title='Map', 
-                           locations_data=locations_data, 
-                           vietmap_api_key=tile_key)
 
 # --- HELPER: HEADERS ---
 def get_headers():
     return {
-        'User-Agent': 'Mozilla/5.0 (compatible; MyMapApp/1.0)',
+        'User-Agent': 'FriendUS-App/1.0',
         'Accept': 'application/json'
     }
 
-@map_bp.route('/map/api/search')
-@login_required
+# ==============================================================================
+# 1. API CẤU HÌNH (Lấy Key hiển thị bản đồ)
+# ==============================================================================
+@map_bp.route('/map/api/config', methods=['GET'])
+def api_config():
+    """
+    [PUBLIC] Trả về Tile Key để Frontend hiển thị bản đồ VietMap.
+    """
+    # Lấy key từ .env thông qua config của Flask
+    tile_key = current_app.config.get('VIETMAP_TILE_KEY', '')
+    
+    if not tile_key:
+        print("WARNING: VIETMAP_TILE_KEY chưa được cấu hình trong .env")
+        
+    return jsonify({'tile_key': tile_key})
+
+# ==============================================================================
+# 2. API TÌM KIẾM (Autocomplete)
+# ==============================================================================
+@map_bp.route('/map/api/search', methods=['GET'])
 def api_search():
+    """
+    [PUBLIC] Proxy tìm kiếm địa điểm từ VietMap.
+    """
     query = request.args.get('query', '')
     
-    # [FIX] Get the SERVICE KEY (for backend search)
+    # Lấy Service Key (Secret) từ backend
     service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
     
-    if not service_key:
-        print("ERROR: VIETMAP_SERVICE_KEY is missing in config.")
-        return jsonify({"error": "Missing Service Key"}), 500
+    if not query: 
+        return jsonify([])
     
-    if not query: return jsonify([])
+    if not service_key:
+        return jsonify({"error": "Server chưa cấu hình VIETMAP_SERVICE_KEY"}), 500
 
+    # Gọi API Autocomplete của VietMap
     url = "https://maps.vietmap.vn/api/autocomplete/v3"
     params = {
-        'apikey': service_key,  # Use Service Key here
+        'apikey': service_key,
         'text': query
     }
     
     try:
         resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
         
-        if resp.status_code != 200:
-            print(f"VietMap API Error [{resp.status_code}]: {resp.text}")
-            return jsonify({"error": f"API Error {resp.status_code}"}), resp.status_code
-
-        return jsonify(resp.json())
+        if resp.status_code == 200:
+            return jsonify(resp.json())
+        else:
+            return jsonify({"error": f"VietMap API Error: {resp.status_code}"}), resp.status_code
+            
     except Exception as e:
-        print(f"Search Exception: {e}")
-        return jsonify({"error": str(e)}), 500
-    
-@map_bp.route('/map/api/route')
-@login_required
-def api_route():
-    p1 = request.args.get('point1') 
-    p2 = request.args.get('point2')
-    
-    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
-    
-    if not p1 or not p2:
-        return jsonify({"error": "Missing coordinates"}), 400
-
-    url = "https://maps.vietmap.vn/api/route"
-    params = {
-        'api-version': '1.1',
-        'apikey': service_key,
-        'point': [p1, p2], 
-        'vehicle': 'car',
-        'points_encoded': False  # [CRITICAL FIX] Request raw GeoJSON coordinates
-    }
-    
-    try:
-        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
-        return jsonify(resp.json())
-    except Exception as e:
+        print(f"Lỗi tìm kiếm: {e}")
         return jsonify({"error": str(e)}), 500
 
-@map_bp.route('/map/api/reverse')
-@login_required
-def api_reverse():
-    lat = request.args.get('lat')
-    lon = request.args.get('lon')
-    
-    # [FIX] Get the SERVICE KEY (for backend reverse geocoding)
-    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
-
-    if not lat or not lon: return jsonify([])
-
-    url = "https://maps.vietmap.vn/api/reverse/v3"
-    params = {
-        'apikey': service_key, # Use Service Key here
-        'lat': lat, 
-        'lng': lon
-    }
-    
-    try:
-        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
-        return jsonify(resp.json())
-    except Exception as e:
-        print(f"Reverse Exception: {e}")
-        return jsonify([])
-
-# ... (Remaining routes like location_detail keep existing logic) ...
-@map_bp.route('/location/<int:location_id>', methods=['GET', 'POST'])
-@login_required
-def location_detail(location_id):
-    location = Location.query.get_or_404(location_id)
-    form = ReviewForm()
-    is_favorited = current_user.favorite_locations.filter(Location.id == location.id).count() > 0
-    if form.validate_on_submit():
-        review = Review(body=form.body.data, rating=int(form.rating.data), author=current_user, location=location)
-        db.session.add(review)
-        db.session.commit()
-        return redirect(url_for('map.location_detail', location_id=location.id))
-    reviews = Review.query.filter_by(location=location).order_by(Review.timestamp.desc()).all()
-    return render_template('location_detail.html', title=location.name, location=location, form=form, reviews=reviews, is_favorited=is_favorited)
-
-@map_bp.route('/api/create_location_on_click', methods=['POST'])
-@login_required
-def create_location_on_click():
-    data = request.json
-    new_loc = Location(
-        name=data['name'] or "Dropped Pin", description=f"Address: {data['address']}",
-        latitude=data['lat'], longitude=data['lon'], type="Custom", price_range=0
-    )
-    db.session.add(new_loc)
-    db.session.commit()
-    return jsonify({'url': url_for('map.location_detail', location_id=new_loc.id)})
-
-# ... inside map.py ...
-
-@map_bp.route('/map/api/detail')
-@login_required
+# ==============================================================================
+# 3. API CHI TIẾT (Lấy tọa độ từ ref_id)
+# ==============================================================================
+@map_bp.route('/map/api/detail', methods=['GET'])
 def api_detail():
+    """
+    [PUBLIC] Lấy chi tiết tọa độ của một địa điểm khi user chọn từ danh sách gợi ý.
+    """
     ref_id = request.args.get('ref_id')
     service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
     
-    if not ref_id: return jsonify({"error": "No Ref ID"}), 400
+    if not ref_id: 
+        return jsonify({"error": "Thiếu ref_id"}), 400
 
-    # Documentation: https://maps.vietmap.vn/api/place/v3
     url = "https://maps.vietmap.vn/api/place/v3"
     params = {
         'apikey': service_key, 
@@ -175,5 +89,56 @@ def api_detail():
         resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
         return jsonify(resp.json())
     except Exception as e:
-        print(f"Detail API Exception: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ==============================================================================
+# 4. API REVERSE GEOCODING (Tùy chọn: Lấy địa chỉ từ tọa độ)
+# ==============================================================================
+@map_bp.route('/map/api/reverse', methods=['GET'])
+def api_reverse():
+    lat = request.args.get('lat')
+    lon = request.args.get('lon')
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
+
+    if not lat or not lon: 
+        return jsonify({"error": "Thiếu tọa độ"}), 400
+
+    url = "https://maps.vietmap.vn/api/reverse/v3"
+    params = {
+        'apikey': service_key,
+        'lat': lat, 
+        'lng': lon
+    }
+    
+    try:
+        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ==============================================================================
+# 5. API ROUTE (Tùy chọn: Tìm đường)
+# ==============================================================================
+@map_bp.route('/map/api/route', methods=['GET'])
+def api_route():
+    p1 = request.args.get('point1') # Format: lat,long
+    p2 = request.args.get('point2')
+    service_key = current_app.config.get('VIETMAP_SERVICE_KEY', '')
+    
+    if not p1 or not p2:
+        return jsonify({"error": "Thiếu điểm đi/đến"}), 400
+
+    url = "https://maps.vietmap.vn/api/route"
+    params = {
+        'api-version': '1.1',
+        'apikey': service_key,
+        'point': [p1, p2], 
+        'vehicle': 'car',
+        'points_encoded': False
+    }
+    
+    try:
+        resp = requests.get(url, params=params, headers=get_headers(), timeout=10)
+        return jsonify(resp.json())
+    except Exception as e:
         return jsonify({"error": str(e)}), 500

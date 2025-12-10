@@ -118,6 +118,9 @@ export function AITripPlanner({ onClose, onAccept }: Props) {
   const [aiPrompt, setAiPrompt] = useState('');
   const [scrollPosition, setScrollPosition] = useState(0);
   const [showAIInput, setShowAIInput] = useState(true);
+  
+  // Thêm state loading để hiển thị hiệu ứng khi gọi API
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleAcceptAll = () => {
     onAccept(activities);
@@ -133,11 +136,54 @@ export function AITripPlanner({ onClose, onAccept }: Props) {
     ));
   };
 
-  const handleSendPrompt = () => {
+  // --- HÀM HELPER ĐỂ CHUYỂN ĐỔI INTENT TỪ SERVER SANG CATEGORY CỦA UI ---
+  const mapIntentToCategory = (intent: string): Activity['category'] => {
+    const i = intent.toLowerCase();
+    if (i.includes('ăn') || i.includes('uống') || i.includes('phở') || i.includes('nhà hàng') || i.includes('cafe')) return 'food';
+    if (i.includes('xe') || i.includes('ga') || i.includes('sân bay')) return 'transport';
+    if (i.includes('khách sạn') || i.includes('nghỉ') || i.includes('homestay')) return 'accommodation';
+    return 'attraction'; // Mặc định
+  };
+
+  // --- HÀM GỌI API THẬT (Thay thế hàm console.log cũ) ---
+  const handleSendPrompt = async () => {
     if (!aiPrompt.trim()) return;
-    // Simulate AI response - in production, this would call an AI API
-    console.log('AI Prompt:', aiPrompt);
-    setAiPrompt('');
+
+    setIsProcessing(true); // Bật loading
+    try {
+      // Gọi xuống server Python (Cổng 5000)
+      const response = await fetch('http://127.0.0.1:5000/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: aiPrompt }),
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        // Map dữ liệu từ Python (Vietmap) sang format Activity của giao diện
+        const newActivities: Activity[] = data.data.map((item: any, index: number) => ({
+          id: Date.now() + index,
+          time: 'TBD', // Python chưa trả về giờ, tạm để TBD
+          title: item.name || item.step_intent,
+          location: item.address || 'Vietnam',
+          duration: '1-2 hours',
+          cost: 'Varies',
+          description: `Gợi ý từ AI: ${item.step_intent}`,
+          category: mapIntentToCategory(item.step_intent),
+        }));
+
+        setActivities(newActivities); // Cập nhật danh sách hoạt động mới
+      } else {
+        alert("AI không trả về kết quả hợp lệ.");
+      }
+    } catch (error) {
+      console.error('Error calling AI:', error);
+      alert("Lỗi kết nối tới Server AI (Kiểm tra lại xem đã chạy python run.py chưa)");
+    } finally {
+      setIsProcessing(false); // Tắt loading
+      setAiPrompt('');
+    }
   };
 
   const scrollTimeline = (direction: 'left' | 'right') => {
@@ -329,36 +375,37 @@ export function AITripPlanner({ onClose, onAccept }: Props) {
                 <div className="flex-1 relative">
                   <input
                     type="text"
-                    placeholder="Ask AI to modify the itinerary: 'Add more food stops', 'Remove expensive activities', etc..."
+                    placeholder="Ask AI to modify the itinerary: 'Tìm quán phở rồi đi cafe'..."
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendPrompt()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendPrompt()} // Đổi onKeyPress thành onKeyDown cho chuẩn
                     className="w-full px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-600 dark:text-white transition-colors"
+                    disabled={isProcessing}
                   />
                 </div>
                 <button
                   onClick={handleSendPrompt}
-                  disabled={!aiPrompt.trim()}
+                  disabled={!aiPrompt.trim() || isProcessing}
                   className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  <Send className="w-5 h-5" />
-                  Send
+                  {isProcessing ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isProcessing ? 'Thinking...' : 'Send'}
                 </button>
               </div>
 
               {/* Quick Suggestions */}
               <div className="flex flex-wrap gap-2 mt-3">
-                <button className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                  💰 Make it budget-friendly
+                <button onClick={() => setAiPrompt("Tìm quán ăn rẻ cho sinh viên")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                  💰 Tìm quán ăn rẻ
                 </button>
-                <button className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                  🍜 Add more food spots
+                <button onClick={() => setAiPrompt("Tìm quán phở ngon")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                  🍜 Tìm quán phở
                 </button>
-                <button className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                  🏛️ Focus on culture & history
+                <button onClick={() => setAiPrompt("Đi xem phim rồi đi dạo")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                  🏛️ Đi chơi giải trí
                 </button>
-                <button className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                  ⚡ Make it more relaxed
+                <button onClick={() => setAiPrompt("Tìm khách sạn gần đây")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                  ⚡ Tìm chỗ nghỉ
                 </button>
               </div>
             </div>

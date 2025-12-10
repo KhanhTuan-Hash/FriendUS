@@ -1,3 +1,7 @@
+# FriendUS\backend\config.py
 config.py
 __pycache__/
+# FriendUS\backend.env
 .env
+# FriendUS\backend\vietmap-intent-model
+vietmap-intent-model 

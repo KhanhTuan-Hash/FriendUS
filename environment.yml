@@ -38,3 +38,6 @@ dependencies:
   - uvicorn
   - pydantic
   - flask-cors         # Keep: Critical for React connection
+  - python-multipart
+  - sentence-transformers 
+  - pyvi
