@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Cloud,
   CloudRain,
@@ -11,320 +11,459 @@ import {
   MapPin,
   AlertTriangle,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Loader2,
+  Navigation
 } from 'lucide-react';
 
-interface CityWeather {
-  id: number;
-  city: string;
-  region: string;
-  temperature: number;
-  condition: string;
-  icon: 'sun' | 'cloud' | 'rain';
-  humidity: number;
-  windSpeed: number;
-  visibility: number;
-  pressure: number;
-  aqi: number;
-  aqiLevel: 'Good' | 'Moderate' | 'Unhealthy' | 'Hazardous';
-  forecast: {
-    day: string;
-    high: number;
-    low: number;
-    condition: string;
-  }[];
+// =========================================================================
+// 1. INTERFACES & TYPES
+// =========================================================================
+
+interface DailyForecastItem {
+  date: string;
+  temp_max: number;
+  temp_min: number;
+  precipitation_sum: number;
+  wind_max_kmh: number;
+  weather_desc: string;
+  risks: string[];
 }
 
-const weatherData: CityWeather[] = [
-  {
-    id: 1,
-    city: 'Hanoi',
-    region: 'Northern Vietnam',
-    temperature: 28,
-    condition: 'Partly Cloudy',
-    icon: 'cloud',
-    humidity: 75,
-    windSpeed: 12,
-    visibility: 10,
-    pressure: 1013,
-    aqi: 68,
-    aqiLevel: 'Moderate',
-    forecast: [
-      { day: 'Mon', high: 30, low: 24, condition: 'Sunny' },
-      { day: 'Tue', high: 29, low: 23, condition: 'Cloudy' },
-      { day: 'Wed', high: 28, low: 22, condition: 'Rainy' },
-      { day: 'Thu', high: 27, low: 21, condition: 'Cloudy' },
-      { day: 'Fri', high: 29, low: 23, condition: 'Sunny' }
-    ]
-  },
-  {
-    id: 2,
-    city: 'Ho Chi Minh City',
-    region: 'Southern Vietnam',
-    temperature: 32,
-    condition: 'Sunny',
-    icon: 'sun',
-    humidity: 82,
-    windSpeed: 8,
-    visibility: 9,
-    pressure: 1010,
-    aqi: 95,
-    aqiLevel: 'Moderate',
-    forecast: [
-      { day: 'Mon', high: 33, low: 26, condition: 'Sunny' },
-      { day: 'Tue', high: 34, low: 27, condition: 'Sunny' },
-      { day: 'Wed', high: 32, low: 26, condition: 'Rainy' },
-      { day: 'Thu', high: 31, low: 25, condition: 'Cloudy' },
-      { day: 'Fri', high: 33, low: 26, condition: 'Sunny' }
-    ]
-  },
-  {
-    id: 3,
-    city: 'Da Nang',
-    region: 'Central Vietnam',
-    temperature: 30,
-    condition: 'Light Rain',
-    icon: 'rain',
-    humidity: 78,
-    windSpeed: 15,
-    visibility: 8,
-    pressure: 1012,
-    aqi: 45,
-    aqiLevel: 'Good',
-    forecast: [
-      { day: 'Mon', high: 31, low: 25, condition: 'Rainy' },
-      { day: 'Tue', high: 30, low: 24, condition: 'Cloudy' },
-      { day: 'Wed', high: 29, low: 24, condition: 'Sunny' },
-      { day: 'Thu', high: 30, low: 25, condition: 'Sunny' },
-      { day: 'Fri', high: 31, low: 25, condition: 'Cloudy' }
-    ]
-  }
-];
+interface CurrentWeather {
+  temperature: number;
+  temp_max: number;
+  temp_min: number;
+  weather_desc: string;
+  daily_risks: string[];
+  precipitation_sum: number;
+  wind_max_kmh: number;
+}
 
-const getAQIColor = (level: string) => {
-  switch (level) {
-    case 'Good':
-      return 'bg-green-100 text-green-700 border-green-200';
-    case 'Moderate':
-      return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    case 'Unhealthy':
-      return 'bg-orange-100 text-orange-700 border-orange-200';
-    case 'Hazardous':
-      return 'bg-red-100 text-red-700 border-red-200';
+interface WeatherData {
+  current_weather: CurrentWeather | null;
+  five_day_forecast: DailyForecastItem[];
+}
+
+// Interface cho tọa độ và thông tin thành phố
+interface CityCoordinate {
+  id?: number;
+  name: string;
+  region: string; // Tên quốc gia hoặc vùng
+  lat: number;
+  lon: number;
+  currentPreview?: CurrentWeather | null; // Dữ liệu tóm tắt cho thẻ nhỏ
+}
+
+// Interface cho kết quả tìm kiếm từ Geocoding API
+interface GeocodingResult {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  country: string;
+  admin1?: string; // Tên vùng/tỉnh
+}
+
+// =========================================================================
+// 2. HELPER FUNCTIONS
+// =========================================================================
+
+const getRiskImpact = (riskCode: string): string => {
+  switch (riskCode) {
+    case 'RISK_HEAVY_RAIN':
+      return 'Bắt buộc chuyển hoạt động trong nhà.';
+    case 'WARNING_LIGHT_RAIN':
+      return 'Cảnh báo mang ô/áo mưa (Mưa 0.5mm - 2.0mm).';
+    case 'RISK_EXTREME_HEAT':
+      return 'Tránh hoạt động ngoài trời 10h sáng - 16h chiều (> 35°C).';
+    case 'RISK_EXTREME_COLD':
+      return 'Gợi ý giữ ấm, ưu tiên hoạt động ấm cúng (< 10°C).';
+    case 'WARNING_CHILLY':
+      return 'Cảnh báo cần thêm áo khoác (10°C - 15°C).';
+    case 'RISK_HIGH_WIND':
+      return 'Hạn chế hoạt động trên cao/trên biển (> 30km/h).';
+    case 'NORMAL':
+      return 'Thời tiết lý tưởng, không có rủi ro lớn.';
     default:
-      return 'bg-gray-100 text-gray-700 border-gray-200';
+      return 'Thông tin rủi ro không xác định.';
   }
 };
 
-const WeatherIcon = ({ icon, className = "w-12 h-12" }: { icon: string; className?: string }) => {
-  switch (icon) {
-    case 'sun':
-      return <Sun className={`${className} text-yellow-500`} />;
-    case 'rain':
-      return <CloudRain className={`${className} text-blue-500`} />;
-    case 'cloud':
-    default:
-      return <Cloud className={`${className} text-gray-700`} />;
+const WeatherIcon = ({ iconDesc, className = "w-12 h-12" }: { iconDesc: string; className?: string }) => {
+  const desc = iconDesc ? iconDesc.toLowerCase() : '';
+  
+  if (desc.includes('mưa') || desc.includes('rain') || desc.includes('drizzle')) {
+    return <CloudRain className={`${className} text-blue-500`} />;
   }
+  if (desc.includes('quang') || desc.includes('nắng') || desc.includes('sunny') || desc.includes('clear')) {
+    return <Sun className={`${className} text-yellow-500`} />;
+  }
+  if (desc.includes('tuyết') || desc.includes('snow')) {
+    return <CloudRain className={`${className} text-cyan-300`} />;
+  }
+  if (desc.includes('bão') || desc.includes('thunder')) {
+    return <Wind className={`${className} text-purple-500`} />;
+  }
+  // Mặc định là mây
+  return <Cloud className={`${className} text-gray-400`} />;
 };
+
+// =========================================================================
+// 3. MAIN COMPONENT
+// =========================================================================
 
 export function Weather() {
-  const [selectedCity, setSelectedCity] = useState<CityWeather>(weatherData[0]);
+  // --- STATE QUẢN LÝ DỮ LIỆU ---
+  
+  // 1. Danh sách 3 địa điểm mặc định (để hiển thị thẻ nhanh)
+  const [defaultCities, setDefaultCities] = useState<CityCoordinate[]>([
+    { name: 'Hanoi', region: 'Vietnam', lat: 21.0285, lon: 105.8542, currentPreview: null },
+    { name: 'Ho Chi Minh City', region: 'Vietnam', lat: 10.77, lon: 106.69, currentPreview: null },
+    { name: 'Da Nang', region: 'Vietnam', lat: 16.0544, lon: 108.2022, currentPreview: null },
+  ]);
+
+  // 2. Địa điểm đang được chọn để xem chi tiết (Main Card)
+  const [selectedCity, setSelectedCity] = useState<CityCoordinate>(defaultCities[0]);
+  
+  // 3. Dữ liệu chi tiết của địa điểm đang chọn
+  const [detailedWeather, setDetailedWeather] = useState<WeatherData | null>(null);
+  
+  // 4. State cho tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 5. Loading states
+  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
+  const [isLoadingDefaults, setIsLoadingDefaults] = useState(true);
+
+  // --- API CALLS ---
+
+  // A. Fetch dữ liệu tóm tắt cho 3 thẻ mặc định (Chạy 1 lần khi mount)
+  useEffect(() => {
+    const fetchDefaultCities = async () => {
+      setIsLoadingDefaults(true);
+      const updatedCities = await Promise.all(
+        defaultCities.map(async (city) => {
+          try {
+            const response = await fetch(`http://localhost:5000/api/weather/forecast?lat=${city.lat}&lon=${city.lon}`);
+            const data: WeatherData = await response.json();
+            return { ...city, currentPreview: data.current_weather };
+          } catch (error) {
+            console.error(`Lỗi tải data cho ${city.name}:`, error);
+            return city;
+          }
+        })
+      );
+      setDefaultCities(updatedCities);
+      setIsLoadingDefaults(false);
+    };
+
+    fetchDefaultCities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
+
+  // B. Fetch dữ liệu chi tiết khi selectedCity thay đổi
+  useEffect(() => {
+    const fetchDetailedWeather = async () => {
+      setIsLoadingDetail(true);
+      try {
+        const response = await fetch(`http://localhost:5000/api/weather/forecast?lat=${selectedCity.lat}&lon=${selectedCity.lon}`);
+        if (!response.ok) throw new Error('API Error');
+        const data: WeatherData = await response.json();
+        setDetailedWeather(data);
+      } catch (error) {
+        console.error("Lỗi tải chi tiết:", error);
+        setDetailedWeather(null);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    };
+
+    fetchDetailedWeather();
+  }, [selectedCity]);
+
+  // C. Xử lý tìm kiếm địa điểm (Geocoding API)
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (query.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    // Debounce: Đợi 500ms sau khi ngừng gõ mới gọi API
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        // Sử dụng Open-Meteo Geocoding API (Free)
+        const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${query}&count=5&language=en&format=json`);
+        const data = await response.json();
+        if (data.results) {
+          setSearchResults(data.results);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (error) {
+        console.error("Search error:", error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+  };
+
+  // D. Chọn địa điểm từ kết quả tìm kiếm
+  const selectSearchResult = (result: GeocodingResult) => {
+    const newCity: CityCoordinate = {
+      name: result.name,
+      region: `${result.admin1 || ''}, ${result.country}`.replace(/^, /, ''), // Ghép tên vùng + quốc gia
+      lat: result.latitude,
+      lon: result.longitude,
+      currentPreview: null // Không cần preview cho địa điểm tìm kiếm
+    };
+    
+    setSelectedCity(newCity);
+    setSearchQuery(''); // Xóa thanh tìm kiếm
+    setSearchResults([]); // Xóa kết quả
+  };
+
+  const current = detailedWeather?.current_weather;
+
+  // --- RENDER ---
+
+  if (isLoadingDetail && !detailedWeather) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
+        <p className="text-gray-500">Đang cập nhật thời tiết...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-4">
-      {/* Search */}
-      <div className="mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 flex items-center gap-3 transition-colors duration-300">
-          <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+      
+      {/* 1. THANH TÌM KIẾM THÔNG MINH */}
+      <div className="mb-8 relative z-50">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 flex items-center gap-3 transition-all focus-within:ring-2 focus-within:ring-blue-500/50">
+          <Search className="w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search for a city in Vietnam..."
+            placeholder="Tìm kiếm địa điểm bất kỳ (VD: Dalat, Tokyo, London...)"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 outline-none bg-transparent dark:text-white dark:placeholder-gray-500"
+            onChange={(e) => handleSearch(e.target.value)}
+            className="flex-1 outline-none bg-transparent dark:text-white placeholder-gray-400"
           />
+          {isSearching && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
         </div>
+
+        {/* Dropdown kết quả tìm kiếm */}
+        {searchResults.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden max-h-60 overflow-y-auto">
+            {searchResults.map((result) => (
+              <button
+                key={result.id}
+                onClick={() => selectSearchResult(result)}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-3"
+              >
+                <MapPin className="w-4 h-4 text-gray-400" />
+                <div>
+                  <p className="font-medium text-gray-800 dark:text-gray-200">{result.name}</p>
+                  <p className="text-xs text-gray-500">{result.admin1 ? `${result.admin1}, ` : ''}{result.country}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* City Selector */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {weatherData.map((city) => (
+      {/* 2. DANH SÁCH 3 ĐỊA ĐIỂM NỔI BẬT (Dữ liệu độc lập) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {defaultCities.map((city, index) => (
           <button
-            key={city.id}
-            onClick={() => setSelectedCity(city)}
-            className={`bg-white dark:bg-gray-800 rounded-lg p-4 text-left transition-all duration-300 ${
-              selectedCity.id === city.id
-                ? 'ring-2 ring-blue-600 dark:ring-blue-500 shadow-lg'
-                : 'shadow-sm hover:shadow-md'
+            key={index}
+            onClick={() => setSelectedCity(city)} // Click để xem chi tiết địa điểm này
+            className={`relative overflow-hidden group bg-white dark:bg-gray-800 rounded-2xl p-5 text-left transition-all duration-300 border ${
+              selectedCity.lat === city.lat
+                ? 'border-blue-500 shadow-lg ring-1 ring-blue-500 bg-blue-50/10'
+                : 'border-transparent shadow-sm hover:shadow-md hover:border-blue-200'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h3 className="text-lg dark:text-white">{city.city}</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{city.region}</p>
+                <h3 className="font-bold text-lg dark:text-white group-hover:text-blue-600 transition-colors">
+                  {city.name}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{city.region}</p>
               </div>
-              <WeatherIcon icon={city.icon} className="w-10 h-10" />
+              
+              {/* Hiển thị icon dựa trên dữ liệu riêng của thành phố này */}
+              {isLoadingDefaults ? (
+                 <div className="w-10 h-10 bg-gray-200 animate-pulse rounded-full"></div>
+              ) : (
+                 <WeatherIcon iconDesc={city.currentPreview?.weather_desc || 'cloud'} className="w-10 h-10" />
+              )}
             </div>
-            <p className="text-3xl mb-1 dark:text-white">{city.temperature}°C</p>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{city.condition}</p>
+
+            <div className="flex items-end justify-between">
+              <div>
+                 {isLoadingDefaults ? (
+                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded mb-1"></div>
+                 ) : (
+                    <p className="text-3xl font-light dark:text-white">
+                      {/* ĐÃ THÊM 'C' VÀO ĐÂY */}
+                      {city.currentPreview?.temperature ?? '--'}°C
+                    </p>
+                 )}
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 text-right max-w-[50%] truncate">
+                {city.currentPreview?.weather_desc ?? 'N/A'}
+              </p>
+            </div>
           </button>
         ))}
       </div>
 
-      {/* Main Weather Display */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Current Weather */}
-        <div className="lg:col-span-2 bg-gradient-to-br from-blue-500 to-purple-600 dark:from-blue-700 dark:to-purple-800 rounded-2xl p-8 text-white shadow-xl transition-all duration-300">
-          <div className="flex items-center gap-2 mb-4">
-            <MapPin className="w-5 h-5" />
-            <h2 className="text-2xl">{selectedCity.city}</h2>
-          </div>
+      {/* 3. KHU VỰC HIỂN THỊ CHÍNH (MAIN CARD) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Cột Trái: Thông tin chi tiết */}
+        <div className="lg:col-span-2 bg-gradient-to-br from-blue-600 to-indigo-700 dark:from-blue-900 dark:to-indigo-950 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
+          {/* Background decoration */}
+          <div className="absolute top-0 right-0 -mr-10 -mt-10 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
           
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <p className="text-7xl mb-2">{selectedCity.temperature}°C</p>
-              <p className="text-xl opacity-90">{selectedCity.condition}</p>
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Navigation className="w-4 h-4 text-blue-200" />
+                  <span className="text-blue-100 text-sm uppercase tracking-wider">{selectedCity.region}</span>
+                </div>
+                <h2 className="text-4xl font-bold">{selectedCity.name}</h2>
+                <p className="text-blue-100 mt-2">Cập nhật lúc: {new Date().toLocaleTimeString()}</p>
+              </div>
+              <WeatherIcon iconDesc={current?.weather_desc || ''} className="w-24 h-24 text-white drop-shadow-lg" />
             </div>
-            <WeatherIcon icon={selectedCity.icon} className="w-32 h-32" />
-          </div>
 
-          {/* Weather Details Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1 opacity-80">
-                <Droplets className="w-4 h-4" />
-                <span className="text-sm">Humidity</span>
+            <div className="flex flex-col md:flex-row items-end gap-6 mb-8 border-b border-white/20 pb-8">
+              <span className="text-8xl font-thin tracking-tighter">
+                {/* ĐÃ THÊM 'C' VÀO ĐÂY */}
+                {current?.temperature ?? '--'}°C
+              </span>
+              <div className="flex flex-col gap-1 mb-4">
+                <p className="text-2xl font-medium">{current?.weather_desc}</p>
+                <div className="flex gap-4 text-blue-100 text-sm">
+                  <span className="flex items-center gap-1"><TrendingUp className="w-4 h-4" /> Cao: {current?.temp_max}°</span>
+                  <span className="flex items-center gap-1"><TrendingDown className="w-4 h-4" /> Thấp: {current?.temp_min}°</span>
+                </div>
               </div>
-              <p className="text-xl">{selectedCity.humidity}%</p>
             </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1 opacity-80">
-                <Wind className="w-4 h-4" />
-                <span className="text-sm">Wind</span>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2 text-blue-200 text-sm">
+                  <Droplets className="w-4 h-4" /> Lượng mưa
+                </div>
+                <p className="text-xl font-semibold">{current?.precipitation_sum.toFixed(1) ?? 0} mm</p>
               </div>
-              <p className="text-xl">{selectedCity.windSpeed} km/h</p>
-            </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1 opacity-80">
-                <Eye className="w-4 h-4" />
-                <span className="text-sm">Visibility</span>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2 text-blue-200 text-sm">
+                  <Wind className="w-4 h-4" /> Gió Max
+                </div>
+                <p className="text-xl font-semibold">{current?.wind_max_kmh ?? 0} km/h</p>
               </div>
-              <p className="text-xl">{selectedCity.visibility} km</p>
-            </div>
-            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
-              <div className="flex items-center gap-2 mb-1 opacity-80">
-                <Gauge className="w-4 h-4" />
-                <span className="text-sm">Pressure</span>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2 text-blue-200 text-sm">
+                  <Eye className="w-4 h-4" /> Tầm nhìn
+                </div>
+                <p className="text-xl font-semibold">10+ km</p>
               </div>
-              <p className="text-xl">{selectedCity.pressure} mb</p>
+              <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2 text-blue-200 text-sm">
+                  <Gauge className="w-4 h-4" /> Áp suất
+                </div>
+                <p className="text-xl font-semibold">1012 hPa</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Air Quality */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg transition-colors duration-300">
-          <div className="flex items-center gap-2 mb-4">
-            <Wind className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h3 className="text-xl dark:text-white">Air Quality</h3>
-          </div>
-
-          <div className="text-center mb-6">
-            <div className="relative inline-block">
-              <svg className="w-32 h-32 transform -rotate-90">
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke="#e5e7eb"
-                  strokeWidth="8"
-                  fill="none"
-                  className="dark:stroke-gray-700"
-                />
-                <circle
-                  cx="64"
-                  cy="64"
-                  r="56"
-                  stroke={
-                    selectedCity.aqiLevel === 'Good'
-                      ? '#10b981'
-                      : selectedCity.aqiLevel === 'Moderate'
-                      ? '#f59e0b'
-                      : '#ef4444'
-                  }
-                  strokeWidth="8"
-                  fill="none"
-                  strokeDasharray={`${(selectedCity.aqi / 200) * 352} 352`}
-                  strokeLinecap="round"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-3xl dark:text-white">{selectedCity.aqi}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">AQI</p>
-                </div>
+        {/* Cột Phải: Cảnh báo & Chỉ số phụ */}
+        <div className="flex flex-col gap-6">
+          
+          {/* Box Cảnh báo Rủi ro */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
+                <AlertTriangle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
               </div>
+              <h3 className="text-lg font-bold dark:text-white">Cảnh báo & Lời khuyên</h3>
             </div>
-          </div>
-
-          <div
-            className={`px-4 py-2 rounded-lg border text-center mb-4 ${getAQIColor(
-              selectedCity.aqiLevel
-            )}`}
-          >
-            <p>{selectedCity.aqiLevel}</p>
-          </div>
-
-          <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-            {selectedCity.aqiLevel === 'Good' && (
-              <p className="flex items-start gap-2">
-                <TrendingUp className="w-4 h-4 text-green-600 mt-0.5" />
-                Air quality is satisfactory, outdoor activities recommended
-              </p>
-            )}
-            {selectedCity.aqiLevel === 'Moderate' && (
-              <p className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5" />
-                Acceptable air quality, unusually sensitive people should limit outdoor exposure
-              </p>
-            )}
-            {(selectedCity.aqiLevel === 'Unhealthy' ||
-              selectedCity.aqiLevel === 'Hazardous') && (
-              <p className="flex items-start gap-2">
-                <TrendingDown className="w-4 h-4 text-red-600 mt-0.5" />
-                Unhealthy air quality, limit prolonged outdoor activities
-              </p>
-            )}
+            
+            <div className="space-y-3">
+              {current?.daily_risks && current.daily_risks.length > 0 && current.daily_risks[0] !== 'NORMAL' ? (
+                current.daily_risks.map((risk, idx) => (
+                  <div key={idx} className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800/30">
+                     <p className="text-xs font-bold text-red-600 dark:text-red-400 mb-1">
+                       {risk.replace(/_/g, ' ')}
+                     </p>
+                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                       {getRiskImpact(risk)}
+                     </p>
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800/30 text-center">
+                  <p className="font-medium text-green-700 dark:text-green-400">Thời tiết an toàn</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Lý tưởng cho các hoạt động ngoài trời.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* 5-Day Forecast */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg transition-colors duration-300">
-        <h3 className="text-xl mb-4 dark:text-white">5-Day Forecast</h3>
+      {/* 4. DỰ BÁO 5 NGÀY (5-Day Forecast) */}
+      <div className="mt-8">
+        <h3 className="text-xl font-bold mb-4 dark:text-white flex items-center gap-2">
+          <Sun className="w-5 h-5" /> Dự báo 5 ngày tới
+        </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {selectedCity.forecast.map((day, index) => (
+          {detailedWeather?.five_day_forecast.map((day, index) => (
             <div
               key={index}
-              className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-center hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+              className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow"
             >
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{day.day}</p>
-              <WeatherIcon
-                icon={
-                  day.condition.toLowerCase().includes('rain')
-                    ? 'rain'
-                    : day.condition.toLowerCase().includes('cloud')
-                    ? 'cloud'
-                    : 'sun'
-                }
-                className="w-8 h-8 mx-auto mb-2"
-              />
-              <div className="flex items-center justify-center gap-2 mb-1">
-                <span className="text-gray-800 dark:text-gray-200">{day.high}°</span>
-                <span className="text-gray-400">{day.low}°</span>
+              <p className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">
+                {new Date(day.date).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+              </p>
+              
+              <div className="flex justify-center mb-3">
+                <WeatherIcon
+                  iconDesc={day.weather_desc}
+                  className="w-10 h-10"
+                />
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{day.condition}</p>
+
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <span className="font-bold text-lg dark:text-white">{day.temp_max}°</span>
+                <span className="text-gray-400 text-sm">{day.temp_min}°</span>
+              </div>
+              
+              <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 mb-2 h-4">
+                {day.weather_desc}
+              </p>
+
+              {/* Dấu chấm cảnh báo nếu ngày đó có rủi ro */}
+              {day.risks.length > 0 && day.risks[0] !== 'NORMAL' && (
+                 <div className="inline-flex items-center justify-center px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[10px] rounded-full font-bold">
+                    ! Risk
+                 </div>
+              )}
             </div>
           ))}
         </div>
