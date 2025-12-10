@@ -778,12 +778,18 @@ export function ChatDetail({ chat, onBack, messages, addMessage, handleLeaveChat
         onClose={() => setShowAIPlanner(false)}
         onAccept={(activities) => {
           console.log("Accepted:", activities);
-          // Bạn có thể thêm logic gửi lịch trình vào khung chat ở đây nếu muốn
         }}
-        // --- THÊM DÒNG NÀY VÀO ---
-        chatContext={messages.map(m => `${m.sender}: ${m.content}`).join('\n')} 
+        // --- SỬA ĐOẠN NÀY ---
+        // 1. Lọc bỏ tin nhắn hệ thống (!m.isSystem)
+        // 2. Chỉ lấy nội dung (m.content)
+        // 3. Nối lại bằng dấu chấm câu ". " để model hiểu là các ý khác nhau
+        chatContext={messages
+          .filter(m => !m.isSystem) // Bỏ dòng "System: You joined..."
+          .map(m => m.content)      // Chỉ lấy "Tôi muốn ăn cơm"
+          .join('. ')               // Kết quả: "Tôi muốn ăn cơm. Đi xem phim."
+        } 
       />
-      )}
+    )}
     </div>
   );
 }

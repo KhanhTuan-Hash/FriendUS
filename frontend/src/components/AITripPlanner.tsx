@@ -105,17 +105,21 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
 
   // --- USE EFFECT: TỰ ĐỘNG GỌI KHI MỞ ---
   useEffect(() => {
-    const init = async () => {
-      setIsInitialLoading(true);
-      addLog("🚀 KHỞI ĐỘNG: Đọc tin nhắn...");
-      const prompt = chatContext 
-        ? `Dựa trên tin nhắn này: "${chatContext}". Hãy lên lịch trình.` 
-        : "Gợi ý lịch trình tham quan trung tâm thành phố";
-      await callAIServer(prompt);
-      setIsInitialLoading(false);
-    };
-    init();
-  }, [chatContext]);
+  const init = async () => {
+    setIsInitialLoading(true);
+    addLog("🚀 KHỞI ĐỘNG: Đọc tin nhắn...");
+    
+    // --- SỬA ĐOẠN NÀY ---
+    // Đừng thêm chữ "Dựa trên tin nhắn này..." nữa, gửi thẳng nội dung luôn
+    const prompt = chatContext 
+      ? chatContext  // <--- Gửi thẳng: "Tôi muốn ăn cơm. Đi uống cafe."
+      : "Gợi ý lịch trình mặc định"; // Nếu không có chat thì dùng câu này
+
+    await callAIServer(prompt);
+    setIsInitialLoading(false);
+  };
+  init();
+}, [chatContext]);
 
   // --- CÁC HÀM XỬ LÝ SỰ KIỆN UI ---
   const handleSendPrompt = () => {
