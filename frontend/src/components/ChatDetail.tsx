@@ -774,10 +774,15 @@ export function ChatDetail({ chat, onBack, messages, addMessage, handleLeaveChat
 
       {/* AI Trip Planner Modal */}
       {showAIPlanner && (
-        <AITripPlanner
-          onClose={() => setShowAIPlanner(false)}
-          onAccept={handleAcceptAISuggestions}
-        />
+      <AITripPlanner 
+        onClose={() => setShowAIPlanner(false)}
+        onAccept={(activities) => {
+          console.log("Accepted:", activities);
+          // Bạn có thể thêm logic gửi lịch trình vào khung chat ở đây nếu muốn
+        }}
+        // --- THÊM DÒNG NÀY VÀO ---
+        chatContext={messages.map(m => `${m.sender}: ${m.content}`).join('\n')} 
+      />
       )}
     </div>
   );

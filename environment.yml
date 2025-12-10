@@ -1,5 +1,7 @@
 name: friendus-env
 channels:
+  # Thêm kênh pytorch cho các gói PyTorch và Torchvision
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
@@ -7,37 +9,42 @@ dependencies:
   - python=3.10
   - pip
 
-  # --- Flask Web Framework ---
-  - flask
-  # [REMOVED] bootstrap-flask (No longer needed for React)
-  - flask-login        # Keep: For session management
-  - flask-socketio     # Keep: For Chat
-  - flask-sqlalchemy   # Keep: Database
-  - flask-wtf          # Keep: For current form validation logic
-  - email-validator    # Keep: Helper for validation
-  - eventlet           # Keep: High-performance server
+  # --- AI Core & Dependencies (Quan trọng cho ai_engine.py) ---
+  - pytorch
+  - torchvision
+  - torchaudio
+  # Gói này sẽ tải PyTorch phiên bản CPU từ kênh pytorch
+  - cpuonly 
 
-  # --- Geospatial Data ---
+  # --- Web Backend (FLASK) ---
+  - flask
+  - flask-login
+  - flask-socketio
+  - flask-sqlalchemy
+  - flask-wtf
+  - email-validator
+  - eventlet
+  - flask-cors 
+
+  # --- AI Backend (FASTAPI) ---
+  - fastapi
+  - uvicorn
+  - pydantic
+  - python-multipart
+  - sentence-transformers 
+
+  # --- Geospatial & DB ---
   - osmnx
   - geopandas
   - pyogrio
   - matplotlib-base
-
-  # --- Database ---
   - sqlalchemy
-
-  # --- Auth & Utilities ---
   - Authlib
   - requests
-  - python-dotenv      # Keep: To read .env files
+  - python-dotenv
   - Pillow
-  - bleach             # Keep: Security (Sanitization)
-
-  # --- AI / API ---
-  - fastapi            # Note: You are mixing Flask and FastAPI? (Keep if intended)
-  - uvicorn
-  - pydantic
-  - flask-cors         # Keep: Critical for React connection
-  - python-multipart
-  - sentence-transformers 
-  - pyvi
+  - bleach
+  
+  # --- PIP Dependencies (Thư viện không có trên Conda) ---
+  - pip:
+    - pyvi
