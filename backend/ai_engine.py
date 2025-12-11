@@ -1,11 +1,11 @@
 # Tên file: ai_engine.py
 import os
 import re
-import math
 import requests
 import torch
 from sentence_transformers import SentenceTransformer, util
 from pyvi import ViTokenizer
+from requests.utils import quote
 
 # ==============================================================================
 # CONFIGURATION
@@ -19,13 +19,17 @@ class Config:
     # User Default Location (Ví dụ: KHTN, TP.HCM)
     CURRENT_LAT = 10.7628356
     CURRENT_LON = 106.6799075
+    
+    # Số lượng kết quả muốn lấy từ Vietmap API cho mỗi bước tìm kiếm
+    MAX_CANDIDATES_PER_STEP = 3
 
-    # Vietmap Search Keys (Database từ model của bạn)
+    # Vietmap Search Keys (Database từ model)
     SEARCH_KEYS = [
         "quán ăn nhanh", "nhà hàng buffet", "quán cà phê lãng mạn", "tiệm bánh",
         "nhà hàng chay", "quán nhậu", "nhà hàng gia đình", "quán ăn truyền thống",
         "quán phở", "quán bún chả", "quán lẩu nướng", "quán hải sản",
         "quán kem", "quán cà phê sách",
+        "quán cơm", "tiệm bánh mì", "cửa hàng tiện lợi", 
         "phòng karaoke", "công viên cây xanh", "công viên giải trí", "rạp chiếu phim",
         "quán bida/board game", "trung tâm trò chơi", "trung tâm văn hóa",
         "bảo tàng", "sân vận động", "hồ bơi công cộng", "phòng gym", "sân bóng đá",
@@ -55,7 +59,6 @@ class VietmapAssistant:
         self.search_keys = Config.SEARCH_KEYS
         
         # --- LOADING MODEL ---
-        # Nếu có model_path truyền vào (từ máy local), dùng nó. Nếu không thì tải từ HuggingFace
         target_path = model_path if model_path else Config.HF_REPO_ID
         print(f"🔄 Đang tải model từ: {target_path}")
         try:
@@ -83,22 +86,27 @@ class VietmapAssistant:
         lat = location[0] if location else Config.CURRENT_LAT
         lon = location[1] if location else Config.CURRENT_LON
         
-        url = f"{Config.VIETMAP_API_ENDPOINT}?apikey={self.api_key}&text={keyword}&focus={lat},{lon}"
+        # Mã hóa từ khóa URL
+        encoded_keyword = quote(keyword)
+        url = f"{Config.VIETMAP_API_ENDPOINT}?apikey={self.api_key}&text={encoded_keyword}&focus={lat},{lon}"
+        
+        print(f" > VIETMAP API URL: {url}")
+
         try:
             resp = requests.get(url).json()
             return resp if isinstance(resp, list) else []
         except Exception as e:
-            print(f"Vietmap API Error: {e}")
+            print(f" > ERROR API Call: {e}") 
             return []
 
     def extract_steps(self, chat_text):
         steps = []
-        # Tách câu đơn giản bằng dấu phẩy hoặc từ nối (logic đơn giản)
+        # Tách câu đơn giản
         raw_steps = re.split(r',|\.| sau đó | tiếp theo | cuối cùng ', chat_text)
         
         for raw in raw_steps:
             raw = raw.strip()
-            if len(raw) > 5: # Bỏ qua câu quá ngắn
+            if len(raw) >= 1: 
                 key, score = self.predict_intent(raw)
                 steps.append({
                     "raw_text": raw,
@@ -114,48 +122,92 @@ class VietmapAssistant:
             candidates = step['candidates']
             
             if not candidates:
-                route.append({"error": f"Không tìm thấy địa điểm cho: {intent}", "step_intent": intent})
+                print(f" > Không tìm thấy địa điểm cho: {intent}") 
                 continue
 
-            # Heuristic đơn giản: Chọn địa điểm đầu tiên tìm thấy (Top 1 Vietmap)
-            # Nâng cao: Có thể tính khoảng cách giữa các điểm để chọn đường ngắn nhất
-            best_place = candidates[0] 
+            # Lặp qua TẤT CẢ ứng cử viên để thêm vào route
+            for candidate in candidates:
+                # Lấy thông tin, nếu thiếu thì để giá trị mặc định hoặc chuỗi rỗng
+                name = candidate.get('name', candidate.get('display', 'Unknown Place'))
+                address = candidate.get('address', 'Chưa có địa chỉ cụ thể')
+                
+                # Tọa độ: Lấy từ API, nếu không có thì gán bằng 0.0
+                lat = candidate.get('lat', 0.0)
+                lng = candidate.get('lng', 0.0)
+                
+                print(f" > Chấp nhận địa điểm: {name} ({address}) - Lat/Lng: {lat}/{lng}")
+
+                route.append({
+                    "step_intent": name, 
+                    "name": name,
+                    "address": address,
+                    "lat": lat,
+                    "lng": lng,
+                    "ref_id": candidate.get('ref_id')
+                })
             
-            route.append({
-                "step_intent": intent,
-                "name": best_place.get('name'),
-                "address": best_place.get('address'),
-                "lat": best_place.get('lat'),
-                "lng": best_place.get('lng'),
-                "ref_id": best_place.get('ref_id')
-            })
         return route
 
     def process_chat(self, chat_text):
         print(f"User Query: {chat_text}")
         
-        # 1. Phân tích ý định từng bước
         planned_steps = self.extract_steps(chat_text)
+        print(f" > Intent Steps: {planned_steps}")
         
-        # 2. Tìm kiếm địa điểm cho từng bước
         steps_data = []
         last_coords = (Config.CURRENT_LAT, Config.CURRENT_LON)
         
         for step in planned_steps:
-            print(f" > Searching: {step['search_key']} (from '{step['raw_text']}')")
-            candidates = self.search_vietmap(step['search_key'], location=last_coords)
+            search_key = step['search_key']
+            print(f" > Searching Vietmap for Keyword: '{search_key}'")
+            
+            candidates = self.search_vietmap(search_key, location=last_coords)
             
             if candidates:
-                steps_data.append({
-                    'intent': step['search_key'],
-                    'candidates': candidates
-                })
-                # Update location để tìm điểm tiếp theo gần điểm này
-                if 'lat' in candidates[0] and 'lng' in candidates[0]:
-                    last_coords = (candidates[0]['lat'], candidates[0]['lng'])
-            else:
-                steps_data.append({'intent': step['search_key'], 'candidates': []})
+                # 1. TÌM ỨNG CỬ VIÊN CÓ TỌA ĐỘ HỢP LỆ ĐỂ CẬP NHẬT last_coords
+                first_valid_coord_candidate = None
+                for candidate in candidates:
+                    if candidate.get('lat') and candidate.get('lng'):
+                        first_valid_coord_candidate = candidate
+                        break
 
-        # 3. Tạo lộ trình
+                # 2. CHỈ LẤY SỐ LƯỢNG KẾT QUẢ TỐI ĐA ĐÃ CẤU HÌNH
+                top_candidates = candidates[:Config.MAX_CANDIDATES_PER_STEP]
+                
+                # 3. LOGIC MỚI: ƯU TIÊN ĐẨY ỨNG CỬ VIÊN CÓ TỌA ĐỘ LÊN ĐẦU DANH SÁCH top_candidates
+                if first_valid_coord_candidate and first_valid_coord_candidate not in top_candidates:
+                    # Nếu ứng cử viên có tọa độ tốt không nằm trong top 3, chúng ta sẽ thay thế mục cuối cùng
+                    # (Hoặc không làm gì, nhưng để đảm bảo có tọa độ, ta nên đưa nó vào)
+                    # Tuy nhiên, để tránh phức tạp và giữ nguyên top N của Vietmap, chúng ta chỉ cần đảm bảo nó là top 1 nếu nó là top 3 trở xuống.
+                    
+                    # Tìm index của ứng cử viên hợp lệ (nếu nó nằm trong top N)
+                    try:
+                        idx = top_candidates.index(first_valid_coord_candidate)
+                        if idx > 0: # Chỉ sắp xếp lại nếu nó không phải là top 1
+                            top_candidates.insert(0, top_candidates.pop(idx))
+                            print(f" > Reordered: Moved valid coord candidate to index 0.")
+                    except ValueError:
+                        # Ứng cử viên hợp lệ không nằm trong top_candidates. Bỏ qua.
+                        pass
+                
+                # Nếu ứng cử viên hợp lệ là top 1 rồi, thì không cần làm gì.
+                
+                steps_data.append({
+                    'intent': search_key,
+                    'candidates': top_candidates
+                })
+                
+                # 4. CẬP NHẬT TỌA ĐỘ BẰNG ỨNG CỬ VIÊN CÓ TỌA ĐỘ HỢP LỆ ĐẦU TIÊN (Nếu có)
+                if first_valid_coord_candidate:
+                    last_coords = (first_valid_coord_candidate['lat'], first_valid_coord_candidate['lng'])
+                    print(f" > Found place with coords for next search focus: {first_valid_coord_candidate.get('name')}")
+                else:
+                    print(f" > Warning: No candidate in search result had valid coordinates. Keeping previous focus.")
+            else:
+                steps_data.append({'intent': search_key, 'candidates': []})
+                print(f" > No candidates found for '{search_key}'")
+
         final_route = self.optimize_route(steps_data)
+        
+        print(f"🤖 AI trả về tổng cộng ({len(final_route)} items)")
         return final_route

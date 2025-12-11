@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+// FIX: Sửa lỗi không giải quyết được module bằng cách thêm đuôi .tsx vào đường dẫn import
+import { AITripPlanner } from './AITripPlanner.tsx'; 
 import {
   ArrowLeft,
   Send,
@@ -18,14 +20,14 @@ import {
   X,
   Clock,
   MapPin,
-  Sparkles
+  Sparkles,
+  Edit2, // Thêm Edit2 để dùng cho Activity Title
 } from 'lucide-react';
 
 // --- STUB COMPONENTS (Assuming these were missing or caused conflicts) ---
 const DebtGraph = ({ relations, currentUser }: any) => <div className="p-4 text-gray-500">Debt Graph Stub</div>;
 const ClockTimePicker = ({ value, onChange }: any) => <div className="p-4 text-gray-500">Time Picker Stub: {value}</div>;
 const LocationPicker = ({ value, onChange }: any) => <div className="p-4 text-gray-500">Location Picker Stub: {value}</div>;
-const AITripPlanner = ({ onClose, onAccept, chatContext }: any) => <div className="p-4 text-gray-500">AI Planner Stub</div>;
 // --- END STUB COMPONENTS ---
 
 interface ChatConversation {
@@ -73,6 +75,9 @@ interface PlannerActivity {
   completed: boolean;
   date: string;
   description?: string;
+  // FIX 3: Thêm lat/lng để đồng bộ dữ liệu
+  lat?: number;
+  lng?: number;
 }
 
 const DUMMY_FINANCE: FinanceItem[] = [
@@ -82,8 +87,9 @@ const DUMMY_FINANCE: FinanceItem[] = [
 ];
 
 const DUMMY_ACTIVITIES: PlannerActivity[] = [
-  { id: 1, time: '8:00 AM', title: 'Meet at bus station', location: 'Ben Xe Mien Dong', completed: true, date: '2025-12-08', description: 'Departure to Hanoi' },
-  { id: 3, time: '2:00 PM', title: 'Visit Hoan Kiem Lake', location: 'Old Quarter, Hanoi', completed: false, date: '2025-12-09', description: 'Walking tour around the lake' }
+  // Thêm lat/lng giả định cho dữ liệu dummy để tránh lỗi type
+  { id: 1, time: '8:00 AM', title: 'Meet at bus station', location: 'Ben Xe Mien Dong', completed: true, date: '2025-12-08', description: 'Departure to Hanoi', lat: 10.76, lng: 106.67 },
+  { id: 3, time: '2:00 PM', title: 'Visit Hoan Kiem Lake', location: 'Old Quarter, Hanoi', completed: false, date: '2025-12-09', description: 'Walking tour around the lake', lat: 21.03, lng: 105.85 }
 ];
 
 export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveChat }: Props) {
@@ -131,6 +137,7 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
       completed: isCompleted,
       date: activityForm.date,
       description: activityForm.description
+      // lat/lng có thể được thêm sau khi có LocationPicker thực tế
     };
     
     setPlannerActivities([...plannerActivities, newActivity]);
@@ -165,15 +172,20 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
     .filter((item) => item.type === 'lend' && !item.settled)
     .reduce((sum, item) => sum + item.amount, 0);
 
+  // FIX 4: Sửa lỗi ngày cứng và gán lat/lng từ gợi ý AI
   const handleAcceptAISuggestions = (aiActivities: any[]) => {
+    const today = new Date().toISOString().substring(0, 10);
+    
     const newActivities = aiActivities.map((ai, index) => ({
       id: plannerActivities.length + index + 1,
       time: ai.time,
       title: ai.title,
       location: ai.location,
       completed: false,
-      date: '2025-12-10', 
-      description: ai.description
+      date: today, // Sửa từ '2025-12-10' cứng sang ngày hiện tại
+      description: ai.description,
+      lat: ai.lat, // Lấy lat từ AITripPlanner
+      lng: ai.lng, // Lấy lng từ AITripPlanner
     }));
     
     setPlannerActivities([...plannerActivities, ...newActivities]);
@@ -554,8 +566,9 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
 
                     <div className="p-6 space-y-6 max-h-[calc(90vh-200px)] overflow-y-auto">
                       <div>
+                        {/* FIX 5: Thay icon Calendar bằng Edit2/Sparkles cho Title */}
                         <label className="block text-sm mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                          <Calendar className="w-4 h-4" />
+                          <Edit2 className="w-4 h-4" />
                           Activity Title
                         </label>
                         <input

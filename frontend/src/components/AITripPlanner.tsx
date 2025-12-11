@@ -3,18 +3,30 @@ import {
   X, Sparkles, Check, Edit2, RefreshCw, Clock, MapPin, 
   DollarSign, Users, Send, ThumbsUp, ThumbsDown, 
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Loader2,
-  Bug 
+  Bug, Calendar, AlertTriangle // Added Icons
 } from 'lucide-react';
 
 interface Activity {
   id: number;
-  time: string;
+  time: string; // Keep for display if needed, or replace usage
   title: string;
   location: string;
   duration: string;
   cost: string;
   description: string;
   category: 'food' | 'attraction' | 'transport' | 'accommodation';
+  lat: number; 
+  lng: number;
+  
+  // NEW FIELDS for Date/Time & Weather
+  startDate: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  endTime: string;   // HH:MM
+  weatherRisk?: {
+    code: string;
+    description: string;
+  } | null;
+  isWeatherLoading?: boolean;
 }
 
 interface Props {
@@ -23,7 +35,7 @@ interface Props {
   chatContext: string;
 }
 
-// --- DESIGN SYSTEM (Giữ nguyên màu sắc cũ) ---
+// --- DESIGN SYSTEM ---
 const categoryColors = {
   food: 'bg-orange-500',
   attraction: 'bg-blue-500',
@@ -38,14 +50,37 @@ const categoryEmoji = {
   accommodation: '🏨'
 };
 
+// --- WEATHER HELPER (Copied logic from Weather.tsx) ---
+const getRiskImpact = (riskCode: string): string => {
+  switch (riskCode) {
+    case 'RISK_HEAVY_RAIN':
+      return 'Bắt buộc chuyển hoạt động trong nhà.';
+    case 'WARNING_LIGHT_RAIN':
+      return 'Cảnh báo mang ô/áo mưa (Mưa 0.5mm - 2.0mm).';
+    case 'RISK_EXTREME_HEAT':
+      return 'Tránh hoạt động ngoài trời 10h sáng - 16h chiều (> 35°C).';
+    case 'RISK_EXTREME_COLD':
+      return 'Gợi ý giữ ấm, ưu tiên hoạt động ấm cúng (< 10°C).';
+    case 'WARNING_CHILLY':
+      return 'Cảnh báo cần thêm áo khoác (10°C - 15°C).';
+    case 'RISK_HIGH_WIND':
+      return 'Hạn chế hoạt động trên cao/trên biển (> 30km/h).';
+    case 'NORMAL':
+      return 'Thời tiết lý tưởng, không có rủi ro lớn.';
+    default:
+      return 'Thông tin rủi ro không xác định.';
+  }
+};
+
 export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
   // --- STATE LOGIC ---
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [selectedActivities, setSelectedActivities] = useState<number[]>([]); 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(false); 
   
   // --- STATE UI ---
-  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [highlightedActivity, setHighlightedActivity] = useState<Activity | null>(null);
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAIInput, setShowAIInput] = useState(true);
 
@@ -57,10 +92,12 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
     setLogs(prev => [`[${time}] ${msg}`, ...prev]);
   };
 
-  // --- HÀM 1: GỌI AI SERVER (Logic mới) ---
+  // --- HÀM 1: GỌI AI SERVER (PORT 8000) ---
   const callAIServer = async (message: string) => {
     setIsProcessing(true);
-    addLog(`📤 Gửi: "${message.substring(0, 30)}..."`);
+    setSelectedActivities([]); 
+    setHighlightedActivity(null); 
+    addLog(`📤 Sending to Port 8000: "${message.substring(0, 30)}..."`);
     
     try {
       const response = await fetch('http://127.0.0.1:8000/api/chat', {
@@ -69,72 +106,181 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
         body: JSON.stringify({ message: message }),
       });
 
-      if (!response.ok) throw new Error(`Lỗi Server: ${response.status}`);
+      if (!response.ok) {
+         throw new Error(`Server Error: ${response.status}`);
+      }
+
       const data = await response.json();
-      addLog(`📥 Nhận: ${data.data?.length || 0} địa điểm`);
+      addLog(`📥 Received: ${data.data?.length || 0} items`);
 
       if (data.status === 'success') {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const defaultDateStr = tomorrow.toISOString().split('T')[0];
+
         const newActivities: Activity[] = data.data.map((item: any, index: number) => ({
           id: Date.now() + index,
           time: 'TBD',
           title: item.name || item.step_intent,
           location: item.address || 'Vietnam',
+          lat: item.lat || 0, 
+          lng: item.lng || 0,
           duration: '1-2h',
           cost: 'Varies',
-          description: `Gợi ý AI: ${item.step_intent}`,
+          description: `AI Suggestion: ${item.step_intent}`,
           category: mapIntentToCategory(item.step_intent),
+          // Defaults
+          startDate: defaultDateStr,
+          startTime: '09:00',
+          endTime: '11:00',
+          weatherRisk: null,
+          isWeatherLoading: false
         }));
+        
         setActivities(newActivities);
-        if(newActivities.length > 0) setSelectedActivity(newActivities[0]);
+        setSelectedActivities(newActivities.map(a => a.id)); 
+        
+        // Auto-fetch weather for all new items
+        newActivities.forEach(act => fetchWeatherForActivity(act));
       }
     } catch (error) {
-      addLog(`🔥 LỖI: ${String(error)}`);
-      alert("Không kết nối được AI Server (Port 8000). Hãy chạy 'python api_server.py'");
+      addLog(`🔥 Connection Failed: ${String(error)}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // --- HÀM 2: GỌI WEATHER SERVER (PORT 5000) ---
+  const fetchWeatherForActivity = async (activity: Activity) => {
+    // Only fetch if we have valid coords and date
+    if (!activity.lat || !activity.lng || !activity.startDate) return;
+
+    // Update loading state
+    setActivities(prev => prev.map(a => 
+      a.id === activity.id ? { ...a, isWeatherLoading: true } : a
+    ));
+
+    try {
+      addLog(`Checking weather for ${activity.title} on ${activity.startDate}...`);
+      
+      // We only need the date for daily forecast, time doesn't affect it.
+      const response = await fetch(
+        `http://localhost:5000/api/weather/forecast?lat=${activity.lat}&lon=${activity.lng}`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Weather API returned status ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // data.five_day_forecast is array of DailyForecastItem
+      // Find match for startDate
+      const match = data.five_day_forecast?.find((d: any) => d.date === activity.startDate);
+      
+      if (match) {
+        // Check risks. The risk array contains codes like ["RISK_HEAVY_RAIN", "WARNING_CHILLY"]
+        const risks = match.risks || [];
+        
+        // Find the most severe risk (or the first non-NORMAL risk)
+        const severeRisk = risks.find((r: string) => r !== 'NORMAL') || null;
+
+        setActivities(prev => prev.map(a => 
+          a.id === activity.id ? {
+            ...a,
+            weatherRisk: severeRisk ? {
+              code: severeRisk,
+              description: getRiskImpact(severeRisk)
+            } : null,
+            isWeatherLoading: false
+          } : a
+        ));
+        addLog(`Weather success for ${activity.title}. Risk: ${severeRisk || 'NORMAL'}`);
+      } else {
+         // No forecast data for this date (too far in future?)
+         setActivities(prev => prev.map(a => a.id === activity.id ? { 
+           ...a, 
+           isWeatherLoading: false, 
+           weatherRisk: { code: 'WARNING_NO_FORECAST', description: 'Không có dự báo thời tiết cho ngày này (quá xa).' }
+         } : a));
+         addLog(`Weather failed for ${activity.title}: No forecast found.`);
+      }
+    } catch (error) {
+      console.error("Weather fetch error", error);
+      addLog(`🔥 Weather Fetch Error: ${String(error)}`);
+      setActivities(prev => prev.map(a => a.id === activity.id ? { 
+        ...a, 
+        isWeatherLoading: false, 
+        weatherRisk: { code: 'ERROR_API_FETCH', description: 'Lỗi kết nối với máy chủ thời tiết.' }
+      } : a));
+    }
+  };
+
+  const updateActivityTime = (id: number, field: 'startDate' | 'startTime' | 'endTime', value: string) => {
+    // 1. Cập nhật state
+    setActivities(prev => {
+        const updated = prev.map(a => {
+            if (a.id === id) {
+                return { ...a, [field]: value };
+            }
+            return a;
+        });
+        return updated;
+    });
+
+    // 2. Kích hoạt fetch thời tiết nếu startDate thay đổi và có tọa độ
+    if (field === 'startDate') {
+        const activityToUpdate = activities.find(a => a.id === id);
+        if (activityToUpdate && activityToUpdate.lat && activityToUpdate.lng) {
+            // Lấy hoạt động MỚI NHẤT từ state (giả lập)
+            const newActivityData = { 
+                ...activityToUpdate, 
+                startDate: value, // Gán giá trị mới để hàm fetch sử dụng
+                weatherRisk: null,
+                isWeatherLoading: true 
+            };
+            
+            // Dùng setTimeout nhỏ để đảm bảo React đã xử lý xong state update (thường không cần nhưng an toàn hơn)
+            // và gọi hàm fetch
+            setTimeout(() => {
+                fetchWeatherForActivity(newActivityData);
+            }, 50);
+        }
+    }
+  };
+
   const mapIntentToCategory = (intent: string): Activity['category'] => {
     const i = intent.toLowerCase();
-    if (i.includes('ăn') || i.includes('uống') || i.includes('phở') || i.includes('cafe')) return 'food';
-    if (i.includes('xe') || i.includes('ga')) return 'transport';
-    if (i.includes('khách sạn') || i.includes('nghỉ')) return 'accommodation';
+    if (i.includes('eat') || i.includes('food') || i.includes('dinner') || i.includes('lunch') || i.includes('coffee') || i.includes('ăn') || i.includes('cơm')) return 'food';
+    if (i.includes('car') || i.includes('taxi') || i.includes('bus') || i.includes('ride') || i.includes('xe')) return 'transport';
+    if (i.includes('hotel') || i.includes('stay') || i.includes('resort') || i.includes('nghỉ')) return 'accommodation';
     return 'attraction';
   };
-
-  // --- USE EFFECT: TỰ ĐỘNG GỌI KHI MỞ ---
-  useEffect(() => {
-  const init = async () => {
-    setIsInitialLoading(true);
-    addLog("🚀 KHỞI ĐỘNG: Đọc tin nhắn...");
-    
-    // --- SỬA ĐOẠN NÀY ---
-    // Đừng thêm chữ "Dựa trên tin nhắn này..." nữa, gửi thẳng nội dung luôn
-    const prompt = chatContext 
-      ? chatContext  // <--- Gửi thẳng: "Tôi muốn ăn cơm. Đi uống cafe."
-      : "Gợi ý lịch trình mặc định"; // Nếu không có chat thì dùng câu này
-
-    await callAIServer(prompt);
-    setIsInitialLoading(false);
+  
+  const toggleActivitySelection = (activity: Activity) => {
+    setHighlightedActivity(activity);
+    setSelectedActivities(prev => {
+      if (prev.includes(activity.id)) {
+        return prev.filter(id => id !== activity.id);
+      } else {
+        return [...prev, activity.id];
+      }
+    });
   };
-  init();
-}, [chatContext]);
 
-  // --- CÁC HÀM XỬ LÝ SỰ KIỆN UI ---
   const handleSendPrompt = () => {
     if (!aiPrompt.trim()) return;
     callAIServer(aiPrompt);
     setAiPrompt('');
   };
 
-  // 🔥 ĐÂY LÀ HÀM BẠN BỊ THIẾU DẪN ĐẾN LỖI ---
   const handleAcceptAll = () => {
-    onAccept(activities);
+    const activitiesToAccept = activities.filter(a => selectedActivities.includes(a.id));
+    onAccept(activitiesToAccept);
     onClose();
   };
-  // ------------------------------------------
-
+  
   const scrollTimeline = (direction: 'left' | 'right') => {
     const container = document.getElementById('timeline-scroll');
     if (container) {
@@ -145,17 +291,17 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4 pt-20">
-      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-6xl max-h-[80vh] flex flex-col overflow-hidden transition-colors duration-300 relative">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-6xl max-h-[95vh] flex flex-col overflow-hidden transition-colors duration-300 relative">
         
         {/* DEBUG PANEL */}
         {showDebug && (
           <div className="absolute top-0 right-0 w-80 h-full bg-black/90 text-green-400 p-4 font-mono text-xs overflow-y-auto z-50 border-l border-gray-700">
-             <div className="flex justify-between border-b border-gray-700 pb-2 mb-2"><strong>AI LOGS</strong><button onClick={() => setLogs([])}>Clear</button></div>
+             <div className="flex justify-between border-b border-gray-700 pb-2 mb-2"><strong>AI LOGS (Port 8000)</strong><button onClick={() => setLogs([])}>Clear</button></div>
              {logs.map((log, i) => <div key={i} className="mb-1 border-b border-gray-800 pb-1">{log}</div>)}
           </div>
         )}
 
-        {/* HEADER (Design Gốc) */}
+        {/* HEADER */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-700 dark:to-purple-800 p-4 text-white flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -164,7 +310,7 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
               </div>
               <div>
                 <h2 className="text-xl">AI Trip Planner</h2>
-                <p className="text-xs opacity-90">Personalized itinerary for your group</p>
+                <p className="text-xs opacity-90">Ready for your request</p>
               </div>
             </div>
             <button onClick={onClose} className="p-1.5 hover:bg-white/20 rounded-lg transition-colors">
@@ -180,7 +326,7 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
               <div className="flex items-center gap-1.5 mb-0.5"><MapPin className="w-3.5 h-3.5" /> <span className="text-xs opacity-80">Activities</span></div>
-              <p className="text-base">{activities.length} stops</p>
+              <p className="text-base">{selectedActivities.length} / {activities.length} selected</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
               <div className="flex items-center gap-1.5 mb-0.5"><DollarSign className="w-3.5 h-3.5" /> <span className="text-xs opacity-80">Est. Cost</span></div>
@@ -195,20 +341,24 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
 
         {/* TIMELINE BODY */}
         <div className="relative flex-1 bg-gray-50 dark:bg-gray-900 p-4 overflow-y-auto">
-          {isInitialLoading ? (
-             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-20">
-                <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
-                <p className="text-gray-500 animate-pulse font-medium">AI is reading your chat & planning...</p>
-             </div>
-          ) : activities.length === 0 ? (
+          {activities.length === 0 ? (
              <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                <Sparkles className="w-16 h-16 mb-4 opacity-20" />
-                <p>No itinerary found. Try asking AI below!</p>
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
+                    <p className="animate-pulse">Asking AI Server...</p>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-16 h-16 mb-4 opacity-20" />
+                    <p>Enter a prompt below to plan your trip!</p>
+                  </>
+                )}
              </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base dark:text-white font-semibold">Suggested Itinerary</h3>
+                <h3 className="text-base dark:text-white font-semibold">Suggested Itinerary ({selectedActivities.length} selected)</h3>
                 <div className="flex gap-2">
                   <button onClick={() => scrollTimeline('left')} className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all"><ChevronLeft className="w-4 h-4 text-gray-600" /></button>
                   <button onClick={() => scrollTimeline('right')} className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all"><ChevronRight className="w-4 h-4 text-gray-600" /></button>
@@ -216,40 +366,127 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
               </div>
 
               <div id="timeline-scroll" className="flex gap-4 overflow-x-auto pb-4 scroll-smooth hide-scrollbar" style={{ scrollbarWidth: 'none' }}>
-                {activities.map((activity, index) => (
-                  <div key={activity.id} className="flex-shrink-0 w-72 relative group">
-                    {index < activities.length - 1 && (
-                      <div className="absolute top-1/2 -translate-y-1/2 left-full w-4 h-0.5 bg-gradient-to-r from-purple-400 to-blue-400 z-0" />
-                    )}
-                    
-                    <div 
-                      className={`relative bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all cursor-pointer border-2 ${
-                        selectedActivity?.id === activity.id ? 'border-purple-500 ring-4 ring-purple-200' : 'border-transparent'
-                      } z-10`}
-                      onClick={() => setSelectedActivity(activity)}
-                    >
-                      <div className={`${categoryColors[activity.category]} px-3 py-1 rounded-t-xl text-white text-sm flex items-center justify-between font-medium`}>
-                        <span>{categoryEmoji[activity.category]} {activity.category.toUpperCase()}</span>
-                        <span>{activity.time}</span>
-                      </div>
+                {activities.map((activity, index) => {
+                  const isSelected = selectedActivities.includes(activity.id);
+                  const isHighlighted = highlightedActivity?.id === activity.id;
 
-                      <div className="p-4">
-                        <h4 className="text-lg font-bold mb-2 dark:text-white truncate" title={activity.title}>{activity.title}</h4>
-                        <div className="space-y-2 mb-4 text-sm text-gray-600 dark:text-gray-400">
-                          <div className="flex items-start gap-2"><MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" /> <span className="truncate">{activity.location}</span></div>
-                          <div className="flex items-center gap-2"><Clock className="w-4 h-4 flex-shrink-0 text-orange-500" /> <span>{activity.duration}</span></div>
-                          <div className="flex items-center gap-2"><DollarSign className="w-4 h-4 flex-shrink-0 text-green-500" /> <span>{activity.cost}</span></div>
+                  return (
+                    <div key={activity.id} className="flex-shrink-0 w-80 relative group">
+                      {/* Connector Line */}
+                      {index < activities.length - 1 && (
+                        <div className="absolute top-1/2 -translate-y-1/2 left-full w-4 h-0.5 bg-gradient-to-r from-purple-400 to-blue-400 z-0" />
+                      )}
+                      
+                      {/* CARD */}
+                      <div 
+                        className={`relative bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all border-2 ${
+                          isSelected 
+                            ? 'border-green-500 ring-4 ring-green-200 dark:ring-green-900/50' 
+                            : (isHighlighted ? 'border-purple-500 ring-2 ring-purple-200' : 'border-gray-200 dark:border-gray-700')
+                        } z-10 flex flex-col h-full`}
+                        onClick={(e) => {
+                           // Prevent toggling when clicking inputs
+                           if ((e.target as HTMLElement).tagName !== 'INPUT') {
+                               toggleActivitySelection(activity);
+                           }
+                        }}
+                      >
+                        {/* HEADER with Category & Selection */}
+                        <div className={`${categoryColors[activity.category]} px-3 py-2 rounded-t-xl text-white text-sm flex items-center justify-between font-medium cursor-pointer`}
+                             onClick={() => toggleActivitySelection(activity)}
+                        >
+                          <span className="flex items-center gap-1">{categoryEmoji[activity.category]} {activity.category.toUpperCase()}</span>
+                          {isSelected ? <Check className="w-5 h-5 bg-white/20 rounded-full p-1" /> : <div className="w-5 h-5 rounded-full border-2 border-white/50" />}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2 min-h-[40px]">{activity.description}</p>
-                        
-                        <div className="flex gap-2">
-                          <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-medium"><RefreshCw className="w-3 h-3" /> Regen</button>
-                          <button className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg text-xs font-medium"><Edit2 className="w-3 h-3" /> Edit</button>
+
+                        {/* CONTENT */}
+                        <div className="p-4 flex-1 flex flex-col gap-3">
+                          <h4 className="text-lg font-bold dark:text-white truncate" title={activity.title}>{activity.title}</h4>
+                          
+                          {/* Location */}
+                          <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                              <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" /> 
+                              <span className="truncate">{activity.location}</span>
+                          </div>
+
+                          {/* TIME & DATE PICKERS */}
+                          <div className="bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg space-y-2 border border-gray-100 dark:border-gray-700">
+                             <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-gray-500" />
+                                <input 
+                                  type="date" 
+                                  className="flex-1 bg-transparent text-sm border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none dark:text-white"
+                                  value={activity.startDate}
+                                  onChange={(e) => updateActivityTime(activity.id, 'startDate', e.target.value)}
+                                />
+                             </div>
+                             <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-gray-500" />
+                                <div className="flex items-center gap-1 flex-1">
+                                  <input 
+                                    type="time" 
+                                    className="w-full bg-transparent text-sm border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none dark:text-white"
+                                    value={activity.startTime}
+                                    onChange={(e) => updateActivityTime(activity.id, 'startTime', e.target.value)}
+                                  />
+                                  <span className="text-gray-400">-</span>
+                                  <input 
+                                    type="time" 
+                                    className="w-full bg-transparent text-sm border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none dark:text-white"
+                                    value={activity.endTime}
+                                    onChange={(e) => updateActivityTime(activity.id, 'endTime', e.target.value)}
+                                  />
+                                </div>
+                             </div>
+                          </div>
+
+                          <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{activity.description}</p>
+                          
+                          {/* WEATHER WARNING UI */}
+                          {activity.isWeatherLoading ? (
+                             <div className="flex items-center gap-2 text-xs text-gray-400 animate-pulse">
+                               <Loader2 className="w-3 h-3 animate-spin" /> Checking weather...
+                             </div>
+                          ) : activity.weatherRisk && activity.weatherRisk.code === 'WARNING_NO_FORECAST' ? (
+                             <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-100 dark:border-yellow-800/30">
+                                <div className="flex items-center gap-2 mb-1">
+                                   <div className="p-1 bg-yellow-100 dark:bg-yellow-800 rounded">
+                                      <AlertTriangle className="w-3 h-3 text-yellow-600 dark:text-yellow-300" />
+                                   </div>
+                                   <p className="text-xs font-bold text-yellow-600 dark:text-yellow-400">
+                                      {activity.weatherRisk.code.replace(/_/g, ' ')}
+                                   </p>
+                                </div>
+                                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed pl-1">
+                                   {activity.weatherRisk.description}
+                                </p>
+                             </div>
+                          ) : activity.weatherRisk ? (
+                             <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800/30">
+                                <div className="flex items-center gap-2 mb-1">
+                                   <div className="p-1 bg-red-100 dark:bg-red-800 rounded">
+                                      <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-300" />
+                                   </div>
+                                   <p className="text-xs font-bold text-red-600 dark:text-red-400">
+                                      {activity.weatherRisk.code.replace(/_/g, ' ')}
+                                   </p>
+                                </div>
+                                <p className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed pl-1">
+                                   {activity.weatherRisk.description}
+                                </p>
+                             </div>
+                          ) : (
+                             // Optional: Show "Good Weather" indicator
+                             <div className="mt-1 flex items-center gap-1 text-xs text-green-600 dark:text-green-400 opacity-60">
+                                <Check className="w-3 h-3" /> Weather looks good
+                             </div>
+                          )}
+
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -265,7 +502,7 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendPrompt()}
-                  placeholder="Ask AI: 'Add coffee spot', 'Cheaper places'..."
+                  placeholder="Ask AI: 'Eat pho in Hanoi', 'Go to Ben Thanh market'..."
                   className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-600 dark:text-white"
                   disabled={isProcessing}
                 />
@@ -279,9 +516,9 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
                 </button>
               </div>
               <div className="flex flex-wrap gap-2 mt-3">
-                <button onClick={() => callAIServer("Make it budget-friendly")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">💰 Budget-friendly</button>
-                <button onClick={() => callAIServer("Add more food spots")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">🍜 More food</button>
-                <button onClick={() => callAIServer("Focus on culture")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">🏛️ Culture</button>
+                <button onClick={() => setAiPrompt("Find cheap food")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">💰 Cheap Food</button>
+                <button onClick={() => setAiPrompt("Visit historical places")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">🏛️ History</button>
+                <button onClick={() => setAiPrompt("Suggest coffee shops")} className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200">☕ Coffee</button>
               </div>
             </div>
           </div>
@@ -300,9 +537,12 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
           <div className="p-4 flex gap-3 max-w-4xl mx-auto">
             <button onClick={onClose} className="flex-1 px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
             
-            {/* NÚT NÀY ĐÃ ĐƯỢC SỬA LỖI */}
-            <button onClick={handleAcceptAll} className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2">
-              <Check className="w-5 h-5" /> Accept & Add to Planner
+            <button 
+              onClick={handleAcceptAll} 
+              disabled={selectedActivities.length === 0}
+              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Check className="w-5 h-5" /> Accept {selectedActivities.length > 0 ? `(${selectedActivities.length})` : ''} & Add to Planner
             </button>
           </div>
         </div>

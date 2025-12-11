@@ -51,7 +51,7 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp, url_prefix='/auth') 
     app.register_blueprint(map_bp)
     app.register_blueprint(chat_bp)
-    app.register_blueprint(planner_bp)
+    app.register_blueprint(planner_bp, url_prefix='/api/planner')
     app.register_blueprint(finance_bp)
     app.register_blueprint(weather_bp, url_prefix='/api/weather')
 
