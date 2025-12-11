@@ -45,24 +45,22 @@ interface WeatherData {
   five_day_forecast: DailyForecastItem[];
 }
 
-// Interface cho tọa độ và thông tin thành phố
 interface CityCoordinate {
   id?: number;
   name: string;
-  region: string; // Tên quốc gia hoặc vùng
+  region: string;
   lat: number;
   lon: number;
-  currentPreview?: CurrentWeather | null; // Dữ liệu tóm tắt cho thẻ nhỏ
+  currentPreview?: CurrentWeather | null;
 }
 
-// Interface cho kết quả tìm kiếm từ Geocoding API
 interface GeocodingResult {
   id: number;
   name: string;
   latitude: number;
   longitude: number;
   country: string;
-  admin1?: string; // Tên vùng/tỉnh
+  admin1?: string;
 }
 
 // =========================================================================
@@ -102,10 +100,12 @@ const WeatherIcon = ({ iconDesc, className = "w-12 h-12" }: { iconDesc: string; 
   if (desc.includes('tuyết') || desc.includes('snow')) {
     return <CloudRain className={`${className} text-cyan-300`} />;
   }
-  if (desc.includes('bão') || desc.includes('thunder')) {
+  if (desc.includes('bão') || desc.includes('thunder') || desc.includes('dông')) {
     return <Wind className={`${className} text-purple-500`} />;
   }
-  // Mặc định là mây
+  if (desc.includes('sương')) {
+    return <Cloud className={`${className} text-gray-300`} />;
+  }
   return <Cloud className={`${className} text-gray-400`} />;
 };
 
@@ -114,50 +114,57 @@ const WeatherIcon = ({ iconDesc, className = "w-12 h-12" }: { iconDesc: string; 
 // =========================================================================
 
 export function Weather() {
-  // --- STATE QUẢN LÝ DỮ LIỆU ---
-  
-  // 1. Danh sách 3 địa điểm mặc định (để hiển thị thẻ nhanh)
   const [defaultCities, setDefaultCities] = useState<CityCoordinate[]>([
     { name: 'Hanoi', region: 'Vietnam', lat: 21.0285, lon: 105.8542, currentPreview: null },
     { name: 'Ho Chi Minh City', region: 'Vietnam', lat: 10.77, lon: 106.69, currentPreview: null },
     { name: 'Da Nang', region: 'Vietnam', lat: 16.0544, lon: 108.2022, currentPreview: null },
   ]);
 
-  // 2. Địa điểm đang được chọn để xem chi tiết (Main Card)
   const [selectedCity, setSelectedCity] = useState<CityCoordinate>(defaultCities[0]);
-  
-  // 3. Dữ liệu chi tiết của địa điểm đang chọn
   const [detailedWeather, setDetailedWeather] = useState<WeatherData | null>(null);
   
-  // 4. State cho tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<GeocodingResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 5. Loading states
   const [isLoadingDetail, setIsLoadingDetail] = useState(true);
   const [isLoadingDefaults, setIsLoadingDefaults] = useState(true);
 
-  // --- API CALLS ---
-
-  // A. Fetch dữ liệu tóm tắt cho 3 thẻ mặc định (Chạy 1 lần khi mount)
+  // A. Fetch dữ liệu tóm tắt cho 3 thẻ mặc định
   useEffect(() => {
     const fetchDefaultCities = async () => {
       setIsLoadingDefaults(true);
-      const updatedCities = await Promise.all(
-        defaultCities.map(async (city) => {
-          try {
-            const response = await fetch(`http://localhost:5000/api/weather/forecast?lat=${city.lat}&lon=${city.lon}`);
+      
+      // FIX: Use sequential fetching instead of Promise.all to avoid 
+      // overloading the single-threaded Flask dev server, which caused
+      // the tab data to fail (returning null) in the previous version.
+      const newCities = [...defaultCities];
+      
+      for (let i = 0; i < newCities.length; i++) {
+        const city = newCities[i];
+        try {
+          // Add timeout to prevent hanging
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(
+            `http://localhost:5000/api/weather/forecast?lat=${city.lat}&lon=${city.lon}`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
             const data: WeatherData = await response.json();
-            return { ...city, currentPreview: data.current_weather };
-          } catch (error) {
-            console.error(`Lỗi tải data cho ${city.name}:`, error);
-            return city;
+            newCities[i] = { ...city, currentPreview: data.current_weather };
+            // Update state incrementally to show progress if desired
+            setDefaultCities([...newCities]);
           }
-        })
-      );
-      setDefaultCities(updatedCities);
+        } catch (error) {
+          console.error(`Lỗi tải data cho ${city.name}:`, error);
+        }
+      }
+      
       setIsLoadingDefaults(false);
     };
 
@@ -188,7 +195,6 @@ export function Weather() {
   // C. Xử lý tìm kiếm địa điểm (Geocoding API)
   const handleSearch = async (query: string) => {
     setSearchQuery(query);
-    
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
     if (query.length < 3) {
@@ -196,11 +202,9 @@ export function Weather() {
       return;
     }
 
-    // Debounce: Đợi 500ms sau khi ngừng gõ mới gọi API
     searchTimeoutRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // Sử dụng Open-Meteo Geocoding API (Free)
         const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${query}&count=5&language=en&format=json`);
         const data = await response.json();
         if (data.results) {
@@ -216,24 +220,20 @@ export function Weather() {
     }, 500);
   };
 
-  // D. Chọn địa điểm từ kết quả tìm kiếm
   const selectSearchResult = (result: GeocodingResult) => {
     const newCity: CityCoordinate = {
       name: result.name,
-      region: `${result.admin1 || ''}, ${result.country}`.replace(/^, /, ''), // Ghép tên vùng + quốc gia
+      region: `${result.admin1 || ''}, ${result.country}`.replace(/^, /, ''),
       lat: result.latitude,
       lon: result.longitude,
-      currentPreview: null // Không cần preview cho địa điểm tìm kiếm
+      currentPreview: null 
     };
-    
     setSelectedCity(newCity);
-    setSearchQuery(''); // Xóa thanh tìm kiếm
-    setSearchResults([]); // Xóa kết quả
+    setSearchQuery(''); 
+    setSearchResults([]); 
   };
 
   const current = detailedWeather?.current_weather;
-
-  // --- RENDER ---
 
   if (isLoadingDetail && !detailedWeather) {
     return (
@@ -247,7 +247,7 @@ export function Weather() {
   return (
     <div className="max-w-7xl mx-auto p-4">
       
-      {/* 1. THANH TÌM KIẾM THÔNG MINH */}
+      {/* 1. SEARCH BAR */}
       <div className="mb-8 relative z-50">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 flex items-center gap-3 transition-all focus-within:ring-2 focus-within:ring-blue-500/50">
           <Search className="w-5 h-5 text-gray-400" />
@@ -261,7 +261,6 @@ export function Weather() {
           {isSearching && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
         </div>
 
-        {/* Dropdown kết quả tìm kiếm */}
         {searchResults.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden max-h-60 overflow-y-auto">
             {searchResults.map((result) => (
@@ -281,14 +280,14 @@ export function Weather() {
         )}
       </div>
 
-      {/* 2. DANH SÁCH 3 ĐỊA ĐIỂM NỔI BẬT (Dữ liệu độc lập) */}
+      {/* 2. DEFAULT CITIES TABS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {defaultCities.map((city, index) => (
           <button
             key={index}
-            onClick={() => setSelectedCity(city)} // Click để xem chi tiết địa điểm này
+            onClick={() => setSelectedCity(city)}
             className={`relative overflow-hidden group bg-white dark:bg-gray-800 rounded-2xl p-5 text-left transition-all duration-300 border ${
-              selectedCity.lat === city.lat
+              selectedCity.name === city.name
                 ? 'border-blue-500 shadow-lg ring-1 ring-blue-500 bg-blue-50/10'
                 : 'border-transparent shadow-sm hover:shadow-md hover:border-blue-200'
             }`}
@@ -301,39 +300,42 @@ export function Weather() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">{city.region}</p>
               </div>
               
-              {/* Hiển thị icon dựa trên dữ liệu riêng của thành phố này */}
-              {isLoadingDefaults ? (
-                 <div className="w-10 h-10 bg-gray-200 animate-pulse rounded-full"></div>
+              {/* FIX: Ensure WeatherIcon component is reliably rendered when data is available. 
+                  Added check for `weather_desc` to prevent rendering a blank icon if the 
+                  description is unexpectedly null/empty, falling back to the cloud placeholder. */}
+              {city.currentPreview && city.currentPreview.weather_desc ? (
+                 <WeatherIcon iconDesc={city.currentPreview.weather_desc} className="w-10 h-10" />
               ) : (
-                 <WeatherIcon iconDesc={city.currentPreview?.weather_desc || 'cloud'} className="w-10 h-10" />
+                 <div className="w-10 h-10 bg-gray-200 dark:bg-gray-700 animate-pulse rounded-full flex items-center justify-center">
+                    {/* Fallback to Cloud icon if data is missing or loading is slow */}
+                    {isLoadingDefaults ? '' : <Cloud className="w-6 h-6 text-gray-400" />}
+                 </div>
               )}
             </div>
 
             <div className="flex items-end justify-between">
               <div>
-                 {isLoadingDefaults ? (
-                    <div className="h-8 w-16 bg-gray-200 animate-pulse rounded mb-1"></div>
-                 ) : (
+                 {city.currentPreview?.temperature !== undefined ? (
                     <p className="text-3xl font-light dark:text-white">
-                      {/* ĐÃ THÊM 'C' VÀO ĐÂY */}
-                      {city.currentPreview?.temperature ?? '--'}°C
+                      {city.currentPreview.temperature}°C
                     </p>
+                 ) : (
+                    <div className="h-9 w-20 bg-gray-200 dark:bg-gray-700 animate-pulse rounded mb-1"></div>
                  )}
               </div>
               <p className="text-sm text-gray-500 dark:text-gray-400 text-right max-w-[50%] truncate">
-                {city.currentPreview?.weather_desc ?? 'N/A'}
+                {city.currentPreview?.weather_desc ?? ''}
               </p>
             </div>
           </button>
         ))}
       </div>
 
-      {/* 3. KHU VỰC HIỂN THỊ CHÍNH (MAIN CARD) */}
+      {/* 3. MAIN WEATHER CARD */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Cột Trái: Thông tin chi tiết */}
+        {/* Left Column: Details */}
         <div className="lg:col-span-2 bg-gradient-to-br from-blue-600 to-indigo-700 dark:from-blue-900 dark:to-indigo-950 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-          {/* Background decoration */}
           <div className="absolute top-0 right-0 -mr-10 -mt-10 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none"></div>
           
           <div className="relative z-10">
@@ -343,7 +345,7 @@ export function Weather() {
                   <Navigation className="w-4 h-4 text-blue-200" />
                   <span className="text-blue-100 text-sm uppercase tracking-wider">{selectedCity.region}</span>
                 </div>
-                <h2 className="text-4xl font-bold">{selectedCity.name}</h2>
+                <h2 className="4xl font-bold">{selectedCity.name}</h2>
                 <p className="text-blue-100 mt-2">Cập nhật lúc: {new Date().toLocaleTimeString()}</p>
               </div>
               <WeatherIcon iconDesc={current?.weather_desc || ''} className="w-24 h-24 text-white drop-shadow-lg" />
@@ -351,7 +353,6 @@ export function Weather() {
 
             <div className="flex flex-col md:flex-row items-end gap-6 mb-8 border-b border-white/20 pb-8">
               <span className="text-8xl font-thin tracking-tighter">
-                {/* ĐÃ THÊM 'C' VÀO ĐÂY */}
                 {current?.temperature ?? '--'}°C
               </span>
               <div className="flex flex-col gap-1 mb-4">
@@ -392,10 +393,8 @@ export function Weather() {
           </div>
         </div>
 
-        {/* Cột Phải: Cảnh báo & Chỉ số phụ */}
+        {/* Right Column: Warnings */}
         <div className="flex flex-col gap-6">
-          
-          {/* Box Cảnh báo Rủi ro */}
           <div className="bg-white dark:bg-gray-800 rounded-3xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 flex-1">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-yellow-100 dark:bg-yellow-900/50 rounded-lg">
@@ -427,7 +426,7 @@ export function Weather() {
         </div>
       </div>
 
-      {/* 4. DỰ BÁO 5 NGÀY (5-Day Forecast) */}
+      {/* 4. 5-DAY FORECAST */}
       <div className="mt-8">
         <h3 className="text-xl font-bold mb-4 dark:text-white flex items-center gap-2">
           <Sun className="w-5 h-5" /> Dự báo 5 ngày tới
@@ -458,7 +457,6 @@ export function Weather() {
                 {day.weather_desc}
               </p>
 
-              {/* Dấu chấm cảnh báo nếu ngày đó có rủi ro */}
               {day.risks.length > 0 && day.risks[0] !== 'NORMAL' && (
                  <div className="inline-flex items-center justify-center px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 text-[10px] rounded-full font-bold">
                     ! Risk

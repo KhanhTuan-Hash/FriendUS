@@ -11,7 +11,7 @@ weather_bp = Blueprint('weather', __name__)
 # 2. LOGIC SERVICE (Class OpenMeteoClient)
 # ==============================================================================
 class OpenMeteoClient:
-    """Client tương tác với Open-Meteo API, cung cấp dự báo Daily và Hourly."""
+    """Client tương tác với Open-Meteo API, cung cấp dự báo Daily và Current."""
 
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -20,46 +20,14 @@ class OpenMeteoClient:
         'temperature_2m_max', 'temperature_2m_min', 'precipitation_sum',
         'weathercode', 'wind_speed_10m_max'
     ]
-
-    # BIẾN HOURLY (Cho lịch trình chi tiết trong ngày)
-    DEFAULT_HOURLY_VARS = [
-        'temperature_2m', 'precipitation_probability', 'wind_speed_10m',
-        'weathercode'
+    
+    # BIẾN CURRENT (Cho dữ liệu thời gian thực chính xác)
+    DEFAULT_CURRENT_VARS = [
+        'temperature_2m', 'is_day', 'precipitation', 'weather_code', 'wind_speed_10m'
     ]
 
     def __init__(self, default_timezone: str = 'Asia/Ho_Chi_Minh'):
         self.default_timezone = default_timezone
-
-    # --- Phương thức gọi API nội bộ ---
-    def _call_api(self, lat: float, lon: float, params_type: str, period: int) -> Dict[str, Any]:
-        if params_type == 'daily':
-            params_key = 'daily'
-            variables = self.DEFAULT_DAILY_VARS
-            time_period = 'forecast_days'
-        elif params_type == 'hourly':
-            params_key = 'hourly'
-            variables = self.DEFAULT_HOURLY_VARS
-            time_period = 'forecast_hours'
-        else:
-            return {"error": "Invalid forecast type."}
-
-        params = {
-            'latitude': lat,
-            'longitude': lon,
-            params_key: ",".join(variables),
-            'timezone': self.default_timezone,
-            time_period: period,
-            'temperature_unit': 'celsius',
-            'wind_speed_unit': 'kmh'
-        }
-
-        try:
-            response = requests.get(self.BASE_URL, params=params)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Lỗi khi gọi Open-Meteo API: {e}")
-            return {"error": str(e)}
 
     def _map_weather_code(self, wmo_code: int) -> str:
         """Dịch Weather Code (WMO) thành mô tả dễ đọc."""
@@ -67,145 +35,142 @@ class OpenMeteoClient:
             return "Trời quang mây"
         elif wmo_code == 2:
             return "Mây rải rác"
+        elif wmo_code == 3:
+            return "Nhiều mây"
+        elif wmo_code in [45, 48]:
+            return "Sương mù"
         elif wmo_code in [51, 61, 63, 65]:
             return "Mưa nhẹ/Mưa vừa"
         elif wmo_code in [80, 81, 82]:
             return "Mưa rào lớn"
+        elif wmo_code in [95, 96, 99]:
+            return "Dông bão"
         else:
             return "Thời tiết thay đổi"
 
-    # --- Phương thức Phân tích Rủi ro DAILY ---
+    # --- Phương thức Phân tích Rủi ro DAILY (FIXED THRESHOLDS) ---
     def _analyze_daily_risk(self, temp_max: float, temp_min: float, precip_sum: float, wind_max: float) -> List[str]:
         """Phân tích các rủi ro chính trong ngày dựa trên ngưỡng an toàn."""
         risks = []
-        # [cite_start]Mưa [cite: 12, 13]
-        if precip_sum > 2.0:
+        
+        # 1. Mưa
+        if precip_sum > 5.0: # Tăng ngưỡng một chút để tránh báo động giả quá nhiều
             risks.append("RISK_HEAVY_RAIN")
         elif precip_sum >= 0.5:
             risks.append("WARNING_LIGHT_RAIN")
         
-        # [cite_start]Nhiệt độ [cite: 14, 15, 17]
+        # 2. Nhiệt độ (FIXED)
         if temp_max > 35.0:
             risks.append("RISK_EXTREME_HEAT")
-        elif temp_min < 20.0:
+        elif temp_min < 10.0:
+            # Sửa: Chỉ báo EXTREME_COLD khi dưới 10 độ (khớp text frontend)
             risks.append("RISK_EXTREME_COLD")
-        elif temp_min < 25.0:
+        elif temp_min < 15.0:
+            # Sửa: Chỉ báo CHILLY khi dưới 15 độ (khớp text frontend 10-15 độ)
+            # Trước đây là 25.0 gây sai lệch
             risks.append("WARNING_CHILLY")
 
-        # [cite_start]Gió [cite: 18]
+        # 3. Gió
         if wind_max > 30.0: 
             risks.append("RISK_HIGH_WIND")
 
         return risks if risks else ["NORMAL"]
 
-    # --- Phương thức Phân tích Rủi ro HOURLY ---
-    def _analyze_hourly_risk(self, temp: float, precip_prob: int, wind_speed: float) -> List[str]:
-        risks = []
-        if precip_prob > 60: risks.append("HOURLY_RISK_RAIN")
-        elif precip_prob > 30: risks.append("HOURLY_WARNING_RAIN_CHANCE")
-        if temp > 33.0: risks.append("HOURLY_RISK_HEAT")
-        elif temp < 25.0: risks.append("HOURLY_WARNING_COOL")
-        if wind_speed > 25.0: risks.append("HOURLY_RISK_WIND")
-        return risks if risks else ["NORMAL"]
-
     # --- PUBLIC API METHODS ---
-    def get_daily_forecast(self, lat: float, lon: float, days: int = 7) -> List[Dict[str, Any]]:
-        raw_data = self._call_api(lat, lon, 'daily', days)
-        if 'error' in raw_data or 'daily' not in raw_data: return []
+    def get_full_forecast(self, lat: float, lon: float, days: int = 7) -> Dict[str, Any]:
+        """Lấy cả Current và Daily trong 1 API call để tối ưu và chính xác."""
+        params = {
+            'latitude': lat,
+            'longitude': lon,
+            'current': ",".join(self.DEFAULT_CURRENT_VARS),
+            'daily': ",".join(self.DEFAULT_DAILY_VARS),
+            'timezone': self.default_timezone,
+            'forecast_days': days,
+            'temperature_unit': 'celsius',
+            'wind_speed_unit': 'kmh'
+        }
 
-        daily = raw_data['daily']
-        structured_list = []
-        num_days = len(daily['time'])
+        try:
+            response = requests.get(self.BASE_URL, params=params)
+            response.raise_for_status()
+            data = response.json()
+            return data
+        except requests.exceptions.RequestException as e:
+            print(f"Lỗi khi gọi Open-Meteo API: {e}")
+            return {"error": str(e)}
+
+    def process_forecast_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
+        if 'error' in raw_data:
+            return raw_data
+
+        daily = raw_data.get('daily', {})
+        current = raw_data.get('current', {})
+        
+        # Xử lý Daily
+        structured_daily = []
+        num_days = len(daily.get('time', []))
 
         for i in range(num_days):
-            temp_max = daily['temperature_2m_max'][i]
-            temp_min = daily['temperature_2m_min'][i]
+            t_max = daily['temperature_2m_max'][i]
+            t_min = daily['temperature_2m_min'][i]
             precip = daily['precipitation_sum'][i]
-            wind_max = daily['wind_speed_10m_max'][i]
-            wmo_code = daily['weathercode'][i]
-
-            risks = self._analyze_daily_risk(temp_max, temp_min, precip, wind_max)
-
-            structured_list.append({
+            w_max = daily['wind_speed_10m_max'][i]
+            code = daily['weathercode'][i]
+            
+            risks = self._analyze_daily_risk(t_max, t_min, precip, w_max)
+            
+            structured_daily.append({
                 'date': daily['time'][i],
-                'temp_max': temp_max,
-                'temp_min': temp_min,
+                'temp_max': t_max,
+                'temp_min': t_min,
                 'precipitation_sum': precip,
-                'wind_max_kmh': wind_max,
-                'weather_desc': self._map_weather_code(wmo_code),
-                'risks': risks,
+                'wind_max_kmh': w_max,
+                'weather_desc': self._map_weather_code(code),
+                'risks': risks
             })
-        return structured_list
 
-    def get_hourly_forecast(self, lat: float, lon: float, hours: int = 24) -> List[Dict[str, Any]]:
-        raw_data = self._call_api(lat, lon, 'hourly', hours)
-        if 'error' in raw_data or 'hourly' not in raw_data: return []
+        # Xử lý Current (Lấy chính xác từ sensor, không tính trung bình)
+        current_risks = structured_daily[0]['risks'] if structured_daily else []
+        
+        current_obj = {
+            'temperature': current.get('temperature_2m'), # Real-time value
+            'temp_max': structured_daily[0]['temp_max'] if structured_daily else 0,
+            'temp_min': structured_daily[0]['temp_min'] if structured_daily else 0,
+            'weather_desc': self._map_weather_code(current.get('weather_code', 0)),
+            'daily_risks': current_risks,
+            'precipitation_sum': structured_daily[0]['precipitation_sum'] if structured_daily else 0,
+            'wind_max_kmh': current.get('wind_speed_10m', 0)
+        }
 
-        hourly = raw_data['hourly']
-        structured_list = []
-        num_hours = len(hourly['time'])
-
-        for i in range(num_hours):
-            temp = hourly['temperature_2m'][i]
-            precip_prob = hourly['precipitation_probability'][i]
-            wind_speed = hourly['wind_speed_10m'][i]
-            wmo_code = hourly['weathercode'][i]
-
-            risks = self._analyze_hourly_risk(temp, precip_prob, wind_speed)
-
-            structured_list.append({
-                'datetime': hourly['time'][i],
-                'temp_c': temp,
-                'precip_prob_percent': precip_prob,
-                'wind_speed_kmh': wind_speed,
-                'weather_desc': self._map_weather_code(wmo_code),
-                'risks': risks,
-            })
-        return structured_list
+        return {
+            'current_weather': current_obj,
+            'five_day_forecast': structured_daily
+        }
 
 # ==============================================================================
 # 3. ROUTE HANDLERS
 # ==============================================================================
 
-# Khởi tạo instance service duy nhất để tái sử dụng
 weather_service = OpenMeteoClient(default_timezone='Asia/Ho_Chi_Minh')
 
 @weather_bp.route('/forecast', methods=['GET'])
 def get_forecast():
     """
     API Endpoint: /api/weather/forecast?lat=...&lon=...
-    Trả về dữ liệu thời tiết đã được phân tích rủi ro.
     """
     try:
-        # Lấy tọa độ từ query params, mặc định là Hà Nội
         lat = float(request.args.get('lat', 21.0285))
         lon = float(request.args.get('lon', 105.8542))
     except ValueError:
         return jsonify({"error": "Invalid coordinates"}), 400
 
-    # Lấy dữ liệu từ service
-    daily_data = weather_service.get_daily_forecast(lat, lon, days=5)
+    # 1. Fetch raw data (Combined call)
+    raw_data = weather_service.get_full_forecast(lat, lon, days=5)
     
-    # Lấy thêm hourly nếu cần (để mở rộng sau này)
-    # hourly_data = weather_service.get_hourly_forecast(lat, lon, hours=24)
-
-    # Xử lý dữ liệu ngày hiện tại để hiển thị Main Card
-    current_day = daily_data[0] if daily_data else None
+    # 2. Process and Format
+    result = weather_service.process_forecast_data(raw_data)
     
-    if not current_day:
-        return jsonify({"error": "Service unavailable or API error"}), 503
+    if 'error' in result:
+        return jsonify(result), 503
 
-    # Trả về JSON đúng cấu trúc Frontend yêu cầu
-    return jsonify({
-        'current_weather': {
-            'temp_max': current_day['temp_max'],
-            'temp_min': current_day['temp_min'],
-            'temperature': round((current_day['temp_max'] + current_day['temp_min']) / 2),
-            'weather_desc': current_day['weather_desc'],
-            'daily_risks': current_day['risks'],
-            'precipitation_sum': current_day.get('precipitation_sum', 0),
-            'wind_max_kmh': current_day.get('wind_max_kmh', 0),
-        },
-        'five_day_forecast': daily_data,
-        # 'hourly_forecast': hourly_data # Bỏ comment nếu muốn trả về hourly
-    })
+    return jsonify(result)

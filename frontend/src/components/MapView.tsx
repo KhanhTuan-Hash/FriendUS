@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, MapPin, Navigation, Loader2, X, AlertCircle } from 'lucide-react';
 
-// Khai báo để TypeScript không báo lỗi window
+// Khai báo global types cho window
 declare global {
   interface Window {
     vietmapgl: any;
@@ -31,146 +31,260 @@ export function MapView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<LocationDetail | null>(null);
+  const [isMapReady, setIsMapReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- DEBUG STATES ---
-  const [logs, setLogs] = useState<string[]>([]);
-  const [hasCriticalError, setHasCriticalError] = useState(false);
-
-  // Hàm ghi log ra màn hình
-  const addLog = (msg: string, isError = false) => {
-    const time = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev, `[${time}] ${isError ? '❌' : '✅'} ${msg}`]);
-    console.log(`[MapView] ${msg}`);
-    if (isError) setHasCriticalError(true);
+  // Hàm thêm CSS VietMap nếu chưa có
+  const injectVietMapCSS = () => {
+    if (!document.querySelector('link[href*="vietmap-gl.css"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://maps.vietmap.vn/sdk/vietmap-gl/1.15.3/vietmap-gl.css';
+      document.head.appendChild(link);
+    }
   };
 
-  // 1. QUY TRÌNH KHỞI TẠO (Diagnostic Mode)
+  // 1. KHỞI TẠO MAP
   useEffect(() => {
-    const initProcess = async () => {
-      addLog("Bắt đầu khởi tạo MapView...");
+    let isMounted = true;
+    injectVietMapCSS();
 
-      // BƯỚC 1: KIỂM TRA DOM
-      if (!mapContainerRef.current) {
-        addLog("Lỗi: Không tìm thấy thẻ div chứa bản đồ (mapContainerRef is null)", true);
-        return;
-      }
-      addLog("DOM Container đã sẵn sàng.");
+    const initMap = async () => {
+      // Nếu map đã tồn tại, không init lại (Strict Mode safeguard)
+      if (mapInstanceRef.current) return;
 
-      // BƯỚC 2: GỌI BACKEND LẤY KEY
-      let tileKey = "";
+      if (!mapContainerRef.current) return;
+
       try {
-        addLog("Đang gọi API: http://localhost:5000/map/api/config ...");
+        // A. Lấy Config từ Backend
         const res = await fetch('http://localhost:5000/map/api/config');
-        
-        if (res.status === 401 || res.status === 302 || res.url.includes('login')) {
-             throw new Error("Lỗi Auth: API đang yêu cầu đăng nhập (302/401). Hãy kiểm tra lại file map.py đã xóa @login_required chưa.");
-        }
-        if (!res.ok) throw new Error(`Lỗi HTTP: ${res.status} ${res.statusText}`);
-
+        if (!res.ok) throw new Error('Failed to load map config');
         const data = await res.json();
-        addLog(`Backend phản hồi: ${JSON.stringify(data)}`);
+        const tileKey = data.tile_key;
 
-        if (!data.tile_key) throw new Error("Backend trả về tile_key rỗng. Kiểm tra file .env!");
-        if (data.tile_key.includes("YOUR_REAL")) throw new Error("Bạn chưa thay key thật vào file .env!");
-        
-        tileKey = data.tile_key;
-        addLog("Đã lấy được Tile Key hợp lệ.");
+        if (!tileKey) throw new Error('Missing VietMap Tile Key');
 
-      } catch (e: any) {
-        addLog(`Lỗi BƯỚC 2 (Backend): ${e.message}`, true);
-        return;
-      }
+        // B. Đợi SDK Load (Polling an toàn)
+        let attempts = 0;
+        while (!window.vietmapgl && attempts < 20) {
+          await new Promise(r => setTimeout(r, 200));
+          attempts++;
+        }
 
-      // BƯỚC 3: KIỂM TRA SDK VIETMAP (window.vietmapgl)
-      addLog("Đang kiểm tra thư viện VietMap GL SDK...");
-      let retries = 50; // Thử trong 10 giây (50 * 200ms)
-      while (!window.vietmapgl && retries > 0) {
-        await new Promise(r => setTimeout(r, 200));
-        retries--;
-      }
+        if (!window.vietmapgl) {
+          throw new Error('VietMap SDK not found. Please check index.html');
+        }
 
-      if (!window.vietmapgl) {
-        addLog("Lỗi BƯỚC 3: Không tìm thấy window.vietmapgl. Bạn đã thêm <script> vào index.html chưa?", true);
-        return;
-      }
-      addLog("Đã tìm thấy thư viện VietMap SDK.");
+        if (!isMounted) return;
 
-      // BƯỚC 4: VẼ BẢN ĐỒ
-      try {
-        addLog("Đang khởi tạo Map Instance...");
-        if (mapInstanceRef.current) return; // Đã có map rồi
-
+        // C. Khởi tạo Map
         window.vietmapgl.accessToken = tileKey;
         const map = new window.vietmapgl.Map({
           container: mapContainerRef.current,
           style: `https://maps.vietmap.vn/api/maps/light/styles.json?apikey=${tileKey}`,
-          center: [106.660172, 10.762622], // TP.HCM
+          center: [106.660172, 10.762622], // HCM
           zoom: 13,
           pitch: 0,
           bearing: 0,
         });
 
-        // Event listeners để debug
-        map.on('load', () => {
-             addLog("Sự kiện Map 'load' đã kích hoạt -> THÀNH CÔNG!");
-        });
-        
-        map.on('error', (e: any) => {
-             addLog(`Sự kiện Map 'error': ${JSON.stringify(e)}`, true);
-        });
-
         map.addControl(new window.vietmapgl.NavigationControl(), 'bottom-right');
-        mapInstanceRef.current = map;
-        addLog("Lệnh new Map() đã chạy xong.");
+        map.addControl(new window.vietmapgl.GeolocateControl({
+            positionOptions: { enableHighAccuracy: true },
+            trackUserLocation: true
+        }), 'bottom-right');
 
-      } catch (e: any) {
-        addLog(`Lỗi BƯỚC 4 (Render Map): ${e.message}`, true);
+        // D. Lắng nghe sự kiện load và error
+        map.on('load', () => {
+          if (isMounted) setIsMapReady(true);
+        });
+
+        // Bắt lỗi tile (403 Forbidden hoặc Invalid Key)
+        map.on('error', (e: any) => {
+          console.error("VietMap Runtime Error:", e);
+          if (e?.error?.message?.includes('Unable to parse') || e?.error?.status === 403) {
+            if (isMounted) {
+               // FIX: Use a more specific error message based on the status code if available,
+               // otherwise, rely on the general configuration warning.
+               const status = e?.error?.status;
+               let errorMessage = "Lỗi cấu hình Key: Vui lòng kiểm tra VIETMAP_TILE_KEY.";
+               
+               if (status === 403) {
+                   errorMessage = "Lỗi 403 Forbidden: Key bị từ chối. Kiểm tra Domain Whitelist hoặc Key Type.";
+               } else if (e?.error?.message?.includes('Unable to parse')) {
+                   errorMessage = "Lỗi parse tile: Key không hợp lệ hoặc không có quyền truy cập.";
+               }
+
+               setError(errorMessage);
+            }
+          }
+        });
+
+        mapInstanceRef.current = map;
+
+      } catch (err: any) {
+        if (isMounted) setError(err.message);
+        console.error("Map Init Error:", err);
       }
     };
 
-    initProcess();
+    initMap();
 
+    // CLEANUP FUNCTION (CRITICAL FIX FOR REACT STRICT MODE)
     return () => {
-      if (mapInstanceRef.current) mapInstanceRef.current.remove();
+      isMounted = false;
+      if (markerRef.current) {
+        markerRef.current.remove();
+        markerRef.current = null;
+      }
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null; // Quan trọng: Reset ref về null để lần mount sau init lại được
+      }
     };
   }, []);
 
-  // ... (Các hàm Search, FlyTo giữ nguyên như cũ, tôi lược bớt để tập trung debug lỗi hiển thị) ...
-  // (Bạn có thể giữ lại logic search từ file cũ nếu cần, ở đây tôi ưu tiên hiển thị map trước)
-  
-  return (
-    <div className="relative w-full h-[calc(100vh-64px)] bg-gray-100 flex flex-col">
+  // 2. XỬ LÝ TÌM KIẾM
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+
+    if (query.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(`http://localhost:5000/map/api/search?query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSearchResults(data);
+        }
+      } catch (err) {
+        console.error("Search error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 500);
+  };
+
+  // 3. XỬ LÝ CHỌN ĐỊA ĐIỂM
+  const handleSelectLocation = async (item: SearchResult) => {
+    setSearchQuery(item.display);
+    setSearchResults([]); // Ẩn dropdown
+    
+    try {
+      const res = await fetch(`http://localhost:5000/map/api/detail?ref_id=${item.ref_id}`);
+      const data = await res.json();
       
-      {/* KHUNG HIỂN THỊ LOG DEBUG (XÓA SAU KHI FIX XONG) */}
-      <div className="absolute top-4 left-4 z-50 bg-black/80 text-green-400 p-4 rounded-lg font-mono text-xs w-96 max-h-96 overflow-y-auto border border-green-500 shadow-2xl">
-        <h3 className="font-bold border-b border-green-600 pb-2 mb-2 text-white flex justify-between">
-           SYSTEM DIAGNOSTICS
-           {hasCriticalError && <span className="text-red-500 animate-pulse">ERROR DETECTED</span>}
-        </h3>
-        <ul className="space-y-1">
-            {logs.map((log, i) => (
-                <li key={i} className={log.includes('❌') ? 'text-red-400 font-bold' : ''}>{log}</li>
-            ))}
-        </ul>
-        {hasCriticalError && (
-            <div className="mt-4 p-2 bg-red-900/50 text-white border border-red-500 rounded">
-                <p>⚠️ Map không hiển thị do lỗi trên. Hãy chụp màn hình này và kiểm tra lại.</p>
+      if (data.lat && data.lng && mapInstanceRef.current) {
+        const { lat, lng } = data;
+
+        // Di chuyển map
+        mapInstanceRef.current.flyTo({
+          center: [lng, lat],
+          zoom: 15,
+          speed: 1.5
+        });
+
+        // Xóa marker cũ nếu có
+        if (markerRef.current) markerRef.current.remove();
+
+        // Tạo marker mới
+        const el = document.createElement('div');
+        el.className = 'w-8 h-8 bg-red-500 rounded-full border-2 border-white shadow-lg animate-bounce flex items-center justify-center';
+        el.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>';
+
+        markerRef.current = new window.vietmapgl.Marker(el)
+          .setLngLat([lng, lat])
+          .addTo(mapInstanceRef.current);
+
+        // Tạo popup
+        const popup = new window.vietmapgl.Popup({ offset: 25 })
+            .setText(item.name);
+        
+        markerRef.current.setPopup(popup).togglePopup();
+      }
+    } catch (err) {
+      console.error("Detail error:", err);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  return (
+    <div className="relative w-full h-full bg-gray-100 flex flex-col overflow-hidden">
+      
+      {/* ERROR OVERLAY */}
+      {error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded flex items-center gap-2 shadow-lg">
+          <AlertCircle className="w-5 h-5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* SEARCH BAR WIDGET */}
+      <div className="absolute top-4 left-4 right-4 md:left-4 md:w-96 z-10">
+        <div className="bg-white rounded-lg shadow-lg border border-gray-200">
+          <div className="flex items-center px-4 py-3 gap-3">
+            <Search className="w-5 h-5 text-gray-400" />
+            <input 
+              type="text"
+              placeholder="Tìm kiếm địa điểm (VD: Bitexco, Hoan Kiem)..."
+              className="flex-1 outline-none text-gray-700 placeholder-gray-400"
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+            {isSearching ? (
+              <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+            ) : searchQuery ? (
+              <button onClick={handleClearSearch}>
+                <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+              </button>
+            ) : null}
+          </div>
+
+          {/* SEARCH RESULTS DROPDOWN */}
+          {searchResults.length > 0 && (
+            <div className="border-t border-gray-100 max-h-80 overflow-y-auto rounded-b-lg bg-white">
+              {searchResults.map((result, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectLocation(result)}
+                  className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-start gap-3 transition-colors border-b border-gray-50 last:border-0"
+                >
+                  <MapPin className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium text-gray-800 text-sm">{result.display}</p>
+                    <p className="text-xs text-gray-500 truncate">{result.address}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* MAP CONTAINER */}
-      <div 
-        ref={mapContainerRef} 
-        className="flex-1 w-full h-full relative"
-        style={{ minHeight: '500px' }} // Đảm bảo div có chiều cao
-      >
-         {/* Nếu map chưa load, hiện nền xám */}
-         <div className="absolute inset-0 flex items-center justify-center text-gray-400 z-0">
-            Waiting for Map Rendering...
-         </div>
+      <div className="flex-1 relative w-full h-full bg-gray-200">
+        <div 
+          ref={mapContainerRef} 
+          className="absolute inset-0 w-full h-full"
+        />
+        
+        {/* LOADING OVERLAY */}
+        {!isMapReady && !error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100/80 backdrop-blur-sm z-20">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-3" />
+            <p className="text-gray-600 font-medium animate-pulse">Đang tải bản đồ...</p>
+          </div>
+        )}
       </div>
     </div>
   );
