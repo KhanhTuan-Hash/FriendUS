@@ -119,6 +119,7 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const defaultDateStr = tomorrow.toISOString().split('T')[0];
 
+        // LOGIC CHÍNH: Backend (ai_engine.py) trả về TẤT CẢ các gợi ý (tối đa 10) trong mảng data.data
         const newActivities: Activity[] = data.data.map((item: any, index: number) => ({
           id: Date.now() + index,
           time: 'TBD',
@@ -139,7 +140,8 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
         }));
         
         setActivities(newActivities);
-        setSelectedActivities(newActivities.map(a => a.id)); 
+        // [CHỈNH SỬA] Thay đổi từ tự động chọn thành KHÔNG CHỌN BẤT KỲ GỢI Ý NÀO
+        setSelectedActivities([]); 
         
         // Auto-fetch weather for all new items
         newActivities.forEach(act => fetchWeatherForActivity(act));
@@ -322,7 +324,7 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
           <div className="grid grid-cols-4 gap-3 mt-3">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
               <div className="flex items-center gap-1.5 mb-0.5"><Clock className="w-3.5 h-3.5" /> <span className="text-xs opacity-80">Duration</span></div>
-              <p className="text-base">~5 hours</p>
+              <p className="text-base">~{activities.length * 2} hours</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
               <div className="flex items-center gap-1.5 mb-0.5"><MapPin className="w-3.5 h-3.5" /> <span className="text-xs opacity-80">Activities</span></div>
@@ -358,25 +360,23 @@ export function AITripPlanner({ onClose, onAccept, chatContext }: Props) {
           ) : (
             <>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base dark:text-white font-semibold">Suggested Itinerary ({selectedActivities.length} selected)</h3>
+                {/* HIỂN THỊ TỔNG SỐ GỢI Ý */}
+                <h3 className="text-base dark:text-white font-semibold">Suggested Itinerary ({activities.length} items found)</h3>
                 <div className="flex gap-2">
                   <button onClick={() => scrollTimeline('left')} className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all"><ChevronLeft className="w-4 h-4 text-gray-600" /></button>
                   <button onClick={() => scrollTimeline('right')} className="p-1.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-all"><ChevronRight className="w-4 h-4 text-gray-600" /></button>
                 </div>
               </div>
 
+              {/* CONTAINER HIỂN THỊ TẤT CẢ GỢI Ý (Cuộn ngang) */}
               <div id="timeline-scroll" className="flex gap-4 overflow-x-auto pb-4 scroll-smooth hide-scrollbar" style={{ scrollbarWidth: 'none' }}>
                 {activities.map((activity, index) => {
                   const isSelected = selectedActivities.includes(activity.id);
                   const isHighlighted = highlightedActivity?.id === activity.id;
 
                   return (
+                    // Mỗi thẻ có chiều rộng cố định 80 (w-80), buộc phải cuộn nếu số lượng lớn
                     <div key={activity.id} className="flex-shrink-0 w-80 relative group">
-                      {/* Connector Line */}
-                      {index < activities.length - 1 && (
-                        <div className="absolute top-1/2 -translate-y-1/2 left-full w-4 h-0.5 bg-gradient-to-r from-purple-400 to-blue-400 z-0" />
-                      )}
-                      
                       {/* CARD */}
                       <div 
                         className={`relative bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all border-2 ${

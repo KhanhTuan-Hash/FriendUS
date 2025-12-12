@@ -21,7 +21,7 @@ class Config:
     CURRENT_LON = 106.6799075
     
     # Số lượng kết quả muốn lấy từ Vietmap API cho mỗi bước tìm kiếm
-    MAX_CANDIDATES_PER_STEP = 3
+    MAX_CANDIDATES_PER_STEP = 10 # ĐÃ CHẮC CHẮN LÀ 10
 
     # Vietmap Search Keys (Database từ model)
     SEARCH_KEYS = [
@@ -88,7 +88,8 @@ class VietmapAssistant:
         
         # Mã hóa từ khóa URL
         encoded_keyword = quote(keyword)
-        url = f"{Config.VIETMAP_API_ENDPOINT}?apikey={self.api_key}&text={encoded_keyword}&focus={lat},{lon}"
+        # ĐÃ THÊM THAM SỐ 'limit' ĐỂ YÊU CẦU API TRẢ VỀ ĐÚNG SỐ LƯỢNG
+        url = f"{Config.VIETMAP_API_ENDPOINT}?apikey={self.api_key}&text={encoded_keyword}&focus={lat},{lon}&limit={Config.MAX_CANDIDATES_PER_STEP}"
         
         print(f" > VIETMAP API URL: {url}")
 
@@ -125,7 +126,7 @@ class VietmapAssistant:
                 print(f" > Không tìm thấy địa điểm cho: {intent}") 
                 continue
 
-            # Lặp qua TẤT CẢ ứng cử viên để thêm vào route
+            # Lặp qua TẤT CẢ ứng cử viên (tối đa 10) để thêm vào route
             for candidate in candidates:
                 # Lấy thông tin, nếu thiếu thì để giá trị mặc định hoặc chuỗi rỗng
                 name = candidate.get('name', candidate.get('display', 'Unknown Place'))
@@ -161,6 +162,7 @@ class VietmapAssistant:
             search_key = step['search_key']
             print(f" > Searching Vietmap for Keyword: '{search_key}'")
             
+            # API call now attempts to get MAX_CANDIDATES_PER_STEP (10) results
             candidates = self.search_vietmap(search_key, location=last_coords)
             
             if candidates:
@@ -171,26 +173,13 @@ class VietmapAssistant:
                         first_valid_coord_candidate = candidate
                         break
 
-                # 2. CHỈ LẤY SỐ LƯỢNG KẾT QUẢ TỐI ĐA ĐÃ CẤU HÌNH
+                # 2. CHỈ LẤY SỐ LƯỢNG KẾT QUẢ TỐI ĐA ĐÃ CẤU HÌNH (10)
                 top_candidates = candidates[:Config.MAX_CANDIDATES_PER_STEP]
                 
                 # 3. LOGIC MỚI: ƯU TIÊN ĐẨY ỨNG CỬ VIÊN CÓ TỌA ĐỘ LÊN ĐẦU DANH SÁCH top_candidates
                 if first_valid_coord_candidate and first_valid_coord_candidate not in top_candidates:
-                    # Nếu ứng cử viên có tọa độ tốt không nằm trong top 3, chúng ta sẽ thay thế mục cuối cùng
-                    # (Hoặc không làm gì, nhưng để đảm bảo có tọa độ, ta nên đưa nó vào)
-                    # Tuy nhiên, để tránh phức tạp và giữ nguyên top N của Vietmap, chúng ta chỉ cần đảm bảo nó là top 1 nếu nó là top 3 trở xuống.
-                    
-                    # Tìm index của ứng cử viên hợp lệ (nếu nó nằm trong top N)
-                    try:
-                        idx = top_candidates.index(first_valid_coord_candidate)
-                        if idx > 0: # Chỉ sắp xếp lại nếu nó không phải là top 1
-                            top_candidates.insert(0, top_candidates.pop(idx))
-                            print(f" > Reordered: Moved valid coord candidate to index 0.")
-                    except ValueError:
-                        # Ứng cử viên hợp lệ không nằm trong top_candidates. Bỏ qua.
-                        pass
-                
-                # Nếu ứng cử viên hợp lệ là top 1 rồi, thì không cần làm gì.
+                    # Nếu ứng cử viên có tọa độ tốt không nằm trong top N, chúng ta sẽ bỏ qua
+                    pass
                 
                 steps_data.append({
                     'intent': search_key,
