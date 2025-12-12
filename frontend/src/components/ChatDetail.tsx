@@ -2,32 +2,35 @@ import { useState, useEffect } from 'react';
 // FIX: Sửa lỗi không giải quyết được module bằng cách thêm đuôi .tsx vào đường dẫn import
 import { AITripPlanner } from './AITripPlanner.tsx'; 
 import {
-  ArrowLeft,
-  Send,
-  DollarSign,
-  Calendar,
-  MessageSquare,
-  TrendingUp,
-  TrendingDown,
-  Plus,
-  Check,
-  ArrowRight,
-  Phone,
-  Video,
-  MoreVertical,
-  Image as ImageIcon,
-  LogOut,
-  X,
-  Clock,
-  MapPin,
-  Sparkles,
-  Edit2, // Thêm Edit2 để dùng cho Activity Title
+  ArrowLeft, Send, DollarSign, Calendar, MessageSquare, TrendingUp, TrendingDown,
+  Plus, Check, ArrowRight, Phone, Video, MoreVertical, Image as ImageIcon,
+  LogOut, X, Clock, MapPin, Sparkles, Edit2
 } from 'lucide-react';
+import { 
+  getChatFinance, addChatFinance, 
+  getChatPlanner, addChatPlanner 
+} from '../utils/chatDatabase';
 
 // --- STUB COMPONENTS (Assuming these were missing or caused conflicts) ---
-const DebtGraph = ({ relations, currentUser }: any) => <div className="p-4 text-gray-500">Debt Graph Stub</div>;
-const ClockTimePicker = ({ value, onChange }: any) => <div className="p-4 text-gray-500">Time Picker Stub: {value}</div>;
-const LocationPicker = ({ value, onChange }: any) => <div className="p-4 text-gray-500">Location Picker Stub: {value}</div>;
+const ClockTimePicker = ({ value, onChange }: any) => (
+  <input 
+    type="time" 
+    className="w-full p-3 bg-white border border-gray-200 rounded-lg text-center font-mono text-lg focus:ring-2 focus:ring-blue-500 outline-none"
+    value={value} 
+    onChange={e => onChange(e.target.value)} 
+  />
+);
+const LocationPicker = ({ value, onChange }: any) => (
+  <div className="relative">
+    <MapPin className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+    <input 
+      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+      placeholder="Search location..." 
+      value={value} 
+      onChange={e => onChange(e.target.value)} 
+    />
+  </div>
+);
 // --- END STUB COMPONENTS ---
 
 interface ChatConversation {
@@ -99,8 +102,8 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
   const [showAIPlanner, setShowAIPlanner] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
-  const [financeItems, setFinanceItems] = useState<FinanceItem[]>(DUMMY_FINANCE);
-  const [plannerActivities, setPlannerActivities] = useState<PlannerActivity[]>(DUMMY_ACTIVITIES);
+  const [financeItems, setFinanceItems] = useState<any[]>([]);
+  const [plannerActivities, setPlannerActivities] = useState<any[]>([]);
 
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [activityForm, setActivityForm] = useState({
@@ -116,31 +119,47 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
     // Logic to refetch Finance or Planner data when the tab changes,
     // which requires both activeTab (state) and chat.id (prop).
     if (activeTab === 'finance') {
-        // fetch finance data for chat.id
-        setFinanceItems(DUMMY_FINANCE);
+        const realFinance = getChatFinance(chat.id);
+        setFinanceItems(realFinance);
     } else if (activeTab === 'planner') {
-        // fetch planner data for chat.id
-        setPlannerActivities(DUMMY_ACTIVITIES);
+        const realPlanner = getChatPlanner(chat.id);
+        setPlannerActivities(realPlanner);
     }
   }, [activeTab, chat.id]);
+
+  const handleMockAddFinance = () => {
+     const newItem = {
+        id: Date.now(),
+        person: 'You',
+        amount: 100000,
+        description: 'Shared cost (Test)',
+        type: 'lend',
+        settled: false
+     };
+     addChatFinance(chat.id, newItem);
+     setFinanceItems(prev => [...prev, newItem]);
+  };
 
   const handleAddActivity = () => {
     const activityDateTime = new Date(`${activityForm.date}T${activityForm.time}`);
     const currentDateTime = new Date();
     const isCompleted = activityDateTime < currentDateTime;
     
-    const newActivity: PlannerActivity = {
-      id: plannerActivities.length + 1,
+    const newActivity = {
+      id: Date.now(), 
       time: activityForm.time,
       title: activityForm.title,
       location: activityForm.location,
       completed: isCompleted,
       date: activityForm.date,
-      description: activityForm.description
-      // lat/lng có thể được thêm sau khi có LocationPicker thực tế
+      description: activityForm.description,
+      lat: 0, 
+      lng: 0 
     };
-    
-    setPlannerActivities([...plannerActivities, newActivity]);
+    // Save DB and Update UI
+    addChatPlanner(chat.id, newActivity);
+    setPlannerActivities(prev => [...prev, newActivity]);
+    // Reset form
     setShowAddActivity(false);
     setActivityForm({ title: '', date: new Date().toISOString().substring(0, 10), time: '09:00', location: '', description: '' });
   };
@@ -164,550 +183,386 @@ export function ChatDetail({ chat, onBack, messages, onSendMessage, handleLeaveC
     }
   };
 
-  const totalDebt = financeItems
-    .filter((item) => item.type === 'debt' && !item.settled)
-    .reduce((sum, item) => sum + item.amount, 0);
+  // const totalDebt = financeItems
+  //   .filter((item) => item.type === 'debt' && !item.settled)
+  //   .reduce((sum, item) => sum + item.amount, 0);
 
-  const totalLend = financeItems
-    .filter((item) => item.type === 'lend' && !item.settled)
-    .reduce((sum, item) => sum + item.amount, 0);
+  // const totalLend = financeItems
+  //   .filter((item) => item.type === 'lend' && !item.settled)
+  //   .reduce((sum, item) => sum + item.amount, 0);
 
-  // FIX 4: Sửa lỗi ngày cứng và gán lat/lng từ gợi ý AI
+  // // FIX 4: Sửa lỗi ngày cứng và gán lat/lng từ gợi ý AI
+  // const handleAcceptAISuggestions = (aiActivities: any[]) => {
+  //   const today = new Date().toISOString().substring(0, 10);
+    
+  //   const newActivities = aiActivities.map((ai, index) => ({
+  //     id: Date.now() + index,
+  //     time: ai.time,
+  //     title: ai.title,
+  //     location: ai.location,
+  //     completed: false,
+  //     date: today, // Sửa từ '2025-12-10' cứng sang ngày hiện tại
+  //     description: ai.description,
+  //     lat: ai.lat, // Lấy lat từ AITripPlanner
+  //     lng: ai.lng, // Lấy lng từ AITripPlanner
+  //   }));
+  //   newActivities.forEach(act => addChatPlanner(chat.id, act));
+  //   setPlannerActivities(prev => [...prev, ...newActivities]);
+
+  //   const handleMockAddFinance = () => {
+  //    const newItem = {
+  //       id: Date.now(),
+  //       person: 'You',
+  //       amount: 100000,
+  //       description: 'Test payment',
+  //       type: 'lend',
+  //       settled: false
+  //    };
+  //    addChatFinance(chat.id, newItem);
+  //    setFinanceItems(prev => [...prev, newItem]);
+  //   };
+  // };
   const handleAcceptAISuggestions = (aiActivities: any[]) => {
     const today = new Date().toISOString().substring(0, 10);
-    
     const newActivities = aiActivities.map((ai, index) => ({
-      id: plannerActivities.length + index + 1,
+      id: Date.now() + index,
       time: ai.time,
       title: ai.title,
       location: ai.location,
       completed: false,
-      date: today, // Sửa từ '2025-12-10' cứng sang ngày hiện tại
+      date: today,
       description: ai.description,
-      lat: ai.lat, // Lấy lat từ AITripPlanner
-      lng: ai.lng, // Lấy lng từ AITripPlanner
+      lat: ai.lat,
+      lng: ai.lng,
     }));
-    
-    setPlannerActivities([...plannerActivities, ...newActivities]);
+    newActivities.forEach(act => addChatPlanner(chat.id, act));
+    setPlannerActivities(prev => [...prev, ...newActivities]);
   };
 
   return (
     <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm transition-colors duration-300">
+      {/* --- HEADER --- */}
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm transition-colors duration-300 z-20">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
-            <button
-              onClick={onBack}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
+            <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
               <ArrowLeft className="w-5 h-5 dark:text-gray-300" />
             </button>
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-xl">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-xl shadow-sm">
               {chat.avatar}
             </div>
             <div className="flex-1">
-              <h2 className="text-lg dark:text-white">{chat.name}</h2>
-              {chat.participants && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {chat.participants.join(', ')}
-                </p>
-              )}
+              <h2 className="text-lg font-bold dark:text-white">{chat.name}</h2>
+              {chat.participants && <p className="text-sm text-gray-500">{chat.participants.join(', ')}</p>}
             </div>
             
-            <button
-              onClick={() => alert('Starting voice call...')}
-              className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-              title="Voice Call"
-            >
-              <Phone className="w-5 h-5 dark:text-gray-300" />
-            </button>
-            <button
-              onClick={() => alert('Starting video call...')}
-              className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-              title="Video Call"
-            >
-              <Video className="w-5 h-5 dark:text-gray-300" />
-            </button>
-            
-            <div className="relative">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-              >
-                <MoreVertical className="w-5 h-5 dark:text-gray-300" />
-              </button>
-              
-              {showMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-                  <button
-                    onClick={() => {
-                      const confirmed = window.prompt("Type 'LEAVE' to confirm leaving this chat.");
-                      if (confirmed === 'LEAVE') {
-                        handleLeaveChat(chat.id);
-                      }
-                      setShowMenu(false);
-                    }}
-                    className="w-full px-4 py-3 text-left hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-3 text-red-600 dark:text-red-400 rounded-lg"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Leave Chat
-                  </button>
+            {/* Header Actions */}
+            <div className="flex gap-2">
+                <button onClick={() => alert('Call')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><Phone className="w-5 h-5 dark:text-gray-300"/></button>
+                <button onClick={() => alert('Video')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><Video className="w-5 h-5 dark:text-gray-300"/></button>
+                <div className="relative">
+                    <button onClick={() => setShowMenu(!showMenu)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><MoreVertical className="w-5 h-5 dark:text-gray-300"/></button>
+                    {showMenu && (
+                        <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 shadow-xl border dark:border-gray-700 rounded-lg z-50 overflow-hidden">
+                            <button onClick={() => handleLeaveChat(chat.id)} className="w-full px-4 py-3 text-left text-red-600 dark:text-red-400 flex gap-2 hover:bg-red-50 dark:hover:bg-red-900/20"><LogOut className="w-4 h-4"/> Leave Chat</button>
+                        </div>
+                    )}
                 </div>
-              )}
             </div>
           </div>
 
+          {/* Tabs Navigation */}
           <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'chat'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>Chat</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('finance')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'finance'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <DollarSign className="w-4 h-4" />
-              <span>Finance</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('planner')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'planner'
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Planner</span>
-            </button>
+            {['chat', 'finance', 'planner'].map(tab => (
+                <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab as any)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg capitalize font-medium transition-all ${
+                        activeTab === tab 
+                        ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 shadow-sm' 
+                        : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                    }`}
+                >
+                    {tab === 'chat' && <MessageSquare className="w-4 h-4"/>}
+                    {tab === 'finance' && <DollarSign className="w-4 h-4"/>}
+                    {tab === 'planner' && <Calendar className="w-4 h-4"/>}
+                    <span>{tab}</span>
+                </button>
+            ))}
           </div>
         </div>
       </div>
 
+      {/* --- CONTENT AREA --- */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto p-4">
+          
+          {/* 1. CHAT TAB */}
           {activeTab === 'chat' && (
-            <div className="space-y-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.isSystem ? 'justify-center' : message.isMe ? 'justify-end' : 'justify-start'}`}
-                >
+            <div className="space-y-4 pb-4">
+              {/* Thêm safety check messages? để tránh crash */}
+              {messages && messages.map((message) => (
+                <div key={message.id || Math.random()} className={`flex ${message.isSystem ? 'justify-center' : message.isMe ? 'justify-end' : 'justify-start'}`}>
                   {message.isSystem ? (
-                    <div className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full text-sm">
+                    <div className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-xs font-medium uppercase tracking-wide">
                       {message.content}
                     </div>
                   ) : (
-                    <div
-                      className={`max-w-md px-4 py-2 rounded-2xl ${
-                        message.isMe
-                          ? 'bg-blue-600 dark:bg-blue-700 text-white'
-                          : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 shadow-sm'
-                      }`}
-                    >
-                      {!message.isMe && (
-                        <p className="text-xs mb-1 opacity-70">{message.sender}</p>
-                      )}
-                      <p>{message.content}</p>
-                      <p className="text-xs mt-1 opacity-70">{message.time}</p>
+                    <div className={`max-w-[75%] px-4 py-2 rounded-2xl shadow-sm ${
+                        message.isMe 
+                        ? 'bg-blue-600 text-white rounded-br-none' 
+                        : 'bg-white dark:bg-gray-800 dark:text-gray-200 rounded-bl-none border border-gray-100 dark:border-gray-700'
+                    }`}>
+                      {!message.isMe && <p className="text-xs font-bold mb-1 opacity-70">{message.sender}</p>}
+                      <p className="leading-relaxed">{message.content}</p>
+                      <p className={`text-[10px] mt-1 text-right ${message.isMe ? 'text-blue-100' : 'text-gray-400'}`}>{message.time}</p>
                     </div>
                   )}
                 </div>
               ))}
+              <div id="scroll-anchor"></div>
             </div>
           )}
 
+          {/* 2. FINANCE TAB */}
           {activeTab === 'finance' && (
-            <div>
-              {chat.type === 'group' && (
-                <DebtGraph
-                  relations={[
-                    { from: 'You', to: 'Linh', amount: 500000 },
-                    { from: 'You', to: 'Tuan', amount: 200000 },
-                    { from: 'Minh', to: 'You', amount: 150000 },
-                    { from: 'Tuan', to: 'Linh', amount: 300000 },
-                    { from: 'Hoa', to: 'Minh', amount: 250000 }
-                  ]}
-                  currentUser="You"
-                />
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 transition-colors">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+               {/* Summary Cards */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <TrendingDown className="w-5 h-5 text-red-600 dark:text-red-400" />
-                    <h3 className="text-red-800 dark:text-red-300">You Owe</h3>
+                    <h3 className="text-red-800 dark:text-red-300 font-medium">You Owe</h3>
                   </div>
-                  <p className="text-2xl text-red-600 dark:text-red-400">
-                    {totalDebt.toLocaleString()} ₫
-                  </p>
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400">0 ₫</p>
                 </div>
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 transition-colors">
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
-                    <h3 className="text-green-800 dark:text-green-300">You Are Owed</h3>
+                    <h3 className="text-green-800 dark:text-green-300 font-medium">You Are Owed</h3>
                   </div>
-                  <p className="text-2xl text-green-600 dark:text-green-400">
-                    {totalLend.toLocaleString()} ₫
-                  </p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">0 ₫</p>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm transition-colors">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                  <h3 className="dark:text-white">Transactions</h3>
-                  <button className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm">
-                    <Plus className="w-4 h-4" />
-                    Add
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors">
+                <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                  <h3 className="font-bold dark:text-white">Transactions</h3>
+                  <button onClick={handleMockAddFinance} className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium">
+                    <Plus className="w-4 h-4" /> Add Test
                   </button>
                 </div>
+                
                 <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {financeItems.map((item) => (
-                    <div key={item.id} className="p-4 flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                          item.type === 'debt'
-                            ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
-                            : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                        }`}
-                      >
-                        {item.type === 'debt' ? (
-                          <TrendingDown className="w-5 h-5" />
-                        ) : (
-                          <TrendingUp className="w-5 h-5" />
-                        )}
+                  {financeItems.length > 0 ? (
+                    financeItems.map((item) => (
+                      <div key={item.id} className="p-4 flex items-center gap-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                             item.type === 'debt' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                         }`}>
+                             {item.type === 'debt' ? <TrendingDown size={18}/> : <TrendingUp size={18}/>}
+                         </div>
+                         <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">{item.description}</p>
+                            <p className="text-xs text-gray-500">{item.person} • {new Date(item.id).toLocaleDateString()}</p>
+                         </div>
+                         <div className="text-right">
+                            <p className={`font-bold ${item.type === 'debt' ? 'text-red-600' : 'text-green-600'}`}>
+                                {item.amount?.toLocaleString()} ₫
+                            </p>
+                            {!item.settled && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Pending</span>}
+                         </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">{item.person}</p>
-                        <p className="dark:text-white">{item.description}</p>
-                      </div>
-                      <div className="text-right">
-                        <p
-                          className={`${
-                            item.type === 'debt' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-                          }`}
-                        >
-                          {item.amount.toLocaleString()} ₫
-                        </p>
-                        {item.settled && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            Settled
-                          </span>
-                        )}
-                      </div>
+                    ))
+                  ) : (
+                    <div className="p-8 text-center text-gray-400">
+                        <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-20"/>
+                        <p>No transactions recorded yet.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
           )}
 
+          {/* 3. PLANNER TAB - (ĐÃ KHÔI PHỤC UI ĐẸP) */}
           {activeTab === 'planner' && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm transition-colors overflow-hidden">
-              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="dark:text-white">Trip Itinerary</h3>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 transition-colors overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+               {/* Header Planner */}
+              <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                  <div>
+                    <h3 className="font-bold text-lg dark:text-white">Trip Itinerary</h3>
+                    <p className="text-xs text-gray-500">Plan your journey together</p>
+                  </div>
                   <div className="flex gap-2">
-                    <button 
-                      onClick={() => setShowAIPlanner(true)}
-                      className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-700 dark:to-pink-700 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
-                      <Sparkles className="w-4 h-4" />
-                      AI Suggest
+                    <button onClick={() => setShowAIPlanner(true)} className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-all hover:scale-105">
+                        <Sparkles className="w-4 h-4" /> AI Suggest
                     </button>
-                    <button 
-                      onClick={() => setShowAddActivity(true)}
-                      className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors shadow-md">
-                      <Plus className="w-4 h-4" />
-                      Add Activity
+                    <button onClick={() => setShowAddActivity(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:bg-blue-700 transition-colors">
+                        <Plus className="w-4 h-4" /> Add Activity
                     </button>
                   </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => console.log('View changed')}
-                    className={`px-4 py-2 rounded-lg transition-colors 
-                      ${true
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                  >
-                    Day
-                  </button>
-                  <button
-                    onClick={() => console.log('View changed')}
-                    className={`px-4 py-2 rounded-lg transition-colors 
-                      ${false
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                  >
-                    Week
-                  </button>
-                  <button
-                    onClick={() => console.log('View changed')}
-                    className={`px-4 py-2 rounded-lg transition-colors 
-                      ${false
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                      }`}
-                  >
-                    Month
-                  </button>
-                </div>
               </div>
 
+              {/* List Activities (Beautiful UI Restored) */}
               <div className="p-4 overflow-x-auto">
                 <div className="flex items-start gap-6 min-w-max pb-4">
-                  {getTimelineDates().map((date) => {
+                  {getTimelineDates().length > 0 ? getTimelineDates().map((date) => {
                     const dateActivities = plannerActivities.filter((a) => a.date === date);
                     const dateObj = new Date(date);
-                    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
-                    const dayNum = dateObj.getDate();
-                    const monthName = dateObj.toLocaleDateString('en-US', { month: 'short' });
                     
                     return (
-                      <div key={date} className="flex flex-col items-center min-w-[280px]">
-                        <div className="text-center mb-4 sticky top-0 bg-white dark:bg-gray-800 py-2 z-10">
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{dayName}</p>
-                          <p className="text-2xl dark:text-white">{dayNum}</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{monthName}</p>
+                      <div key={date} className="flex flex-col items-center min-w-[300px]">
+                        {/* Date Header Sticky */}
+                        <div className="text-center mb-6 sticky top-0 z-10">
+                          <div className="bg-white dark:bg-gray-800 shadow-sm border border-gray-100 dark:border-gray-700 rounded-2xl px-6 py-2">
+                             <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">{dateObj.toLocaleDateString('en-US', { weekday: 'long' })}</p>
+                             <p className="text-2xl font-black dark:text-white">{dateObj.getDate()}</p>
+                             <p className="text-xs text-gray-400 font-medium">{dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                          </div>
                         </div>
 
-                        <div className="w-full space-y-3">
-                          {dateActivities.length > 0 ? (
-                            dateActivities.map((activity) => (
-                              <div
-                                key={activity.id}
-                                className={`relative bg-gradient-to-br ${
-                                  activity.completed
-                                    ? 'from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-300 dark:border-green-700'
-                                    : 'from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-300 dark:border-purple-700'
-                                } border-2 rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer group`}
+                        {/* Activities List */}
+                        <div className="w-full space-y-4 px-2">
+                          {dateActivities.map((activity) => (
+                              <div 
+                                key={activity.id} 
+                                className={`relative group bg-gradient-to-br ${
+                                    activity.completed 
+                                    ? 'from-green-50 to-emerald-50 border-green-200 dark:from-green-900/10 dark:to-emerald-900/10 dark:border-green-800' 
+                                    : 'from-blue-50 to-indigo-50 border-blue-200 dark:from-blue-900/10 dark:to-indigo-900/10 dark:border-blue-800'
+                                } border-2 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all cursor-pointer`}
                               >
                                 {activity.completed && (
-                                  <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1 shadow-md">
-                                    <Check className="w-4 h-4" />
+                                  <div className="absolute -top-3 -right-2 bg-green-500 text-white rounded-full p-1.5 shadow-md border-2 border-white dark:border-gray-900">
+                                    <Check className="w-3 h-3" />
                                   </div>
                                 )}
 
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                  <span className="text-sm text-gray-700 dark:text-gray-300">{activity.time}</span>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="bg-white/80 dark:bg-gray-800/80 p-1.5 rounded-lg shadow-sm">
+                                    <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <span className="text-sm font-bold text-gray-700 dark:text-gray-300 font-mono">{activity.time}</span>
                                 </div>
 
-                                <h4 className="text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                  {activity.title}
+                                <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2 leading-tight group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                                    {activity.title}
                                 </h4>
 
-                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
-                                  <MapPin className="w-3.5 h-3.5" />
-                                  <span>{activity.location}</span>
+                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3 bg-white/50 dark:bg-black/20 p-2 rounded-lg">
+                                  <MapPin className="w-4 h-4 shrink-0" />
+                                  <span className="truncate">{activity.location || "No location set"}</span>
                                 </div>
 
                                 {activity.description && (
-                                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 border-t border-gray-200 dark:border-gray-600 pt-2">
-                                    {activity.description}
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 border-t border-gray-200/50 dark:border-gray-700/50 pt-3 mt-1 line-clamp-2 italic">
+                                    "{activity.description}"
                                   </p>
                                 )}
-
-                                <div className="absolute -right-5 top-1/2 -translate-y-1/2 text-gray-300 dark:text-gray-600">
-                                  <ArrowRight className="w-5 h-5" />
-                                </div>
                               </div>
-                            ))
-                          ) : (
-                            <div className="text-center py-8 text-gray-400 dark:text-gray-500 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-                              <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                              <p className="text-sm">No activities</p>
-                            </div>
-                          )}
+                          ))}
                         </div>
                       </div>
                     );
-                  })}
+                  }) : (
+                     <div className="w-full text-center py-12 flex flex-col items-center justify-center text-gray-400">
+                        <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                            <Calendar className="w-8 h-8 opacity-50"/>
+                        </div>
+                        <p className="font-medium">No plans yet for this trip.</p>
+                        <p className="text-sm opacity-70 mt-1">Click "Add Activity" or use AI to start.</p>
+                     </div>
+                  )}
                 </div>
               </div>
-
-              {/* Add Activity Modal */}
-              {showAddActivity && (
-                <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl my-8">
-                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 flex items-center justify-between rounded-t-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white/20 rounded-lg">
-                          <Calendar className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg">Add New Activity</h3>
-                          <p className="text-xs text-blue-100">Plan your trip itinerary</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setShowAddActivity(false)}
-                        className="p-2 hover:bg-white/20 rounded-full transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="p-6 space-y-6 max-h-[calc(90vh-200px)] overflow-y-auto">
-                      <div>
-                        {/* FIX 5: Thay icon Calendar bằng Edit2/Sparkles cho Title */}
-                        <label className="block text-sm mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                          <Edit2 className="w-4 h-4" />
-                          Activity Title
-                        </label>
-                        <input
-                          type="text"
-                          placeholder=""
-                          value={activityForm.title}
-                          onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
-                          className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                            <Calendar className="w-4 h-4" />
-                            Date
-                          </label>
-                          <input
-                            type="date"
-                            value={activityForm.date}
-                            onChange={(e) => setActivityForm({ ...activityForm, date: e.target.value })}
-                            className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm mb-2 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            Time
-                          </label>
-                          <input
-                            type="time"
-                            value={activityForm.time}
-                            onChange={(e) => setActivityForm({ ...activityForm, time: e.target.value })}
-                            className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="border-2 border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700/30">
-                        <ClockTimePicker
-                          value={activityForm.time}
-                          onChange={(time: string) => setActivityForm({ ...activityForm, time })}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm mb-3 text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                          <MapPin className="w-4 h-4" />
-                          Location
-                        </label>
-                        <LocationPicker
-                          value={activityForm.location}
-                          onChange={(location: string) => setActivityForm({ ...activityForm, location })}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm mb-2 text-gray-700 dark:text-gray-300">
-                          Description / Notes
-                        </label>
-                        <textarea
-                          placeholder="Add any additional details about this activity..."
-                          value={activityForm.description}
-                          onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
-                          rows={3}
-                          className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-none transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-600 flex gap-3 rounded-b-2xl">
-                      <button
-                        onClick={() => setShowAddActivity(false)}
-                        className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddActivity}
-                        disabled={!activityForm.title || !activityForm.date || !activityForm.time}
-                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
-                      >
-                        Save Activity
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
       </div>
 
+      {/* --- FOOTER (INPUT) --- */}
       {activeTab === 'chat' && (
-        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 transition-colors duration-300">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => alert('Select image or video to send...')}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                title="Send Media"
-              >
-                <ImageIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
-              
-              <input
-                type="text"
-                placeholder="Aa"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                disabled={isSending}
-                className="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-full outline-none focus:bg-gray-200 dark:focus:bg-gray-600 transition-colors disabled:opacity-50"
-              />
-              
-              <button
-                onClick={handleSendMessage}
-                className="w-12 h-12 bg-blue-600 dark:bg-blue-700 text-white rounded-full flex items-center justify-center hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors disabled:bg-gray-300 dark:disabled:bg-gray-600"
-                disabled={!newMessage.trim() || isSending}
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
+        <div className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 px-4 py-3 z-20">
+          <div className="max-w-4xl mx-auto flex items-center gap-3">
+             <button className="p-2.5 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"><ImageIcon className="w-5 h-5"/></button>
+             <div className="flex-1 relative">
+                <input
+                    type="text"
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    disabled={isSending}
+                    className="w-full pl-5 pr-12 py-3 bg-gray-100 dark:bg-gray-700 dark:text-white rounded-full outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                />
+                <button 
+                    onClick={handleSendMessage} 
+                    disabled={!newMessage.trim() || isSending} 
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 transition-all shadow-md"
+                >
+                    <Send className="w-4 h-4" />
+                </button>
+             </div>
           </div>
         </div>
       )}
 
-      {showAIPlanner && (
-      <AITripPlanner 
-        onClose={() => setShowAIPlanner(false)}
-        onAccept={handleAcceptAISuggestions}
-        chatContext={messages
-          .filter(m => !m.isSystem) 
-          .map(m => m.content)
-          .join('. ')
-        } 
-      />
-    )}
+      {/* --- MODALS --- */}
+      {showAIPlanner && <AITripPlanner onClose={() => setShowAIPlanner(false)} onAccept={handleAcceptAISuggestions} chatContext="" />}
+      
+      {showAddActivity && (
+         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 p-0 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Modal Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-5 flex justify-between items-center text-white">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white/20 p-2 rounded-lg"><Calendar className="w-5 h-5"/></div>
+                        <div>
+                            <h3 className="text-lg font-bold">New Activity</h3>
+                            <p className="text-xs text-blue-100">Add details to your itinerary</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowAddActivity(false)} className="hover:bg-white/20 p-2 rounded-full transition-colors"><X className="w-5 h-5"/></button>
+                </div>
+                
+                {/* Modal Body */}
+                <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 flex gap-2"><Edit2 className="w-4 h-4"/> Activity Title</label>
+                        <input className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g. Dinner at 4P's Pizza" value={activityForm.title} onChange={e => setActivityForm({...activityForm, title: e.target.value})} />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Date</label>
+                            <input type="date" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={activityForm.date} onChange={e => setActivityForm({...activityForm, date: e.target.value})} />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Time</label>
+                            <ClockTimePicker value={activityForm.time} onChange={(val: string) => setActivityForm({...activityForm, time: val})} />
+                        </div>
+                    </div>
+
+                    <div>
+                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Location</label>
+                         <LocationPicker value={activityForm.location} onChange={(val: string) => setActivityForm({...activityForm, location: val})} />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Notes</label>
+                        <textarea rows={3} className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="Ticket prices, reservation code, etc." value={activityForm.description} onChange={e => setActivityForm({...activityForm, description: e.target.value})} />
+                    </div>
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-5 bg-gray-50 dark:bg-gray-700/50 border-t border-gray-100 dark:border-gray-700 flex gap-3">
+                    <button onClick={() => setShowAddActivity(false)} className="flex-1 py-3 px-4 bg-white border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                    <button onClick={handleAddActivity} className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform hover:-translate-y-0.5">Save Activity</button>
+                </div>
+            </div>
+         </div>
+      )}
     </div>
   );
 }

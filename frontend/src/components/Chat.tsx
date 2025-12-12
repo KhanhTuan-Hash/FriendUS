@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, Users, User, Plus, X, Globe, Lock, Trash2 } from 'lucide-react'; // Added Trash2 icon
 import { ChatDetail } from './ChatDetail';
+import { 
+  getLocalConversations, 
+  saveLocalConversations, 
+  getChatMessages, 
+  saveChatMessage   
+} from '../utils/chatDatabase';
 
 interface ChatConversation {
   id: number;
@@ -62,8 +69,11 @@ const DUMMY_USERS: UserResult[] = [
 ];
 
 export function Chat() {
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChat, setSelectedChat] = useState<ChatConversation | null>(null);
+
+  // Create Chaht States
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [newChatName, setNewChatName] = useState('');
   const [chatType, setChatType] = useState<'private' | 'public'>('private');
@@ -71,7 +81,7 @@ export function Chat() {
   
   // REAL DATA STATE
   const [messagesDatabase, setMessagesDatabase] = useState<Record<number, Message[]>>(DUMMY_MESSAGES);
-  const [conversationsList, setConversationsList] = useState<ChatConversation[]>(DUMMY_CONVERSATIONS);
+  const [conversationsList, setConversationsList] = useState<ChatConversation[]>([]);
   
   // Search Users State
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -85,24 +95,32 @@ export function Chat() {
 
   // 1. Fetch Conversations on Mount
   useEffect(() => {
-    fetchConversations();
-  }, []);
-
-  const fetchConversations = async () => {
-    try {
-      const response = await fetch('/api/conversations');
-      if (response.ok && isJson(response)) {
-        const data = await response.json();
-        setConversationsList(data);
-      } else {
-        throw new Error("Backend not JSON");
+    const initData = () => {
+      // A. Load from LocalStorage 
+      let localData = getLocalConversations();
+      
+      // If LocalStorage None, use Dummy Data and save
+      if (localData.length === 0) {
+        localData = DUMMY_CONVERSATIONS;
+        saveLocalConversations(localData);
       }
-    } catch (error) {
-      console.warn("Backend unavailable, using dummy conversations.");
-      // Ensure we don't overwrite if we already have added new chats locally in a previous session or state update
-      setConversationsList(prev => prev.length > 0 ? prev : DUMMY_CONVERSATIONS);
-    }
-  };
+      setConversationsList(localData);
+
+      // B. Check URL chat
+      const activeChatId = searchParams.get('activeChat');
+      if (activeChatId) {
+        const chatToOpen = localData.find((c: any) => c.id === Number(activeChatId));
+        if (chatToOpen) {
+          setSelectedChat(chatToOpen);
+          // Load messages for this chat immediately
+          const msgs = getChatMessages(chatToOpen.id);
+          setMessagesDatabase(prev => ({...prev, [chatToOpen.id]: msgs}));
+        }
+      }
+    };
+
+    initData();
+  }, [searchParams]);
 
   // 2. Fetch Messages for a specific chat
   const fetchMessages = async (chatId: number) => {
@@ -110,18 +128,16 @@ export function Chat() {
       const response = await fetch(`/api/chat/${chatId}/messages`);
       if (response.ok && isJson(response)) {
         const data = await response.json();
-        setMessagesDatabase(prev => ({
-          ...prev,
-          [chatId]: data
-        }));
+        setMessagesDatabase(prev => ({ ...prev, [chatId]: data }));
       } else {
         throw new Error("Backend not JSON");
       }
     } catch (error) {
-      console.warn("Backend unavailable, using dummy messages for chat", chatId);
+      // Fallback to LocalStorage
+      const localMessages = getChatMessages(chatId);
       setMessagesDatabase(prev => ({
-        // FIX: Ensure DUMMY_MESSAGES[chatId] access is safe since we removed ID 1
-        [chatId]: prev[chatId] || DUMMY_MESSAGES[chatId] || []
+        ...prev,
+        [chatId]: localMessages
       }));
     }
   };
@@ -166,150 +182,85 @@ export function Chat() {
         throw new Error("Backend failed");
       }
     } catch (error) {
-      console.warn("Backend unavailable, simulating send locally.");
+      // 1.Save DB
+      saveChatMessage(selectedChat.id, optimisticMessage); 
+
+      // 2. Update State Message
       setMessagesDatabase(prev => ({
         ...prev,
         [selectedChat.id]: [...(prev[selectedChat.id] || []), optimisticMessage]
       }));
-      setConversationsList(prev => prev.map(c => 
+
+      //3. Update State List Chat
+      const updatedConversations = conversationsList.map(c => 
         c.id === selectedChat.id 
           ? { ...c, lastMessage: content, time: optimisticMessage.time } 
           : c
-      ));
+      );
+      setConversationsList(updatedConversations);
+      saveLocalConversations(updatedConversations);
     }
   };
 
   // 5. Handle Leaving Chat
   const handleLeaveChat = async (chatId: number) => {
-    try {
-      const response = await fetch(`/api/chat/${chatId}/leave`, {
-        method: 'POST'
-      });
-      if (response.ok) {
-        setConversationsList(prev => prev.filter(c => c.id !== chatId));
-        setSelectedChat(null);
-      } else {
-        throw new Error("Backend failed");
-      }
-    } catch (error) {
-      console.warn("Backend unavailable, simulating leave.");
-      setConversationsList(prev => prev.filter(c => c.id !== chatId));
-      setSelectedChat(null);
-    }
+    const updatedList = conversationsList.filter(c => c.id !== chatId);
+    setConversationsList(updatedList);
+    saveLocalConversations(updatedList);
+    setSelectedChat(null);
+    window.history.pushState({}, '', '/chat'); // Clear URL params
   };
 
   // 6. Handle Create Chat
   const handleCreateChat = async () => {
     if (newChatName.trim()) {
-      try {
-        const payload = {
-          name: newChatName,
-          type: chatType === 'public' ? 'group' : 'individual',
-          participants: selectedUsers,
-          creator: CURRENT_USER_USERNAME // Pass creator in payload for server
-        };
-
-        const response = await fetch('/api/conversations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (response.ok && isJson(response)) {
-          const newConversation = await response.json();
-          setConversationsList(prev => [newConversation, ...prev]);
-          setShowCreateChat(false);
-          setNewChatName('');
-          setSelectedUsers([]);
-          handleSelectChat(newConversation);
-        } else {
-          throw new Error("Backend failed");
-        }
-      } catch (error) {
-        console.warn("Backend unavailable, simulating create chat.");
-        const newId = conversationsList.length > 0 ? Math.max(...conversationsList.map(c => c.id)) + 1 : 1;
-        
-        const newConversation: ChatConversation = {
-          id: newId,
+      const newConversation: ChatConversation = {
+          id: Date.now(),
           name: newChatName,
           avatar: newChatName.charAt(0).toUpperCase(),
           type: chatType === 'public' ? 'group' : 'individual',
           lastMessage: 'You created this group',
           time: 'Just now',
           unread: 0,
-          participants: selectedUsers.length > 0 ? selectedUsers : ['You'],
-          creator: CURRENT_USER_USERNAME // CRITICAL: Set creator for local logic
-        };
+          participants: selectedUsers,
+          creator: CURRENT_USER_USERNAME
+      };
         
-        setConversationsList(prev => [newConversation, ...prev]);
-        setMessagesDatabase(prev => ({ ...prev, [newId]: [] })); 
-        
-        setShowCreateChat(false);
-        setNewChatName('');
-        setSelectedUsers([]);
-        handleSelectChat(newConversation);
-      }
+      const updatedList = [newConversation, ...conversationsList];
+      setConversationsList(updatedList);
+      saveLocalConversations(updatedList);
+      
+      setShowCreateChat(false);
+      setNewChatName('');
+      setSelectedUsers([]);
+      handleSelectChat(newConversation);
     }
   };
 
-  // 8. Handle Delete Chat
+  // 7. Handle Delete Chat
   const handleDeleteChat = async (chatId: number) => {
-    // FIX: Using window.confirm since alert/confirm restriction is bypassed by using window prefix.
-    // If the standard `confirm` is still restricted, a custom modal is required.
-    // Since we only used prompt/alert previously, let's keep using alert for messages.
-    
     const confirmed = window.prompt("Type 'DELETE' to confirm permanent deletion of this chat.");
-    if (confirmed !== "DELETE") {
-      return;
-    }
+    if (confirmed !== "DELETE") return;
 
-    try {
-      // NOTE: Assume backend checks if CURRENT_USER_USERNAME is the creator of Room ID
-      const response = await fetch(`/api/chat/${chatId}/delete`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        setConversationsList(prev => prev.filter(c => c.id !== chatId));
-        setSelectedChat(null);
-      } else {
-        alert("Deletion failed. You might not be the creator of this chat.");
-      }
-    } catch (error) {
-      console.warn("Backend unavailable, simulating deletion locally.");
-      setConversationsList(prev => prev.filter(c => c.id !== chatId));
-      setSelectedChat(null);
-    }
+    const updatedList = conversationsList.filter(c => c.id !== chatId);
+    setConversationsList(updatedList);
+    saveLocalConversations(updatedList);
+    setSelectedChat(null);
   };
-
 
   // 7. Search Users for Invitation
   useEffect(() => {
     const searchUsers = async () => {
-      const query = userSearchQuery.length > 0 ? userSearchQuery : ''; 
+      const query = userSearchQuery.toLowerCase();
       if (!query) {
          setUserSearchResults(DUMMY_USERS);
          return;
       }
-
-      try {
-        const response = await fetch(`/api/users/search?q=${query}`);
-        if (response.ok && isJson(response)) {
-          const data = await response.json();
-          setUserSearchResults(data);
-        } else {
-          throw new Error("Backend failed");
-        }
-      } catch (error) {
-        // Fallback: Filter local dummy users
-        setUserSearchResults(
-          DUMMY_USERS.filter(u => u.username.toLowerCase().includes(query.toLowerCase()))
-        );
-      }
+      // Mock search local
+      const results = DUMMY_USERS.filter(u => u.username.toLowerCase().includes(query));
+      setUserSearchResults(results);
     };
-
-    const timeoutId = setTimeout(searchUsers, 300);
-    return () => clearTimeout(timeoutId);
+    searchUsers();
   }, [userSearchQuery]);
 
   const toggleUserSelection = (username: string) => {
@@ -318,15 +269,21 @@ export function Chat() {
     );
   };
 
+  // Filter conversations safely
   const filteredConversations = conversationsList.filter((conv) =>
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (conv.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // --- RENDER ---
+  
   if (selectedChat) {
     return (
       <ChatDetail
         chat={selectedChat}
-        onBack={() => setSelectedChat(null)}
+        onBack={() => {
+            setSelectedChat(null);
+            window.history.pushState({}, '', '/chat'); 
+        }}
         messages={messagesDatabase[selectedChat.id] || []}
         onSendMessage={handleSendMessage}
         handleLeaveChat={handleLeaveChat}
@@ -339,235 +296,154 @@ export function Chat() {
       {/* Header */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl dark:text-white">Messages</h2>
+          <h2 className="text-2xl dark:text-white font-bold">Messages</h2>
           <button
             onClick={() => setShowCreateChat(true)}
-            className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+            className="flex items-center gap-2 bg-blue-600 dark:bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
           >
             <Plus className="w-5 h-5" />
             New Chat
           </button>
         </div>
         
-        {/* Search Conversations */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 flex items-center gap-3 mb-4 transition-colors duration-300">
-          <Search className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+        {/* Search */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 flex items-center gap-3 mb-4 border border-gray-100 dark:border-gray-700">
+          <Search className="w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 outline-none bg-transparent dark:text-white dark:placeholder-gray-500"
+            className="flex-1 outline-none bg-transparent dark:text-white"
           />
         </div>
       </div>
 
       {/* Create Chat Modal */}
       {showCreateChat && (
-        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto transition-colors duration-300">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-xl dark:text-white">Create New Chat</h3>
-              <button
-                onClick={() => setShowCreateChat(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5 dark:text-gray-300" />
-              </button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700/50">
+              <h3 className="text-lg font-bold dark:text-white">Create New Chat</h3>
+              <button onClick={() => setShowCreateChat(false)}><X className="w-5 h-5 text-gray-500"/></button>
             </div>
 
-            <div className="p-6">
-              {/* Chat Name */}
-              <div className="mb-6">
-                <label className="block text-sm mb-2 dark:text-gray-300">Chat Name</label>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm font-medium mb-1.5 dark:text-gray-300">Chat Name</label>
                 <input
                   type="text"
-                  placeholder="Enter chat name..."
+                  placeholder="e.g. Summer Trip 2024"
                   value={newChatName}
                   onChange={(e) => setNewChatName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 dark:placeholder-gray-500 transition-colors"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
                 />
               </div>
 
-              {/* Chat Type */}
-              <div className="mb-6">
-                <label className="block text-sm mb-2 dark:text-gray-300">Chat Type</label>
+              <div>
+                <label className="block text-sm font-medium mb-1.5 dark:text-gray-300">Chat Type</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setChatType('private')}
-                    className={`p-4 border-2 rounded-lg flex items-center gap-3 transition-all ${
-                      chatType === 'private'
-                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
+                    className={`p-3 border rounded-lg flex items-center gap-2 ${chatType === 'private' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}
                   >
-                    <Lock className="w-5 h-5 dark:text-gray-300" />
-                    <div className="text-left">
-                      <p className="font-semibold dark:text-white">Private</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Only invited members</p>
-                    </div>
+                    <Lock className="w-4 h-4" /> <span className="text-sm font-medium">Private</span>
                   </button>
                   <button
                     onClick={() => setChatType('public')}
-                    className={`p-4 border-2 rounded-lg flex items-center gap-3 transition-all ${
-                      chatType === 'public'
-                        ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30'
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
+                    className={`p-3 border rounded-lg flex items-center gap-2 ${chatType === 'public' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}
                   >
-                    <Globe className="w-5 h-5 dark:text-gray-300" />
-                    <div className="text-left">
-                      <p className="font-semibold dark:text-white">Public</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Anyone can join</p>
-                    </div>
+                    <Globe className="w-4 h-4" /> <span className="text-sm font-medium">Public</span>
                   </button>
                 </div>
               </div>
 
-              {/* Select Users */}
-              <div className="mb-6">
-                <label className="block text-sm mb-2 dark:text-gray-300">
-                  Select Participants ({selectedUsers.length} selected)
-                </label>
-                
-                {/* Search Users Input */}
-                <div className="mb-2">
-                   <input
+              <div>
+                <label className="block text-sm font-medium mb-1.5 dark:text-gray-300">Add Participants</label>
+                <input
                     type="text"
-                    placeholder="Search users to add..."
+                    placeholder="Search user..."
                     value={userSearchQuery}
                     onChange={(e) => setUserSearchQuery(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 transition-colors"
-                  />
-                </div>
-
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {userSearchResults.length > 0 ? (
-                    userSearchResults.map((user) => (
-                      <button
-                        key={user.username}
-                        onClick={() => toggleUserSelection(user.username)}
-                        className={`w-full p-3 rounded-lg flex items-center gap-3 transition-colors ${
-                          selectedUsers.includes(user.username)
-                            ? 'bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-600'
-                            : 'bg-gray-50 dark:bg-gray-700 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-600'
-                        }`}
-                      >
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-xl">
-                          {user.avatar || user.username.charAt(0)}
-                        </div>
-                        <span className="flex-1 text-left dark:text-white">{user.username}</span>
-                        {selectedUsers.includes(user.username) && (
-                          <div className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center">
-                            ✓
-                          </div>
-                        )}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                      {userSearchQuery ? "No users found" : "Type to search users..."}
-                    </div>
-                  )}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg mb-2 focus:outline-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
+                />
+                <div className="max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-lg p-2 dark:border-gray-700">
+                  {userSearchResults.map((user) => (
+                    <button
+                      key={user.username}
+                      onClick={() => toggleUserSelection(user.username)}
+                      className={`w-full p-2 rounded-lg flex items-center gap-3 ${selectedUsers.includes(user.username) ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200'}`}
+                    >
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">{user.avatar}</div>
+                      <span className="text-sm flex-1 text-left">{user.username}</span>
+                      {selectedUsers.includes(user.username) && <Check className="w-4 h-4"/>}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCreateChat}
-                  disabled={!newChatName.trim()}
-                  className="flex-1 bg-blue-600 dark:bg-blue-700 text-white py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
-                >
-                  Create Chat
-                </button>
-                <button
-                  onClick={() => setShowCreateChat(false)}
-                  className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
+              <button
+                onClick={handleCreateChat}
+                disabled={!newChatName.trim()}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-md"
+              >
+                Create Chat
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {/* Conversations List */}
-      <div className="flex-1 overflow-y-auto space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1">
         {filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => (
             <div 
               key={conversation.id}
-              className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 hover:shadow-md transition-all text-left border border-transparent dark:border-gray-700 flex items-center"
+              onClick={() => handleSelectChat(conversation)}
+              className="group w-full bg-white dark:bg-gray-800 rounded-xl p-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all cursor-pointer border border-transparent hover:border-gray-100 dark:hover:border-gray-600 flex items-center shadow-sm"
             >
-              
-              {/* Conversation Info (Clickable part) */}
-              <button
-                onClick={() => handleSelectChat(conversation)}
-                className="flex-1 min-w-0 flex items-center gap-3 text-left"
-              >
-                {/* Avatar */}
-                <div className="relative">
-                  <div className="w-14 h-14 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center text-2xl">
+              <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 rounded-full flex items-center justify-center text-xl shadow-inner">
                     {conversation.avatar}
                   </div>
-                  {conversation.unread > 0 && (
-                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-xs">
-                      {conversation.unread}
-                    </div>
-                  )}
-                </div>
+                  {conversation.unread > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white">{conversation.unread}</div>}
+              </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="truncate flex items-center gap-2 dark:text-white">
-                      {conversation.name}
-                      {conversation.type === 'group' && (
-                        <Users className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      )}
-                    </h3>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap ml-2">
-                      {conversation.time}
-                    </span>
+              <div className="flex-1 ml-4 min-w-0">
+                  <div className="flex justify-between items-baseline mb-1">
+                      <h4 className="font-bold text-gray-900 dark:text-white truncate">{conversation.name}</h4>
+                      <span className="text-xs text-gray-400 whitespace-nowrap">{conversation.time}</span>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                    {conversation.lastMessage}
+                  <p className="text-sm text-gray-500 dark:text-gray-400 truncate group-hover:text-blue-600 transition-colors">
+                      {conversation.lastMessage}
                   </p>
-                  {conversation.type === 'group' && conversation.participants && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {conversation.participants.length} participants
-                    </p>
-                  )}
-                </div>
-              </button>
+              </div>
 
-              {/* Delete Button (Only visible for the creator) */}
               {conversation.creator === CURRENT_USER_USERNAME && (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation(); // Prevent opening the chat detail
-                    handleDeleteChat(conversation.id);
-                  }}
-                  className="p-2 ml-4 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-full transition-colors"
-                  title="Delete Chat (Creator Only)"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteChat(conversation.id); }}
+                  className="ml-2 p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
                 >
-                  <Trash2 className="w-5 h-5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               )}
-
             </div>
           ))
         ) : (
-          <div className="flex-1 flex items-center justify-center mt-10">
-            <div className="text-center text-gray-400 dark:text-gray-500">
-              <User className="w-16 h-16 mx-auto mb-2 opacity-50" />
-              <p>No conversations found</p>
-            </div>
+          <div className="flex flex-col items-center justify-center mt-20 text-gray-400 opacity-60">
+            <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4"><User className="w-10 h-10"/></div>
+            <p>No conversations found</p>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+// Helper component for Check icon (was missing in Lucide import sometimes)
+const Check = ({className}: {className?: string}) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <polyline points="20 6 9 17 4 12" />
+    </svg>
+);

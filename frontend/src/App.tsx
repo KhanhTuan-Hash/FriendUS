@@ -119,7 +119,8 @@ function MainLayout() {
           <Route path="/map" element={<MapView />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/weather" element={<Weather />} />
-          <Route path="/profile" element={<Profile onLogout={handleLogout} />} />
+          <Route path="/profile" element={<Profile onLogout={handleLogout} />} /> {/* My Profile */}
+          <Route path="/profile/:userId" element={<Profile />} /> {/* Other User's Profile */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>

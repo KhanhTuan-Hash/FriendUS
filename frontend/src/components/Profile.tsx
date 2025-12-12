@@ -1,20 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';// Hooks for URL params and navigation
 import {
-  Camera,
-  Edit2,
-  MapPin,
-  Mail,
-  Phone,
-  Calendar,
-  Users,
-  Heart,
-  Settings,
-  LogOut,
-  Check,
-  X,
-  Upload,
-  FileText
+  Camera, Edit2, MapPin, Mail, Phone, Calendar, Users, Heart,
+  Settings, LogOut, Check, X, Upload, FileText,
+  UserPlus, UserMinus, MessageCircle, Clock // New icons
 } from 'lucide-react';
+import { getUserById, checkFriendStatus, FriendStatus } from '../utils/profileDatabase';
+import { findOrCreateChat } from '../utils/chatDatabase';
 
 // STUB COMPONENTS (To ensure dependencies resolve without external files)
 const ImageWithFallback = ({ src, alt, className }: any) => <img src={src || 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=='} alt={alt} className={className} />;
@@ -63,9 +55,26 @@ const initialProfile: UserProfile = {
 const avatarOptions = ['👤', '😊', '🙂', '😎', '🤗', '🥳', '🤩', '😇', '🧑', '👨', '👩', '🧔', '👱', '🧑‍💼', '👨‍💼'];
 
 export function Profile({ onLogout }: ProfileProps) {
-  const [profile, setProfile] = useState<UserProfile>(initialProfile);
+  const { userId } = useParams(); // Get ID from URL
+  const navigate = useNavigate();
+
+   // Determine if this is the current user's profile
+  // If no userId in URL, or userId matches current user ID (999), it's "Me"
+  const myInfo = { username: 'Minh Nguyen', id: '999' }; 
+  const currentUserId = '999'; 
+
+  const targetUserId = userId || currentUserId;
+  const isOwnProfile = targetUserId === currentUserId;
+
+  const [profile, setProfile] = useState<any>(initialProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [editedProfile, setEditedProfile] = useState<UserProfile>(initialProfile);
+
+  // New State for Friend Actions
+  const [friendStatus, setFriendStatus] = useState<FriendStatus>('me');
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Old Modal States
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showManageFriends, setShowManageFriends] = useState(false);
   const [showSavedPlaces, setShowSavedPlaces] = useState(false);
@@ -75,25 +84,57 @@ export function Profile({ onLogout }: ProfileProps) {
 
   // 1. Fetch Profile Data on Load (Simulated API call)
   useEffect(() => {
-    const fetchProfile = async () => {
-      // In a real app: const response = await fetch('/api/profile');
-      // For now, simulate loading delay and success/failure
+    const loadProfile = async () => {
+      setIsLoading(true);
       try {
-        setFetchError(null);
-        await new Promise(resolve => setTimeout(resolve, 500)); 
-        
-        // Assume API returns data matching UserProfile structure (mapping name -> display_name, location -> location_label)
-        const fetchedData: UserProfile = { ...initialProfile, name: 'Minh Nguyen', username: '@minhnguyen' };
-        setProfile(fetchedData);
-        setEditedProfile(fetchedData);
+        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
+        if (isOwnProfile) {
+          // Load my own profile
+          setFriendStatus('me');
+        } else {
+          const user = getUserById(targetUserId);
+          if(user) setProfile(user);
+          setFriendStatus(checkFriendStatus(targetUserId));
+        }
       } catch (error) {
-        setFetchError("Failed to load profile data.");
-        console.error(error);
+        console.error("Error loading profile", error);
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchProfile();
-  }, []);
+
+    loadProfile();
+  }, [targetUserId, isOwnProfile]);
+
+  const handleMessage = () => {
+    // 1. Take Id chat
+    const chatId = findOrCreateChat(
+        { username: myInfo.username }, // your info
+        { 
+        name: profile.name,         
+        username: profile.username, 
+        avatar: profile.avatar 
+        } 
+    );
+
+    // 2. Go to chat
+    navigate(`/chat?activeChat=${chatId}`);
+  };
+
+  // Handle Friend Actions (Add, Unfriend, Cancel)
+  const handleFriendAction = async () => {
+    // Simulate API call
+    if (friendStatus === 'none') {
+      setFriendStatus('pending'); // Send Request
+    } else if (friendStatus === 'pending') {
+      setFriendStatus('none'); // Cancel Request
+    } else if (friendStatus === 'friends') {
+      if(window.confirm("Are you sure you want to unfriend?")) {
+         setFriendStatus('none'); // Unfriend
+      }
+    }
+  };
 
   // 2. Save Profile (Simulated API call)
   const handleSave = async () => {
@@ -156,7 +197,9 @@ export function Profile({ onLogout }: ProfileProps) {
   const triggerFileInput = () => {
     document.getElementById('avatar-upload')?.click();
   };
-  
+
+  if (isLoading) return <div className="p-8 text-center">Loading Profile...</div>;
+
   if (fetchError) {
       return (
           <div className="max-w-4xl mx-auto p-8 text-center bg-red-100 dark:bg-red-900/50 rounded-lg m-4">
@@ -167,287 +210,234 @@ export function Profile({ onLogout }: ProfileProps) {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    <div className="max-w-4xl mx-auto p-4 pb-20">
       {/* Profile Header */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden mb-6 transition-colors duration-300">
-        {/* Cover Image */}
-        <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-700 dark:to-purple-800 transition-colors duration-300" />
-
-        {/* Profile Info */}
+        <div className="h-32 bg-gradient-to-r from-blue-500 to-purple-600 dark:from-blue-700 dark:to-purple-800" />
+        
         <div className="px-6 pb-6">
-          {/* Avatar */}
-          <div className="relative -mt-16 mb-4">
-            <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full border-4 border-white dark:border-gray-800 shadow-lg flex items-center justify-center text-6xl transition-colors duration-300 overflow-hidden">
-              {(isEditing ? editedProfile.avatar : profile.avatar).startsWith('data:') ? (
-                <ImageWithFallback // Using ImageWithFallback stub
-                  src={isEditing ? editedProfile.avatar : profile.avatar} 
-                  alt="Profile avatar" 
-                  className="w-full h-full object-cover"
-                />
+          <div className="flex flex-col md:flex-row items-start md:items-end -mt-12 md:-mt-16 gap-4">
+            <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full border-4 border-white dark:border-gray-800 shadow-lg flex items-center justify-center text-6xl overflow-hidden">
+               {/* Avatar Display Logic */}
+               {(isEditing ? editedProfile.avatar : profile.avatar).startsWith('data:') ? (
+                <img src={isEditing ? editedProfile.avatar : profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <span>{isEditing ? editedProfile.avatar : profile.avatar}</span>
               )}
             </div>
-            {isEditing && (
-              <button
-                onClick={() => setShowAvatarPicker(!showAvatarPicker)}
-                className="absolute bottom-0 right-0 w-10 h-10 bg-blue-600 dark:bg-blue-700 text-white rounded-full flex items-center justify-center hover:bg-blue-700 dark:hover:bg-blue-600 shadow-lg transition-colors"
-              >
+            
+            {/* Only show Edit Avatar button if it's My Profile and currently Editing */}
+            {isOwnProfile && isEditing && (
+              <button onClick={() => setShowAvatarPicker(!showAvatarPicker)} className="absolute bottom-0 right-0 w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg">
                 <Camera className="w-5 h-5" />
               </button>
             )}
           </div>
 
-          {/* Avatar Picker */}
-          {isEditing && showAvatarPicker && (
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4 transition-colors duration-300">
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">Choose your avatar:</p>
-              <div className="grid grid-cols-5 gap-3">
-                {avatarOptions.map((avatar, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleAvatarChange(avatar)}
-                    className="w-12 h-12 bg-white dark:bg-gray-600 rounded-full border-2 border-gray-200 dark:border-gray-500 hover:border-blue-600 dark:hover:border-blue-400 flex items-center justify-center text-2xl transition-all hover:scale-110"
-                  >
-                    {avatar}
-                  </button>
-                ))}
-                <button
-                  onClick={triggerFileInput}
-                  className="w-12 h-12 bg-white dark:bg-gray-600 rounded-full border-2 border-gray-200 dark:border-gray-500 hover:border-blue-600 dark:hover:border-blue-400 flex items-center justify-center text-2xl transition-all hover:scale-110"
-                >
-                  <Upload className="w-5 h-5" />
-                </button>
-                <input
-                  type="file"
-                  id="avatar-upload"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-              </div>
-            </div>
+          {/* Avatar Picker (Only for My Profile + Edit Mode) */}
+          {isOwnProfile && isEditing && showAvatarPicker && (
+             <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+                <div className="grid grid-cols-5 gap-3">
+                    {avatarOptions.map((av, idx) => (
+                        <button key={idx} onClick={() => handleAvatarChange(av)} className="text-2xl">{av}</button>
+                    ))}
+                </div>
+             </div>
           )}
 
-          {/* Name and Username */}
-          {isEditing ? (
-            <div className="mb-4 space-y-3">
-              <div>
-                <label className="text-sm text-gray-600 dark:text-gray-300 mb-1 block">Name</label>
-                <input
-                  type="text"
-                  value={editedProfile.name}
-                  onChange={(e) =>
-                    setEditedProfile({ ...editedProfile, name: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 transition-colors"
-                  disabled={isSaving}
-                />
-              </div>
-              <div>
-                <label className="text-sm text-gray-600 dark:text-gray-300 mb-1 block">Username</label>
-                <input
-                  type="text"
-                  value={editedProfile.username}
-                  onChange={(e) =>
-                    setEditedProfile({ ...editedProfile, username: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 transition-colors"
-                  disabled={isSaving}
-                />
-              </div>
+          {/* User Info & Actions Area */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-6">
+            
+            {/* Name/Username Inputs or Display */}
+            <div className="flex-1 w-full md:w-auto">
+                {isOwnProfile && isEditing ? (
+                    <div className="space-y-3 mb-4">
+                        <input value={editedProfile.name} onChange={e => setEditedProfile({...editedProfile, name: e.target.value})} className="block w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:text-white" placeholder="Name"/>
+                        <input value={editedProfile.username} onChange={e => setEditedProfile({...editedProfile, username: e.target.value})} className="block w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:text-white" placeholder="Username"/>
+                    </div>
+                ) : (
+                    <div className="mb-4">
+                        <h2 className="text-2xl font-bold dark:text-white flex items-center gap-2">
+                            {profile.name}
+                            {/* Show 'Friend' badge if viewing a friend's profile */}
+                            {!isOwnProfile && friendStatus === 'friends' && (
+                                <span className="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full border border-green-200">Friend</span>
+                            )}
+                        </h2>
+                        <p className="text-gray-600 dark:text-gray-400">{profile.username}</p>
+                    </div>
+                )}
             </div>
-          ) : (
-            <div className="mb-4">
-              <h2 className="text-2xl mb-1 dark:text-white">{profile.name}</h2>
-              <p className="text-gray-600 dark:text-gray-400">{profile.username}</p>
-            </div>
-          )}
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors">
-              <p className="text-2xl text-blue-600 dark:text-blue-400">{profile.stats.posts}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Posts</p>
-            </div>
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors">
-              <p className="text-2xl text-purple-600 dark:text-purple-400">{profile.stats.friends}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Friends</p>
-            </div>
-            <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors">
-              <p className="text-2xl text-green-600 dark:text-green-400">{profile.stats.trips}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Places Visited</p>
-            </div>
+            {/* ACTION BUTTONS (Logic split between Me vs Others) */}
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                  {isOwnProfile ? (
+                    isEditing ? (
+                      <>
+                        <button onClick={handleSave} className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2"><Check size={18}/> Save</button>
+                        <button onClick={handleCancel} className="flex-1 md:flex-none bg-gray-200 text-gray-800 px-4 py-2 rounded-lg flex items-center justify-center gap-2"><X size={18}/> Cancel</button>
+                      </>
+                    ) : (
+                      <button onClick={() => setIsEditing(true)} className="flex-1 md:flex-none bg-gray-100 dark:bg-gray-700 dark:text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-gray-200">
+                        <Edit2 size={18} /> Edit Profile
+                      </button>
+                    )
+                  ) : (
+                    <>
+                      {/* Friend Actions */}
+                      {friendStatus === 'none' && (
+                        <button onClick={handleFriendAction} className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-blue-700">
+                          <UserPlus size={18} /> Add Friend
+                        </button>
+                      )}
+                      {friendStatus === 'pending' && (
+                        <button onClick={handleFriendAction} className="flex-1 md:flex-none bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2">
+                          <Clock size={18} /> Pending
+                        </button>
+                      )}
+                      {friendStatus === 'friends' && (
+                        <button onClick={handleFriendAction} className="flex-1 md:flex-none bg-red-50 text-red-600 border border-red-200 px-4 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-red-100">
+                          <UserMinus size={18} /> Unfriend
+                        </button>
+                      )}
+
+                      {/* Message Button - Đã gắn logic mới */}
+                      <button 
+                        onClick={handleMessage}
+                        className="flex-1 md:flex-none bg-gradient-to-r from-blue-500 to-purple-600 text-white px-5 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 hover:opacity-90 shadow-md"
+                      >
+                        <MessageCircle size={18} /> Message
+                      </button>
+                    </>
+                  )}
+                </div>
           </div>
-
-          {/* Edit/Save Buttons */}
-          {isEditing ? (
-            <div className="flex gap-3 mb-6">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 bg-blue-600 dark:bg-blue-700 text-white py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-              >
-                {isSaving ? 'Saving...' : <><Check className="w-5 h-5" /> Save Changes</>}
-              </button>
-              <button
-                onClick={handleCancel}
-                disabled={isSaving}
-                className="flex-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-              >
-                <X className="w-5 h-5" />
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="w-full bg-blue-600 dark:bg-blue-700 text-white py-3 rounded-lg hover:bg-blue-700 dark:hover:bg-blue-600 flex items-center justify-center gap-2 mb-6 transition-colors"
-            >
-              <Edit2 className="w-5 h-5" />
-              Edit Profile
-            </button>
+              
+          {/* Avatar Picker */}
+          {isOwnProfile && isEditing && showAvatarPicker && (
+             <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg flex flex-wrap gap-2">
+                {avatarOptions.map((av, idx) => (
+                    <button key={idx} onClick={() => handleAvatarChange(av)} className="text-2xl hover:scale-110">{av}</button>
+                ))}
+             </div>
           )}
+          
+          {/* Stats Section */}
+          <div className="grid grid-cols-3 gap-4">
+             <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <p className="text-2xl text-blue-600 dark:text-blue-400">{profile.stats.posts}</p>
+                <p className="text-sm text-gray-500">Posts</p>
+             </div>
+             <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <p className="text-2xl text-purple-600 dark:text-purple-400">{profile.stats.friends}</p>
+                <p className="text-sm text-gray-500">Friends</p>
+             </div>
+             <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <p className="text-2xl text-green-600 dark:text-green-400">{profile.stats.trips}</p>
+                <p className="text-sm text-gray-500">Trips</p>
+             </div>
+          </div>
         </div>
       </div>
 
-      {/* Profile Details */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 transition-colors duration-300">
-        <h3 className="text-xl mb-4 dark:text-white">Profile Information</h3>
-
-        <div className="space-y-4">
-          {/* Bio */}
-          <div>
-            <label className="text-sm text-gray-600 dark:text-gray-400 mb-2 block">Bio</label>
-            {isEditing ? (
-              <textarea
-                value={editedProfile.bio}
-                onChange={(e) =>
-                  setEditedProfile({ ...editedProfile, bio: e.target.value })
-                }
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 transition-colors"
-                disabled={isSaving}
-              />
-            ) : (
-              <p className="text-gray-800 dark:text-gray-200">{profile.bio}</p>
+      {/* Profile Info Details */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
+          <h3 className="text-xl mb-4 dark:text-white font-semibold">About</h3>
+          
+          <div className="space-y-4">
+            {/* Bio */}
+            <div>
+                <label className="text-sm text-gray-500 block mb-1">Bio</label>
+                {isOwnProfile && isEditing ? (
+                    <textarea value={editedProfile.bio} onChange={e => setEditedProfile({...editedProfile, bio: e.target.value})} className="w-full border p-2 rounded dark:bg-gray-700 dark:text-white" rows={3}/>
+                ) : (
+                    <p className="dark:text-gray-200">{profile.bio}</p>
+                )}
+            </div>
+            {/* Location */}
+            <div className="flex items-center gap-3">
+                <MapPin className="w-5 h-5 text-gray-400" />
+                <div className="flex-1">
+                    <label className="text-xs text-gray-500">Location</label>
+                    {isOwnProfile && isEditing ? (
+                        <input value={editedProfile.location} onChange={e => setEditedProfile({...editedProfile, location: e.target.value})} className="w-full border p-1 rounded mt-1 dark:bg-gray-700 dark:text-white"/>
+                    ) : (
+                        <p className="dark:text-gray-200">{profile.location}</p>
+                    )}
+                </div>
+            </div>
+            {/* Join Date */}
+            <div className="flex items-center gap-3">
+                <Calendar className="w-5 h-5 text-gray-400" />
+                <div>
+                    <label className="text-xs text-gray-500">Joined</label>
+                    <p className="dark:text-gray-200">{profile.joinDate}</p>
+                </div>
+            </div>
+            
+            {/* Only show sensitive info (Email/Phone) if it's Me or we are Friends */}
+            {(isOwnProfile || friendStatus === 'friends') && (
+                <>
+                    <div className="flex items-center gap-3">
+                        <Mail className="w-5 h-5 text-gray-400" />
+                        <div className="flex-1">
+                            <label className="text-xs text-gray-500">Email</label>
+                            {isOwnProfile && isEditing ? (
+                                <input value={editedProfile.email} onChange={e => setEditedProfile({...editedProfile, email: e.target.value})} className="w-full border p-1 rounded mt-1 dark:bg-gray-700 dark:text-white"/>
+                            ) : (
+                                <p className="dark:text-gray-200">{profile.email}</p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Phone className="w-5 h-5 text-gray-400" />
+                        <div className="flex-1">
+                            <label className="text-xs text-gray-500">Phone</label>
+                             {isOwnProfile && isEditing ? (
+                                <input value={editedProfile.phone} onChange={e => setEditedProfile({...editedProfile, phone: e.target.value})} className="w-full border p-1 rounded mt-1 dark:bg-gray-700 dark:text-white"/>
+                            ) : (
+                                <p className="dark:text-gray-200">{profile.phone}</p>
+                            )}
+                        </div>
+                    </div>
+                </>
             )}
           </div>
-
-          {/* Email */}
-          <div className="flex items-center gap-3">
-            <Mail className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            <div className="flex-1">
-              <label className="text-sm text-gray-600 dark:text-gray-400">Email</label>
-              {isEditing ? (
-                <input
-                  type="email"
-                  value={editedProfile.email}
-                  onChange={(e) =>
-                    setEditedProfile({ ...editedProfile, email: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 mt-1 transition-colors"
-                  disabled={isSaving}
-                />
-              ) : (
-                <p className="text-gray-800 dark:text-gray-200">{profile.email}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Phone */}
-          <div className="flex items-center gap-3">
-            <Phone className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            <div className="flex-1">
-              <label className="text-sm text-gray-600 dark:text-gray-400">Phone</label>
-              {isEditing ? (
-                <input
-                  type="tel"
-                  value={editedProfile.phone}
-                  onChange={(e) =>
-                    setEditedProfile({ ...editedProfile, phone: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 mt-1 transition-colors"
-                  disabled={isSaving}
-                />
-              ) : (
-                <p className="text-gray-800 dark:text-gray-200">{profile.phone}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Location */}
-          <div className="flex items-center gap-3">
-            <MapPin className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            <div className="flex-1">
-              <label className="text-sm text-gray-600 dark:text-gray-400">Location</label>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editedProfile.location}
-                  onChange={(e) =>
-                    setEditedProfile({ ...editedProfile, location: e.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 mt-1 transition-colors"
-                  disabled={isSaving}
-                />
-              ) : (
-                <p className="text-gray-800 dark:text-gray-200">{profile.location}</p>
-              )}
-            </div>
-          </div>
-
-          {/* Join Date */}
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-            <div>
-              <label className="text-sm text-gray-600 dark:text-gray-400">Member Since</label>
-              <p className="text-gray-800 dark:text-gray-200">{profile.joinDate}</p>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* Settings & Actions */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden transition-colors duration-300">
-        <button className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700">
-          <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          <span className="dark:text-white">Settings & Privacy</span>
-        </button>
-        <button
-          className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700"
-          onClick={() => setShowManageFriends(true)}
-        >
-          <Users className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          <span className="dark:text-white">Manage Friends</span>
-        </button>
-        <button
-          className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700"
-          onClick={() => setShowSavedPlaces(true)}
-        >
-          <Heart className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          <span className="dark:text-white">Saved Places</span>
-        </button>
-        <button
-          className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700"
-          onClick={() => setShowMyPosts(true)}
-        >
-          <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          <span className="dark:text-white">My Posts</span>
-        </button>
-        <button
-          className="w-full px-6 py-4 flex items-center gap-3 hover:bg-red-50 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors"
-          onClick={onLogout}
-        >
-          <LogOut className="w-5 h-5" />
-          <span>Log Out</span>
-        </button>
-      </div>
+      {/* Settings List - SHOW ONLY IF IT IS MY PROFILE */}
+      {isOwnProfile && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+            <button className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 dark:text-white">
+                <Settings className="w-5 h-5 text-gray-500" /> Settings & Privacy
+            </button>
+            <button onClick={() => setShowManageFriends(true)} className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 dark:text-white">
+                <Users className="w-5 h-5 text-gray-500" /> Manage Friends
+            </button>
+            <button onClick={() => setShowSavedPlaces(true)} className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 dark:text-white">
+                <Heart className="w-5 h-5 text-gray-500" /> Saved Places
+            </button>
+             <button onClick={() => setShowMyPosts(true)} className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 dark:text-white">
+                <FileText className="w-5 h-5 text-gray-500" /> My Posts
+            </button>
+            <button onClick={onLogout} className="w-full px-6 py-4 flex items-center gap-3 hover:bg-red-50 text-red-600">
+                <LogOut className="w-5 h-5" /> Log Out
+            </button>
+          </div>
+      )}
 
-      {/* Modals - Renders conditionally over the page */}
-      {showManageFriends && ( <ManageFriends onClose={() => setShowManageFriends(false)} /> )}
-      {showSavedPlaces && ( <SavedPlaces onClose={() => setShowSavedPlaces(false)} /> )}
-      {showMyPosts && ( <MyPosts onClose={() => setShowMyPosts(false)} /> )}
+      {/* If viewing someone else's profile, we can show their public activity here */}
+      {!isOwnProfile && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+              <h3 className="font-semibold mb-4 dark:text-white">Recent Activity</h3>
+              <p className="text-gray-500 italic text-center py-4">No recent public posts.</p>
+          </div>
+      )}
+
+      {/* Modals */}
+      {showManageFriends && <ManageFriends onClose={() => setShowManageFriends(false)} />}
+      {showSavedPlaces && <SavedPlaces onClose={() => setShowSavedPlaces(false)} />}
+      {showMyPosts && <MyPosts onClose={() => setShowMyPosts(false)} />}
     </div>
   );
 }

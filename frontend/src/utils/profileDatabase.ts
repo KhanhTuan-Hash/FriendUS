@@ -473,3 +473,67 @@ export function togglePlaceVisited(placeId: string, visitedDate: string | null) 
   saveSavedPlaces(updated);
   return updated;
 }
+
+// 1. Mock Database containing all users (friends + strangers)
+// In a real app, this data comes from the Backend API.
+export const dummyAllUsers = [
+  ...dummyFriends,
+  {
+    id: '999', // Mock ID for the Current Logged-in User
+    name: 'Nguyen Van An',
+    username: '@vanan',
+    avatar: '👤',
+    location: 'Ho Chi Minh City, Vietnam',
+    mutualFriends: 0,
+    status: 'online',
+    lastActive: 'now',
+    friendSince: '2024'
+  }
+];
+
+// 2. Function to get user details by ID
+export function getUserById(userId: string) {
+  const user = dummyAllUsers.find(u => u.id === userId);
+  
+  if (user) {
+    // Map DB data to the UI Profile structure
+    return {
+      name: user.name,
+      username: user.username,
+      email: `${user.username.replace('@', '')}@friendus.vn`, // Mock email
+      phone: '+84 999 888 777', // Mock phone
+      bio: `Hello, I'm ${user.name}. I love traveling!`,
+      location: user.location,
+      joinDate: user.friendSince || 'January 2024',
+      avatar: user.avatar,
+      stats: {
+        posts: Math.floor(Math.random() * 50),
+        friends: Math.floor(Math.random() * 200),
+        trips: Math.floor(Math.random() * 30),
+      }
+    };
+  }
+  return null;
+}
+
+// 3. Mock Friend Status
+// 'none': Stranger | 'pending': Request Sent | 'friends': Already Friends | 'me': Self
+export type FriendStatus = 'none' | 'pending' | 'friends' | 'me';
+
+export function checkFriendStatus(targetUserId: string): FriendStatus {
+  const currentUserId = '999'; // Assuming current user ID is 999
+  
+  if (targetUserId === currentUserId) return 'me';
+
+  // Check if they are in the local storage friend list
+  const friends = getFriends();
+  const isFriend = friends.some(f => f.id === targetUserId);
+  
+  if (isFriend) return 'friends';
+  
+  // Randomize 'pending' status for testing UI (or use localStorage for persistence)
+  // Logic: Even IDs -> Pending, Odd IDs -> None
+  // return parseInt(targetUserId) % 2 === 0 ? 'pending' : 'none';
+  
+  return 'none'; 
+}
