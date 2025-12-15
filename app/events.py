@@ -2,18 +2,42 @@ from flask import request
 from flask_socketio import emit, join_room, leave_room
 from flask_login import current_user
 from app.extensions import db, socketio
-from app.models import Message, User
+from app.models import Message, User, Room # Cần import Room
 
-# Global state for online users
+# Global state for online users (map: room_name -> {sid: username})
 online_users_in_rooms = {}
 
-def get_users_in_room(room_name):
+def get_online_usernames(room_name):
+    """Helper trả về list username đang online trong room"""
     if room_name in online_users_in_rooms:
         return list(set(online_users_in_rooms[room_name].values()))
     return []
 
-def notify_user(user_id, event_name, data):
-    socketio.emit(event_name, data, to=f"user_{user_id}")
+def broadcast_user_list(room_name):
+    """
+    Hàm này lấy tất cả thành viên từ DB, so sánh với list online
+    để phân loại Online/Offline và gửi về Client.
+    """
+    room = Room.query.filter_by(name=room_name).first()
+    if not room:
+        return
+
+    # 1. Lấy tất cả thành viên từ DB
+    all_members = [m.username for m in room.members]
+    
+    # 2. Lấy danh sách đang online từ biến toàn cục
+    online_usernames = get_online_usernames(room_name)
+    
+    # 3. Tính toán offline (có trong DB nhưng không có trong list online)
+    # Lưu ý: Set giúp loại bỏ trùng lặp và tính toán hiệu (difference) nhanh
+    offline_members = list(set(all_members) - set(online_usernames))
+    
+    # Gửi về client object chứa cả 2 danh sách
+    socketio.emit('user_list', {
+        'online': online_usernames,
+        'offline': offline_members,
+        'total_count': len(all_members)
+    }, to=room_name)
 
 def register_socketio_events(socketio):
     @socketio.on('connect')
@@ -29,7 +53,7 @@ def register_socketio_events(socketio):
         if room_name not in online_users_in_rooms: 
             online_users_in_rooms[room_name] = {}
         
-        # Clean up old connections for this user
+        # Clean up old connections for this user (nếu user refresh tab)
         current_sids = [sid for sid, user in online_users_in_rooms[room_name].items() if user == current_user.username]
         for old_sid in current_sids:
             del online_users_in_rooms[room_name][old_sid]
@@ -39,13 +63,15 @@ def register_socketio_events(socketio):
         
         emit('status', {'msg': f'{current_user.username} has joined.'}, to=room_name)
         
+        # Load lịch sử chat
         try:
             messages = Message.query.filter_by(room=room_name).order_by(Message.timestamp.asc()).limit(50).all()
             history = [{'msg': m.body, 'username': m.author.username, 'timestamp': m.timestamp.strftime('%Y-%m-%d %H:%M')} for m in messages]
             emit('load_history', history, to=request.sid)
         except Exception as e: print(f"Error history: {e}")
         
-        emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
+        # [NEW] Gửi danh sách Online/Offline
+        broadcast_user_list(room_name)
 
     @socketio.on('send_message')
     def handle_send_message(data):
@@ -65,10 +91,14 @@ def register_socketio_events(socketio):
         if not current_user.is_authenticated: return
         room_name = data['room']
         leave_room(room_name)
+        
+        # Xóa user khỏi list online
         if room_name in online_users_in_rooms and request.sid in online_users_in_rooms[room_name]:
             username = online_users_in_rooms[room_name].pop(request.sid)
             emit('status', {'msg': f'{username} has left.'}, to=room_name)
-            emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
+            
+            # [NEW] Cập nhật lại list
+            broadcast_user_list(room_name)
 
     @socketio.on('disconnect')
     def handle_disconnect():
@@ -77,7 +107,9 @@ def register_socketio_events(socketio):
             if request.sid in users:
                 username = users.pop(request.sid)
                 emit('status', {'msg': f'{username} has left.'}, to=room_name)
-                emit('user_list', {'users': get_users_in_room(room_name)}, to=room_name)
+                
+                # [NEW] Cập nhật lại list
+                broadcast_user_list(room_name)
                 break
 
     @socketio.on('typing')

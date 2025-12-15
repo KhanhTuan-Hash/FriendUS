@@ -170,6 +170,30 @@ def delete_chat_room(room_id):
         
     return redirect(url_for('chat.chat'))
 
+@chat_bp.route('/chat/leave/<int:room_id>', methods=['POST'])
+@login_required
+def leave_chat_room(room_id):
+    room = Room.query.get_or_404(room_id)
+    
+    # Không cho phép chủ phòng rời phòng (Chủ phòng phải xóa phòng hoặc chuyển quyền - ở đây ta chặn rời)
+    if room.creator_id == current_user.id:
+        flash('Owner cannot leave the room. Please delete the room if you wish to disband it.', 'danger')
+        return redirect(url_for('chat.chat_room', room_name=room.name))
+
+    if current_user in room.members:
+        room.members.remove(current_user)
+        db.session.commit()
+        
+        # Gửi thông báo socket là user này đã thoát hẳn
+        socketio.emit('status', {'msg': f'{current_user.username} left the group.'}, to=room.name)
+        # Cập nhật lại danh sách member cho những người còn lại
+        from app.events import broadcast_user_list # Import hàm helper chúng ta sẽ viết ở events.py
+        broadcast_user_list(room.name)
+
+        flash(f'You have left the room "{room.name}".', 'warning')
+    
+    return redirect(url_for('chat.chat'))
+
 # [NEW] User tự xin tham gia phòng Public
 @chat_bp.route('/chat/join_request/<int:room_id>', methods=['POST'])
 @login_required

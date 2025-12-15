@@ -41,11 +41,35 @@
         <h3>
             <i class="bi bi-geo-alt-fill text-primary"></i> {{ room.name }} 
             <small class="text-muted fs-6">{{ room.description }}</small>
-            
-            <button class="btn btn-sm btn-outline-primary ms-3 rounded-pill" data-bs-toggle="modal" data-bs-target="#inviteModal">
-                <i class="bi bi-person-plus-fill"></i> Invite Friends
-            </button>
         </h3>
+        
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#inviteModal">
+                <i class="bi bi-person-plus-fill"></i> Invite
+            </button>
+        
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-gear-fill"></i> Settings
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    {% if current_user.id == room.creator_id %}
+                        <li>
+                            <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to PERMANENTLY delete this room?');">
+                                <button class="dropdown-item text-danger"><i class="bi bi-trash"></i> Delete Room</button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li>
+                            <form action="{{ url_for('chat.leave_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to leave this group?');">
+                                <button class="dropdown-item text-warning"><i class="bi bi-box-arrow-right"></i> Leave Group</button>
+                            </form>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
         
         {% if room.creator == current_user and pending_requests %}
         <div class="alert alert-warning shadow-sm">
@@ -108,8 +132,9 @@
         <div class="tab-pane fade show active" id="chat-panel" role="tabpanel">
             <div id="chat-container">
                 <div id="user-sidebar">
-                    <h6>Online (<span id="user-count">0</span>)</h6>
-                    <ul id="user-list" class="list-group list-group-flush small"></ul>
+                    <h6 class="mb-3">Members (<span id="user-count">0</span>)</h6>
+                    <div id="user-list-container">
+                        </div>
                 </div>
                 <div id="chat-main">
                     <div id="messages" class="d-flex flex-column"></div>
@@ -568,8 +593,47 @@
             socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
             socket.on('status', data => { const div = document.createElement('div'); div.className = 'text-center small text-muted my-1'; div.innerHTML = `<em>${data.msg}</em>`; messageContainer.appendChild(div); });
             socket.on('user_list', data => {
-                userList.innerHTML = ''; userCount.textContent = data.users.length;
-                data.users.forEach(u => { const li = document.createElement('li'); li.className='list-group-item px-0 py-1 bg-transparent'; li.innerHTML = `<span style="height:8px;width:8px;background:green;border-radius:50%;display:inline-block;"></span> ${u}`; userList.appendChild(li); });
+                const container = document.getElementById('user-list-container');
+                const userCount = document.getElementById('user-count');
+                        
+                // Cập nhật tổng số thành viên
+                if (data.total_count) userCount.textContent = data.total_count;
+                else userCount.textContent = data.online.length + data.offline.length; // Fallback
+                        
+                container.innerHTML = ''; // Xóa cũ
+                        
+                // Helper tạo list
+                const createList = (title, users, isOnline) => {
+                    if (users.length === 0) return;
+                    
+                    const label = document.createElement('small');
+                    label.className = 'text-muted fw-bold text-uppercase mt-2 d-block';
+                    label.style.fontSize = '0.7rem';
+                    label.innerText = title;
+                    container.appendChild(label);
+                
+                    const ul = document.createElement('ul');
+                    ul.className = 'list-group list-group-flush small mb-2';
+                    
+                    users.forEach(u => {
+                        const li = document.createElement('li');
+                        li.className = 'list-group-item px-0 py-1 bg-transparent border-0';
+                        
+                        // Màu dot: Xanh nếu online, Xám nếu offline
+                        const color = isOnline ? '#28a745' : '#6c757d'; 
+                        
+                        li.innerHTML = `
+                            <span style="height:8px;width:8px;background:${color};border-radius:50%;display:inline-block;margin-right:6px;"></span>
+                            <span class="${!isOnline ? 'text-muted' : ''}">${u}</span>
+                        `;
+                        ul.appendChild(li);
+                    });
+                    container.appendChild(ul);
+                };
+            
+                // Render 2 nhóm
+                createList('Online', data.online, true);
+                createList('Offline', data.offline, false);
             });
             chatForm.addEventListener('submit', e => {
                 e.preventDefault(); let msg = messageInput.value.trim();
