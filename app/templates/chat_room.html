@@ -47,6 +47,32 @@
             </button>
         </h3>
         
+        {% if room.creator == current_user and pending_requests %}
+        <div class="alert alert-warning shadow-sm">
+            <h5 class="alert-heading"><i class="bi bi-exclamation-circle-fill"></i> Approval Needed</h5>
+            <p class="small text-muted mb-2">Member (C) wants to invite User (B). You (A) must approve before B receives the invite.</p>
+            <hr class="my-2">
+            <div class="list-group">
+                {% for req in pending_requests %}
+                <div class="list-group-item d-flex justify-content-between align-items-center bg-white border-0 mb-1 rounded">
+                    <div>
+                        <i class="bi bi-person-plus"></i>
+                        <strong>{{ req.inviter.username }}</strong> wants to invite <strong>{{ req.user.username }}</strong>
+                    </div>
+                    <div>
+                        <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='accept') }}" method="POST">
+                            <button class="btn btn-sm btn-success me-1" title="Approve & Send Invite to User"><i class="bi bi-check-lg"></i> Approve</button>
+                        </form>
+                        <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='reject') }}" method="POST">
+                            <button class="btn btn-sm btn-danger" title="Reject"><i class="bi bi-x-lg"></i></button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
         <div>
             {% if room.is_private %}
                 <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Private</span>

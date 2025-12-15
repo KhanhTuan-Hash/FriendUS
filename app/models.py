@@ -228,3 +228,25 @@ class FriendRequest(db.Model):
 
     def __repr__(self):
         return f"<FriendRequest {self.sender_id}->{self.receiver_id}>"
+    
+# [NEW] Bảng quản lý yêu cầu tham gia phòng
+class RoomRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False) # Người muốn vào phòng
+    inviter_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Người mời (nếu có)
+    
+    # Status flows:
+    # 1. User tự xin vào Public Room -> status='pending_owner' (Chờ chủ phòng duyệt)
+    # 2. Chủ phòng mời User -> status='pending_user' (Chờ user đồng ý)
+    # 3. Member mời User -> status='pending_user' -> User đồng ý -> status='pending_owner' (Chờ chủ phòng chốt)
+    status = db.Column(db.String(20), nullable=False, default='pending_owner') 
+    
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    room = db.relationship('Room', backref='requests')
+    user = db.relationship('User', foreign_keys=[user_id], backref='room_requests')
+    inviter = db.relationship('User', foreign_keys=[inviter_id], backref='sent_room_invites')
+
+    def __repr__(self):
+        return f"<RoomRequest Room:{self.room_id} User:{self.user_id} Status:{self.status}>"

@@ -2,7 +2,7 @@ from flask import request
 from flask_socketio import emit, join_room, leave_room
 from flask_login import current_user
 from app.extensions import db, socketio
-from app.models import Message
+from app.models import Message, User
 
 # Global state for online users
 online_users_in_rooms = {}
@@ -12,10 +12,14 @@ def get_users_in_room(room_name):
         return list(set(online_users_in_rooms[room_name].values()))
     return []
 
+def notify_user(user_id, event_name, data):
+    socketio.emit(event_name, data, to=f"user_{user_id}")
+
 def register_socketio_events(socketio):
     @socketio.on('connect')
     def handle_connect():
         if not current_user.is_authenticated: return False
+        join_room(f"user_{current_user.id}")
 
     @socketio.on('join')
     def handle_join(data):

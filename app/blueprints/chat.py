@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import current_user, login_required
-from app.extensions import db
-from app.models import Room, Message, Activity, Constraint, Transaction, User # [NEW] Import User
+from app.extensions import db, socketio
+from app.models import Room, Message, Activity, Constraint, Transaction, User, RoomRequest 
 from app.forms import CreateRoomForm, ActivityForm, ConstraintForm, TransactionForm
 from app.utils import check_conflicts
 
@@ -12,62 +12,67 @@ chat_bp = Blueprint('chat', __name__)
 def chat():
     form = CreateRoomForm()
     if form.validate_on_submit():
-        # [NEW] Xử lý dữ liệu mới
         is_private_bool = True if form.privacy.data == 'private' else False
-        
-        # Chuyển list tags ['Travel', 'Eating'] thành string "Travel,Eating" để lưu DB
         tags_str = ",".join(form.tags.data) if form.tags.data else ""
-
-        new_room = Room(
-            name=form.name.data, 
-            description=form.description.data,
-            is_private=is_private_bool, # Lưu trạng thái
-            tags=tags_str,              # Lưu tags
-            creator=current_user
-        )
-        
+        new_room = Room(name=form.name.data, description=form.description.data, is_private=is_private_bool, tags=tags_str, creator=current_user)
         new_room.members.append(current_user)
         db.session.add(new_room)
         db.session.commit()
         return redirect(url_for('chat.chat_room', room_name=new_room.name))
 
-    all_rooms = Room.query.all()
     my_rooms = current_user.rooms.all()
-    return render_template('chat_lobby.html', title='Chat Lobby', form=form, all_rooms=all_rooms, my_rooms=my_rooms)
+    my_room_ids = [r.id for r in my_rooms]
+    public_rooms = Room.query.filter(Room.is_private == False).filter(Room.id.notin_(my_room_ids)).all()
+    
+    # Check các phòng đang chờ owner duyệt (để hiện status Pending)
+    my_requests = RoomRequest.query.filter_by(user_id=current_user.id).all()
+    pending_room_ids = [req.room_id for req in my_requests]
+
+    # [NEW] Lấy danh sách lời mời gửi đến TÔI (B) đang chờ TÔI đồng ý
+    # Status = 'pending_user' nghĩa là Creator đã duyệt hoặc Creator mời trực tiếp
+    my_invitations = RoomRequest.query.filter_by(user_id=current_user.id, status='pending_user').all()
+
+    return render_template('chat_lobby.html', title='Chat Lobby', form=form, 
+                           my_rooms=my_rooms, 
+                           public_rooms=public_rooms,
+                           pending_room_ids=pending_room_ids,
+                           my_invitations=my_invitations) # Truyền biến này ra Lobby
 
 @chat_bp.route('/chat/<string:room_name>', methods=['GET'])
 @login_required
 def chat_room(room_name):
     room = Room.query.filter_by(name=room_name).first_or_404()
     
-    # [LOGIC MỚI] Kiểm tra quyền truy cập Private Room
-    if room.is_private:
-        # Nếu user chưa phải thành viên, không cho vào (trừ khi là creator - nhưng creator thì auto là member rồi)
-        if current_user not in room.members:
-            flash('This is a private room. You need an invitation to join.', 'danger')
-            return redirect(url_for('chat.chat'))
+    if room.is_private and current_user not in room.members:
+        flash('This is a private room. You need an invitation to join.', 'danger')
+        return redirect(url_for('chat.chat'))
     
-    # Auto-join logic (Chỉ áp dụng cho Public Room)
+    # Logic Auto-join cũ cho Public room (User tự vào không cần duyệt)
+    # Nếu bạn muốn Public cũng phải duyệt thì comment đoạn này lại
     if current_user not in room.members and not room.is_private:
         room.members.append(current_user)
         db.session.commit()
         flash(f'Joined room: {room.name}', 'info')
 
-    # [LOGIC MỚI] Lấy danh sách bạn bè CÓ THỂ mời (Là bạn bè nhưng CHƯA ở trong phòng)
-    # 1. Lấy tất cả ID thành viên trong phòng
+    # Logic lấy bạn bè để mời
     current_member_ids = [m.id for m in room.members]
+    invitable_friends = [f for f in current_user.friends if f.id not in current_member_ids]
     
-    # 2. Lọc danh sách bạn bè
-    invitable_friends = []
     # Lưu ý: current_user.friends trả về query, cần loop qua
     for friend in current_user.friends: 
         if friend.id not in current_member_ids:
             invitable_friends.append(friend)
 
-    # --- PLANNER DATA --- (Giữ nguyên code cũ)
     act_form = ActivityForm()
     cons_form = ConstraintForm()
     activities = Activity.query.filter_by(room_id=room.id).all()
+    timeline_data = [{'name': a.name, 'start': a.start_time, 'end': a.end_time} for a in activities]
+    my_constraints = Constraint.query.filter_by(user_id=current_user.id, room_id=room.id).all()
+    conflicts = check_conflicts(activities, my_constraints)
+    trans_form = TransactionForm()
+    trans_form.receiver.choices = [(m.id, m.username) for m in room.members if m.id != current_user.id] or [(0, 'No other members')]
+    pending_trans = Transaction.query.filter_by(room_id=room.id, receiver_id=current_user.id, status='pending').all()
+    history_trans = Transaction.query.filter(Transaction.room_id == room.id).filter((Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)).order_by(Transaction.timestamp.desc()).all()
     
     timeline_data = []
     for act in activities:
@@ -91,46 +96,52 @@ def chat_room(room_name):
         (Transaction.sender_id == current_user.id) | (Transaction.receiver_id == current_user.id)
     ).order_by(Transaction.timestamp.desc()).all()
 
-    return render_template('chat_room.html', title=f'Trip: {room.name}', 
-                           room=room,
-                           act_form=act_form, cons_form=cons_form, 
-                           activities=activities, 
-                           timeline_data=timeline_data,
+    pending_requests = []
+    if current_user.id == room.creator_id:
+        pending_requests = RoomRequest.query.filter_by(room_id=room.id, status='pending_owner').all()
+    
+    return render_template('chat_room.html', title=f'Trip: {room.name}', room=room,
+                           act_form=act_form, cons_form=cons_form, activities=activities, timeline_data=timeline_data,
                            constraints=my_constraints, conflicts=conflicts,
                            trans_form=trans_form, pending_trans=pending_trans, history_trans=history_trans,
-                           invitable_friends=invitable_friends) # [NEW] Truyền biến này sang template
+                           invitable_friends=invitable_friends, pending_requests=pending_requests)
 
 # [NEW] Route xử lý mời bạn bè
 @chat_bp.route('/chat/invite/<int:room_id>', methods=['POST'])
 @login_required
 def invite_to_room(room_id):
     room = Room.query.get_or_404(room_id)
-    
-    # Bảo mật: Chỉ thành viên trong phòng mới được mời người khác
-    if current_user not in room.members:
-        flash('You must be a member of this room to invite others.', 'danger')
-        return redirect(url_for('chat.chat_room', room_name=room.name))
+    if current_user not in room.members: return redirect(url_for('chat.chat'))
 
-    # Lấy danh sách ID được chọn từ form
     friend_ids = request.form.getlist('friend_ids')
-    
-    count = 0
-    if friend_ids:
-        for f_id in friend_ids:
-            user_to_add = User.query.get(int(f_id))
-            # Kiểm tra lại lần nữa xem họ có phải bạn bè và chưa vào phòng không
-            if user_to_add and current_user.is_friend(user_to_add) and user_to_add not in room.members:
-                room.members.append(user_to_add)
-                count += 1
+    for f_id in friend_ids:
+        user_to_invite = User.query.get(int(f_id))
         
-        if count > 0:
-            db.session.commit()
-            flash(f'Successfully invited {count} friend(s) to the room!', 'success')
-        else:
-            flash('No valid users were invited.', 'warning')
-    else:
-        flash('No friends selected.', 'warning')
+        # Check if request already exists
+        existing_req = RoomRequest.query.filter_by(room_id=room.id, user_id=user_to_invite.id).first()
+        if existing_req: continue
 
+        if user_to_invite and user_to_invite not in room.members:
+            if current_user.id == room.creator_id:
+                # SCENARIO 1: Creator (A) invites User (B)
+                # Status -> pending_user (Chờ B đồng ý)
+                req = RoomRequest(room_id=room.id, user_id=user_to_invite.id, inviter_id=current_user.id, status='pending_user')
+                db.session.add(req)
+                
+                # Notify B
+                socketio.emit('new_invitation', {'msg': f'{current_user.username} invited you to {room.name}'}, to=f"user_{user_to_invite.id}")
+                flash(f'Invitation sent to {user_to_invite.username}.', 'success')
+            else:
+                # SCENARIO 2: Member (C) invites User (B)
+                # Status -> pending_owner (Chờ A duyệt trước)
+                req = RoomRequest(room_id=room.id, user_id=user_to_invite.id, inviter_id=current_user.id, status='pending_owner')
+                db.session.add(req)
+                
+                # Notify A (Creator)
+                socketio.emit('new_request', {'msg': f'{current_user.username} wants to invite {user_to_invite.username}'}, to=f"user_{room.creator_id}")
+                flash(f'Request to invite {user_to_invite.username} sent to room owner.', 'info')
+
+    db.session.commit()
     return redirect(url_for('chat.chat_room', room_name=room.name))
 
 @chat_bp.route('/chat/delete/<int:room_id>', methods=['POST'])
@@ -154,5 +165,99 @@ def delete_chat_room(room_id):
     except Exception as e:
         db.session.rollback()
         flash(f'Error deleting room: {e}', 'danger')
+        
+    return redirect(url_for('chat.chat'))
+
+# [NEW] User tự xin tham gia phòng Public
+@chat_bp.route('/chat/join_request/<int:room_id>', methods=['POST'])
+@login_required
+def request_join_room(room_id):
+    room = Room.query.get_or_404(room_id)
+    if current_user in room.members:
+        flash('You are already in this room.', 'info')
+        return redirect(url_for('chat.chat'))
+    
+    # Kiểm tra xem đã gửi yêu cầu chưa
+    existing_req = RoomRequest.query.filter_by(user_id=current_user.id, room_id=room.id).first()
+    if existing_req:
+        flash('Request already pending.', 'warning')
+        return redirect(url_for('chat.chat'))
+
+    # Tạo yêu cầu mới -> Chờ chủ phòng duyệt
+    req = RoomRequest(room_id=room.id, user_id=current_user.id, status='pending_owner')
+    db.session.add(req)
+    
+    # [Optional] Tạo thông báo hệ thống vào phòng chat để chủ phòng thấy ngay
+    sys_msg = Message(body=f"System: {current_user.username} wants to join this room.", 
+                      room=room.name, user_id=current_user.id) # user_id tạm để current, hoặc tạo 1 user system ảo
+    db.session.add(sys_msg)
+    
+    db.session.commit()
+    flash('Join request sent to the room owner.', 'success')
+    return redirect(url_for('chat.chat'))
+
+# [NEW] Chủ phòng duyệt hoặc từ chối yêu cầu (Cho cả trường hợp Public request và Member invite)
+# [UPDATED] Owner duyệt request (Duyệt cho C mời B)
+@chat_bp.route('/chat/manage_request/<int:req_id>/<string:action>', methods=['POST'])
+@login_required
+def manage_request(req_id, action):
+    req = RoomRequest.query.get_or_404(req_id)
+    room = Room.query.get(req.room_id)
+    
+    if room.creator_id != current_user.id:
+        flash('Unauthorized.', 'danger')
+        return redirect(url_for('chat.chat_room', room_name=room.name))
+
+    if action == 'accept':
+        # Owner (A) đồng ý cho C mời B
+        # Chuyển status từ 'pending_owner' -> 'pending_user'
+        req.status = 'pending_user'
+        db.session.commit()
+        
+        # Notify B (User)
+        socketio.emit('new_invitation', {'msg': f'You have been invited to {room.name}'}, to=f"user_{req.user_id}")
+        flash(f'Approved invite for {req.user.username}. Waiting for their confirmation.', 'success')
+        
+    elif action == 'reject':
+        # A không đồng ý -> Hủy
+        db.session.delete(req)
+        db.session.commit()
+        flash('Request rejected.', 'secondary')
+        
+    return redirect(url_for('chat.chat_room', room_name=room.name))
+
+# [NEW] User (B) phản hồi lời mời (Accept/Decline)
+# Route này sẽ được gọi từ Chat Lobby (nơi B thấy lời mời)
+@chat_bp.route('/chat/respond_invite/<int:req_id>/<string:action>', methods=['POST'])
+@login_required
+def respond_invite(req_id, action):
+    req = RoomRequest.query.get_or_404(req_id)
+    
+    # Security check: Phải là user B mới được xử lý
+    if req.user_id != current_user.id:
+        flash('Unauthorized.', 'danger')
+        return redirect(url_for('chat.chat'))
+    
+    room = Room.query.get(req.room_id)
+
+    if action == 'accept':
+        # B đồng ý -> Vào phòng
+        room.members.append(current_user)
+        db.session.delete(req) # Xóa request
+        
+        # Notify Room
+        msg = Message(body=f"joined the room via invitation.", room=room.name, author=current_user)
+        db.session.add(msg)
+        db.session.commit()
+        
+        socketio.emit('status', {'msg': f'{current_user.username} joined.'}, to=room.name)
+        flash(f'You joined {room.name}.', 'success')
+        return redirect(url_for('chat.chat_room', room_name=room.name))
+        
+    elif action == 'reject':
+        # B từ chối -> Hủy
+        db.session.delete(req)
+        db.session.commit()
+        flash(f'You declined the invitation to {room.name}.', 'secondary')
         
     return redirect(url_for('chat.chat'))
