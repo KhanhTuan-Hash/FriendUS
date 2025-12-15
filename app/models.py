@@ -2,7 +2,20 @@ from flask_login import UserMixin
 from datetime import datetime
 from app.extensions import db, login_manager
 
-# [NEW] Bảng phụ lưu quan hệ bạn bè (User A là bạn User B)
+# Bảng lưu điểm trọng số sở thích của User (Hệ thống tự học)
+class UserTagScore(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    tag = db.Column(db.String(50), nullable=False, index=True) # Ví dụ: "du lịch bụi"
+    score = db.Column(db.Float, default=1.0) # Điểm số tích lũy (càng cao càng thích)
+    last_interaction = db.Column(db.DateTime, default=datetime.utcnow) # Để sau này có thể giảm điểm theo thời gian (decay)
+
+    user = db.relationship('User', backref=db.backref('tag_scores', lazy='dynamic'))
+
+    def __repr__(self):
+        return f"<UserTagScore {self.user.username} - {self.tag}: {self.score}>"
+
+# Bảng phụ lưu quan hệ bạn bè (User A là bạn User B)
 friendship = db.Table('friendship',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
     db.Column('friend_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)

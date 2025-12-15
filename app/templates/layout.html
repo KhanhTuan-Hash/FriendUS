@@ -220,4 +220,59 @@
 
     {% block scripts %}{% endblock %}
   </body>
+  <script>
+    // Hàm gửi tín hiệu về Server mà không cần load lại trang
+    function sendInterestSignal(tag) {
+        if (!tag) return;
+        fetch('/api/track_interest', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': "{{ csrf_token() if csrf_token else '' }}" // Nếu bạn có dùng CSRF Protect
+            },
+            body: JSON.stringify({ tag: tag })
+        }).then(res => console.log(`Interest recorded: ${tag}`))
+          .catch(err => console.error(err));
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // 1. BẮT SỰ KIỆN CLICK VÀO CÁC TAG (Giả sử bạn hiển thị tag trong thẻ <span class="post-tag">)
+        document.querySelectorAll('.post-tag').forEach(item => {
+            item.addEventListener('click', event => {
+                let tagContent = event.target.innerText.trim(); // Lấy tên tag
+                sendInterestSignal(tagContent);
+            });
+        });
+
+        // 2. (NÂNG CAO) BẮT SỰ KIỆN ĐỌC BÀI (Intersection Observer)
+        // Nếu user cuộn tới bài viết và dừng lại > 2 giây -> Tính là quan tâm
+        let observerOptions = { root: null, threshold: 0.5 }; // 50% bài viết hiển thị
+        
+        let observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    // Lấy tags từ attribute data-tags (Bạn cần thêm vào HTML)
+                    let tags = entry.target.getAttribute('data-tags'); 
+                    if (tags) {
+                        // Set timeout 2s, nếu vẫn còn nhìn thì mới tính
+                        let timer = setTimeout(() => {
+                            if (entry.isIntersecting) { // Vẫn đang nhìn
+                                tags.split(',').forEach(t => sendInterestSignal(t.trim()));
+                            }
+                        }, 2000);
+                        entry.target.dataset.timerId = timer; // Lưu timer để clear nếu lướt qua nhanh
+                    }
+                } else {
+                    // Nếu lướt qua nhanh (<2s) thì hủy timer -> Không tính điểm
+                    clearTimeout(entry.target.dataset.timerId);
+                }
+            });
+        }, observerOptions);
+
+        // Áp dụng cho tất cả bài post (Giả sử bài post có class="post-card")
+        document.querySelectorAll('.post-card').forEach(post => {
+            observer.observe(post);
+        });
+    });
+</script>
 </html>

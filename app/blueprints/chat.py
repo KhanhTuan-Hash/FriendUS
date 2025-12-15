@@ -3,7 +3,7 @@ from flask_login import current_user, login_required
 from app.extensions import db, socketio
 from app.models import Room, Message, Activity, Constraint, Transaction, User, RoomRequest 
 from app.forms import CreateRoomForm, ActivityForm, ConstraintForm, TransactionForm
-from app.utils import check_conflicts
+from app.utils import auto_update_user_interest, score_from_matrix_personalized, check_conflicts
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -22,7 +22,19 @@ def chat():
 
     my_rooms = current_user.rooms.all()
     my_room_ids = [r.id for r in my_rooms]
-    public_rooms = Room.query.filter(Room.is_private == False).filter(Room.id.notin_(my_room_ids)).all()
+    raw_public_rooms = Room.query.filter(Room.is_private == False).filter(Room.id.notin_(my_room_ids)).all()
+
+    # [MỚI] Tính điểm và Sort giống hệt bên main.py
+    ranked_rooms = []
+    for room in raw_public_rooms:
+        # Tách tag của room (VD: "Travel,Eating" -> ['Travel', 'Eating'])
+        room_tags = room.tags.split(',') if room.tags else []
+        score = score_from_matrix_personalized(current_user.id, room_tags)
+        ranked_rooms.append((room, score))
+    
+    # Sort giảm dần theo điểm
+    ranked_rooms.sort(key=lambda x: x[1], reverse=True)
+    public_rooms = [x[0] for x in ranked_rooms] # Lấy danh sách room đã sort
     
     # Check các phòng đang chờ owner duyệt (để hiện status Pending)
     my_requests = RoomRequest.query.filter_by(user_id=current_user.id).all()
@@ -276,6 +288,11 @@ def respond_invite(req_id, action):
         # B đồng ý -> Vào phòng
         room.members.append(current_user)
         db.session.delete(req) # Xóa request
+
+        if room.tags:
+            tags_list = room.tags.split(',')
+            # Tăng trọng số mạnh (+2.0) vì hành động join room thể hiện sự quan tâm cao
+            auto_update_user_interest(current_user.id, tags_list, weight_increment=2.0)
         
         # Notify Room
         msg = Message(body=f"joined the room via invitation.", room=room.name, author=current_user)

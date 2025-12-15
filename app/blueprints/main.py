@@ -6,8 +6,41 @@ from sqlalchemy import func, or_ # [NEW] Import để query OR cho tìm kiếm
 from app.extensions import db
 from app.models import Post, Review, Location, User, FriendRequest
 from app.forms import PostForm
+from app.utils import score_from_matrix_personalized
 
 main_bp = Blueprint('main', __name__)
+
+@main_bp.route('/update_interests', methods=['POST'])
+@login_required
+def update_interests():
+    data = request.get_json()
+    interests = data.get('interests', []) # Nhận list mảng ['du lịch bụi', 'ẩm thực']
+    
+    if not isinstance(interests, list):
+        return jsonify({'status': 'error', 'message': 'Invalid data format'}), 400
+    
+    # Chuyển list thành string CSV để lưu vào DB
+    # Ví dụ: "du lịch bụi,ẩm thực"
+    interests_str = ",".join(interests)
+    
+    current_user.interests = interests_str
+    db.session.commit()
+    
+    return jsonify({'status': 'success', 'message': 'Interests updated'})
+
+@main_bp.route('/api/track_interest', methods=['POST'])
+@login_required
+def track_interest():
+    data = request.get_json()
+    tag = data.get('tag')
+    
+    if tag:
+        # Tăng nhẹ (+0.5) cho hành động click xem/filter tag
+        from app.utils import auto_update_user_interest
+        auto_update_user_interest(current_user.id, [tag], weight_increment=0.5)
+        return jsonify({'status': 'success', 'msg': f'Interest in {tag} recorded'})
+    
+    return jsonify({'status': 'error'}), 400
 
 @main_bp.route('/', methods=['GET', 'POST'])
 @main_bp.route('/index', methods=['GET', 'POST'])
@@ -23,7 +56,6 @@ def index():
             if not os.path.exists(upload_folder): os.makedirs(upload_folder)
             file.save(os.path.join(upload_folder, filename))
 
-        # [UPDATED] Xử lý Tags (List -> String)
         tags_str = ''
         if form.tags.data:
             tags_str = ','.join(form.tags.data)
@@ -39,10 +71,25 @@ def index():
         db.session.commit()
         return redirect(url_for('main.index'))
     
-    posts = Post.query.order_by(Post.timestamp.desc()).all()
-    avg_rating = func.coalesce(func.avg(Review.rating), 0).label('average_rating')
-    suggestions = db.session.query(Location, avg_rating).outerjoin(Review, Location.id == Review.location_id).group_by(Location.id).order_by(avg_rating.desc()).limit(5).all() 
-    return render_template('index.html', title='Home', form=form, posts=posts, suggestions=suggestions)
+    all_posts = Post.query.order_by(Post.timestamp.desc()).all()
+    
+    ranked_posts = []
+    for p in all_posts:
+        post_tags = p.tags.split(',') if p.tags else []
+        # Dùng hàm tính điểm Personalize mới
+        score = score_from_matrix_personalized(current_user.id, post_tags)
+        ranked_posts.append((p, score))
+        
+    ranked_posts.sort(key=lambda x: x[1], reverse=True)
+    final_posts = [x[0] for x in ranked_posts]
+
+    # --- [THÊM ĐOẠN CODE NÀY ĐỂ ĐỊNH NGHĨA SUGGESTIONS] ---
+    # Lấy ngẫu nhiên 3 user không phải là mình để gợi ý kết bạn
+    # Lưu ý: Cần import func từ sqlalchemy nếu chưa có: from sqlalchemy import func
+    suggestions = User.query.filter(User.id != current_user.id).order_by(func.random()).limit(3).all()
+    # -------------------------------------------------------
+
+    return render_template('index.html', title='Home', form=form, posts=final_posts, suggestions=suggestions)
 
 # --- FRIEND SYSTEM ROUTES ---
 
