@@ -74,6 +74,8 @@
   </head>
   <body>
     
+    {# --- CHỈNH SỬA: Thêm điều kiện if not hide_nav --- #}
+    {% if not hide_nav %}
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
       <div class="container">
         <a class="navbar-brand" href="{{ url_for('main.index') }}">FriendUS</a>
@@ -96,6 +98,8 @@
         </div>
       </div>
     </nav>
+    {% endif %}
+    {# --- KẾT THÚC CHỈNH SỬA --- #}
 
     <div id="main-wrapper">
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -113,7 +117,8 @@
         </div>
     </div>
 
-    {% if current_user.is_authenticated %}
+    {# --- CHỈNH SỬA: Ẩn luôn nút Widget nếu đang ở chế độ hide_nav --- #}
+    {% if current_user.is_authenticated and not hide_nav %}
     <button class="scattered-toggle-btn" onclick="toggleWidget()"><i class="bi bi-journal-bookmark-fill"></i></button>
     <div class="scattered-widget" id="swWidget">
         <div style="padding:10px; background:#f1f1f1;"><h6 class="m-0">Saved Links</h6></div>
@@ -132,6 +137,7 @@
         </div>
     </div>
     {% endif %}
+    {# --- KẾT THÚC CHỈNH SỬA --- #}
 
     {{ bootstrap.load_js() }}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
@@ -143,11 +149,12 @@
         const swModal = document.getElementById('swModal');
         const swList = document.getElementById('swList');
         
-        function toggleWidget() { swWidget.style.display = (swWidget.style.display === 'flex') ? 'none' : 'flex'; loadSwItems(); }
-        function openSwModal() { swModal.style.display = 'flex'; }
-        function closeSwModal() { swModal.style.display = 'none'; }
+        function toggleWidget() { if(swWidget) { swWidget.style.display = (swWidget.style.display === 'flex') ? 'none' : 'flex'; loadSwItems(); } }
+        function openSwModal() { if(swModal) swModal.style.display = 'flex'; }
+        function closeSwModal() { if(swModal) swModal.style.display = 'none'; }
         
         function loadSwItems() {
+            if(!swList) return;
             swList.innerHTML = '';
             const data = JSON.parse(localStorage.getItem('scattered_info') || '[]');
             data.forEach((item, i) => {

@@ -46,7 +46,7 @@ def onboarding():
         else:
             flash('Please select at least one interest.', 'warning')
     
-    return render_template('onboarding.html', title='Welcome')
+    return render_template('onboarding.html', title='Welcome', hide_nav=True)
 
 # --- Standard Login Routes ---
 @auth_bp.route('/login', methods=['GET', 'POST'])

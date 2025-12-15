@@ -1,31 +1,39 @@
 {% extends "layout.html" %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8 text-center">
-            <h2 class="mb-4">Welcome to FRIENDUS!</h2>
-            <p class="lead mb-5">Tell us what you are interested in to personalize your experience.</p>
+<div class="d-flex align-items-center justify-content-center" style="min-height: 80vh;">
+    <div class="card shadow-lg border-0" style="width: 100%; max-width: 700px; border-radius: 20px;">
+        <div class="card-body p-5 text-center">
+            
+            <h2 class="card-title mb-3 fw-bold text-primary">Let's get to know you!</h2>
+            <p class="card-text text-muted mb-4">
+                Chọn ít nhất 1 chủ đề bạn quan tâm để chúng tôi gợi ý bạn bè và địa điểm phù hợp nhé.
+            </p>
 
             <form method="POST" action="{{ url_for('auth.onboarding') }}" id="onboardingForm">
                 <input type="hidden" name="interests" id="selectedInterestsInput">
                 
-                <div class="d-flex flex-wrap justify-content-center gap-3 mb-5" id="tagsContainer">
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Travel">Travel ✈️</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Food">Food 🍜</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Music">Music 🎵</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Sports">Sports ⚽</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Technology">Technology 💻</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Cafe">Cafe ☕</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Nightlife">Nightlife 🥂</button>
-                    <button type="button" class="btn btn-outline-primary btn-lg interest-tag" data-value="Nature">Nature 🌳</button>
+                <div class="d-flex flex-wrap justify-content-center gap-2 mb-5" id="tagsContainer">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Travel">Travel ✈️</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Food">Food 🍜</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Music">Music 🎵</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Sports">Sports ⚽</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Technology">Technology 💻</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Cafe">Cafe ☕</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Movies">Movies 🎬</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Reading">Reading 📚</button>
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Gaming">Gaming 🎮</button>
                 </div>
 
-                <button type="submit" class="btn btn-success btn-lg px-5">Get Started</button>
+                <div class="d-grid gap-2 col-6 mx-auto">
+                    <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-sm">
+                        Finish Setup
+                    </button>
+                </div>
             </form>
             
-            <div class="mt-3">
-                <a href="{{ url_for('auth.logout') }}" class="text-muted">Logout</a>
+            <div class="mt-4 pt-3 border-top">
+                <small class="text-muted">Muốn dùng tài khoản khác? <a href="{{ url_for('auth.logout') }}">Logout</a></small>
             </div>
         </div>
     </div>
@@ -42,47 +50,28 @@ document.addEventListener('DOMContentLoaded', function() {
             const value = this.getAttribute('data-value');
 
             if (this.classList.contains('active')) {
-                // Nếu đang chọn -> Bỏ chọn
-                this.classList.remove('active', 'btn-primary');
-                this.classList.add('btn-outline-primary');
-                // Xóa khỏi mảng
+                // Bỏ chọn: Xóa class active và btn-primary, trả về màu xám
+                this.classList.remove('active', 'btn-primary', 'text-white');
+                this.classList.add('btn-outline-secondary');
                 selectedTags = selectedTags.filter(item => item !== value);
             } else {
-                // Nếu chưa chọn -> Chọn
-                this.classList.add('active', 'btn-primary');
-                this.classList.remove('btn-outline-primary');
-                // Thêm vào mảng
+                // Chọn: Thêm màu xanh
+                this.classList.remove('btn-outline-secondary');
+                this.classList.add('active', 'btn-primary', 'text-white');
                 if (!selectedTags.includes(value)) {
                     selectedTags.push(value);
                 }
             }
-
-            // Cập nhật giá trị vào input ẩn (dạng "Travel,Food,Music")
             hiddenInput.value = selectedTags.join(',');
-            console.log("Current selection:", hiddenInput.value); // Debug
         });
     });
     
-    // Validate trước khi submit (bắt buộc chọn ít nhất 1)
     document.getElementById('onboardingForm').addEventListener('submit', function(e) {
         if (selectedTags.length === 0) {
             e.preventDefault();
-            alert('Please select at least one interest!');
+            alert('Hãy chọn ít nhất 1 sở thích!');
         }
     });
 });
 </script>
-
-<style>
-    /* CSS thêm một chút hiệu ứng */
-    .interest-tag {
-        border-radius: 50px;
-        padding: 10px 25px;
-        transition: all 0.3s;
-    }
-    .interest-tag.active {
-        transform: scale(1.05);
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-</style>
 {% endblock %}
