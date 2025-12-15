@@ -49,8 +49,11 @@
         
         {% if room.creator == current_user and pending_requests %}
         <div class="alert alert-warning shadow-sm">
-            <h5 class="alert-heading"><i class="bi bi-exclamation-circle-fill"></i> Approval Needed</h5>
-            <p class="small text-muted mb-2">Member (C) wants to invite User (B). You (A) must approve before B receives the invite.</p>
+            <h5 class="alert-heading"><i class="bi bi-exclamation-circle-fill"></i> Invitation Requests</h5>
+            <p class="small text-muted mb-2">
+                Members want to invite friends. 
+                <strong>Approve</strong> to forward the invitation to the user (User must still accept).
+            </p>
             <hr class="my-2">
             <div class="list-group">
                 {% for req in pending_requests %}
@@ -61,7 +64,7 @@
                     </div>
                     <div>
                         <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='accept') }}" method="POST">
-                            <button class="btn btn-sm btn-success me-1" title="Approve & Send Invite to User"><i class="bi bi-check-lg"></i> Approve</button>
+                            <button class="btn btn-sm btn-success me-1" title="Approve & Send Invite"><i class="bi bi-check-lg"></i> Approve</button>
                         </form>
                         <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='reject') }}" method="POST">
                             <button class="btn btn-sm btn-danger" title="Reject"><i class="bi bi-x-lg"></i></button>

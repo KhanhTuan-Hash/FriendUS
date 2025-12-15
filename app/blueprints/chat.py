@@ -112,7 +112,8 @@ def chat_room(room_name):
                            trans_form=trans_form, pending_trans=pending_trans, history_trans=history_trans,
                            invitable_friends=invitable_friends, pending_requests=pending_requests)
 
-# [NEW] Route xử lý mời bạn bè
+# [CHECK] Hàm invite_to_room của bạn logic đã đúng hướng, 
+# nhưng hãy đảm bảo giữ nguyên logic phân chia Creator/Member như sau:
 @chat_bp.route('/chat/invite/<int:room_id>', methods=['POST'])
 @login_required
 def invite_to_room(room_id):
@@ -128,22 +129,17 @@ def invite_to_room(room_id):
         if existing_req: continue
 
         if user_to_invite and user_to_invite not in room.members:
+            # Nếu là Creator mời: Gửi thẳng cho B (B chỉ cần đồng ý) -> status: pending_user
             if current_user.id == room.creator_id:
-                # SCENARIO 1: Creator (A) invites User (B)
-                # Status -> pending_user (Chờ B đồng ý)
                 req = RoomRequest(room_id=room.id, user_id=user_to_invite.id, inviter_id=current_user.id, status='pending_user')
                 db.session.add(req)
-                
-                # Notify B
                 socketio.emit('new_invitation', {'msg': f'{current_user.username} invited you to {room.name}'}, to=f"user_{user_to_invite.id}")
                 flash(f'Invitation sent to {user_to_invite.username}.', 'success')
+            
+            # Nếu là Member (C) mời: Cần Creator duyệt -> status: pending_owner
             else:
-                # SCENARIO 2: Member (C) invites User (B)
-                # Status -> pending_owner (Chờ A duyệt trước)
                 req = RoomRequest(room_id=room.id, user_id=user_to_invite.id, inviter_id=current_user.id, status='pending_owner')
                 db.session.add(req)
-                
-                # Notify A (Creator)
                 socketio.emit('new_request', {'msg': f'{current_user.username} wants to invite {user_to_invite.username}'}, to=f"user_{room.creator_id}")
                 flash(f'Request to invite {user_to_invite.username} sent to room owner.', 'info')
 
@@ -202,7 +198,6 @@ def request_join_room(room_id):
     flash('Join request sent to the room owner.', 'success')
     return redirect(url_for('chat.chat'))
 
-# [NEW] Chủ phòng duyệt hoặc từ chối yêu cầu (Cho cả trường hợp Public request và Member invite)
 @chat_bp.route('/chat/manage_request/<int:req_id>/<string:action>', methods=['POST'])
 @login_required
 def manage_request(req_id, action):
@@ -215,17 +210,22 @@ def manage_request(req_id, action):
         return redirect(url_for('chat.chat_room', room_name=room.name))
 
     if action == 'accept':
-        # Thêm user vào phòng
-        user_to_add = User.query.get(req.user_id)
-        room.members.append(user_to_add)
+        # LOGIC CŨ: Thêm user vào ngay (SAI với yêu cầu mới)
+        # room.members.append(user_to_add) ...
         
-        # Tạo tin nhắn thông báo
-        msg = Message(body=f"Welcome {user_to_add.username} to the room!", room=room.name, user_id=current_user.id)
-        db.session.add(msg)
-        
-        db.session.delete(req) # Xóa yêu cầu sau khi duyệt
+        # LOGIC MỚI: 
+        # A (Creator) duyệt yêu cầu của C -> Chuyển status thành 'pending_user' 
+        # Lúc này B (User) sẽ nhận được lời mời trong danh sách của họ
+        req.status = 'pending_user'
         db.session.commit()
-        flash(f'Accepted {user_to_add.username} into the room.', 'success')
+        
+        # Gửi thông báo SocketIO cho User B biết là họ vừa nhận được lời mời
+        # (Lời mời này thực chất do C tạo, nhưng giờ A mới duyệt cho đi)
+        socketio.emit('new_invitation', {
+            'msg': f'You have been invited to join {room.name} (Approved by owner)'
+        }, to=f"user_{req.user_id}") # req.user_id là ID của B
+        
+        flash(f'Request approved. Invitation sent to {req.user.username}.', 'success')
         
     elif action == 'reject':
         db.session.delete(req)
@@ -233,6 +233,7 @@ def manage_request(req_id, action):
         flash('Request rejected.', 'secondary')
         
     return redirect(url_for('chat.chat_room', room_name=room.name))
+
 # [NEW] User (B) phản hồi lời mời (Accept/Decline)
 # Route này sẽ được gọi từ Chat Lobby (nơi B thấy lời mời)
 @chat_bp.route('/chat/respond_invite/<int:req_id>/<string:action>', methods=['POST'])
