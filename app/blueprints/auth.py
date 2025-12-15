@@ -2,11 +2,51 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, current_user, login_required
 from app.extensions import db, oauth
 from app.models import User, Post
-from app.forms import LoginForm, RegisterForm, UpdateAccountForm
+from app.forms import LoginForm, RegisterForm, UpdateAccountForm, OnboardingForm
 from app.utils import save_picture
 import secrets
 
 auth_bp = Blueprint('auth', __name__)
+
+@auth_bp.before_app_request
+def check_onboarding():
+    """
+    Hàm này chạy trước mọi request.
+    Nếu user đã login nhưng chưa có interests -> Bắt buộc về trang onboarding.
+    Trừ phi họ đang ở trang onboarding, logout hoặc đang tải file tĩnh (css/js).
+    """
+    if current_user.is_authenticated:
+        # Kiểm tra nếu chưa có interests (coi như chưa onboarding)
+        if not current_user.interests:
+            # Danh sách các endpoint được phép truy cập
+            allowed_endpoints = ['auth.onboarding', 'auth.logout', 'static']
+            
+            # Nếu endpoint hiện tại không nằm trong danh sách cho phép -> Redirect
+            if request.endpoint and request.endpoint not in allowed_endpoints:
+                return redirect(url_for('auth.onboarding'))
+
+@auth_bp.route('/onboarding', methods=['GET', 'POST'])
+@login_required
+def onboarding():
+    # Nếu user đã có interests -> Đẩy về trang chủ luôn
+    if current_user.interests:
+        return redirect(url_for('main.index'))
+
+    # Lưu ý: Form này không cần class OnboardingForm phức tạp nếu bạn dùng JS custom
+    # Nhưng nếu dùng form.validate_on_submit() thì phải đảm bảo frontend gửi đúng name="interests"
+    if request.method == 'POST':
+        # Lấy dữ liệu từ input hidden có name="interests"
+        selected_interests = request.form.get('interests')
+        
+        if selected_interests:
+            current_user.interests = selected_interests # Lưu chuỗi "Tag1,Tag2"
+            db.session.commit()
+            flash('Welcome! Your profile is ready.', 'success')
+            return redirect(url_for('main.index'))
+        else:
+            flash('Please select at least one interest.', 'warning')
+    
+    return render_template('onboarding.html', title='Welcome')
 
 # --- Standard Login Routes ---
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -20,6 +60,11 @@ def login():
         
         if user and user.password == form.password.data:
             login_user(user, remember=form.remember.data)
+            
+            # [LOGIC MỚI] Kiểm tra xem đã có interests chưa
+            if not user.interests: 
+                return redirect(url_for('auth.onboarding'))
+            
             return redirect(url_for('main.index'))
         else:
             flash('Login Unsuccessful. Please check username and password', 'danger')
@@ -85,9 +130,14 @@ def google_callback():
 
     if user:
         login_user(user)
+        # [LOGIC MỚI] User cũ đăng nhập -> Kiểm tra interests
+        if not user.interests:
+            return redirect(url_for('auth.onboarding'))
+        
         flash('Logged in successfully via Google!', 'success')
         return redirect(url_for('main.index'))
     else:
+        # User mới tạo từ Google
         base_username = name.replace(" ", "")
         username = base_username
         if User.query.filter_by(username=username).first():
@@ -95,6 +145,7 @@ def google_callback():
             
         random_password = secrets.token_urlsafe(16)
         
+        # Lưu ý: interests mặc định là '' (rỗng)
         new_user = User(
             username=username, 
             email=email,
@@ -104,8 +155,9 @@ def google_callback():
         db.session.commit()
         
         login_user(new_user)
-        flash('Account created via Google!', 'success')
-        return redirect(url_for('main.index'))
+        # [LOGIC MỚI] User mới tinh -> Chắc chắn chưa có interests -> Vào onboarding
+        flash('Account created! Please select your interests.', 'success')
+        return redirect(url_for('auth.onboarding'))
 
 # --- Account / Profile Routes ---
 

@@ -6,7 +6,6 @@ from flask_login import current_user
 from app.models import User, Room
 
 # --- DANH SÁCH TAGS ---
-# (Giữ nguyên danh sách đầy đủ như yêu cầu của bạn)
 GROUP_HANGOUT_TAGS = [
     "Eating", "Coffee", "Gaming", "Study", "Travel", 
     "Music", "Movie", "Sports", "Shopping", "Camping",
@@ -15,17 +14,38 @@ GROUP_HANGOUT_TAGS = [
 # Tạo list choices
 TAG_CHOICES = [(tag, tag) for tag in GROUP_HANGOUT_TAGS]
 
+class OnboardingForm(FlaskForm):
+    # Dùng SelectMultipleField để chọn nhiều tag
+    interests = SelectMultipleField('Choose your interests (1-5 tags)', choices=TAG_CHOICES)
+    submit = SubmitField('Get Started')
+
+    def validate_interests(self, interests):
+        # Kiểm tra rỗng
+        if not interests.data or len(interests.data) == 0:
+            raise ValidationError('Please select at least one interest to continue.')
+        # Kiểm tra tối đa 5
+        if len(interests.data) > 5:
+            raise ValidationError('You can only select up to 5 interests.')
+
 class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
     password = PasswordField('Password', validators=[DataRequired()])
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
-    interests = SelectMultipleField('Interests', choices=TAG_CHOICES, validators=[Optional()])
+    
+    # [UPDATED] Bắt buộc chọn sở thích khi đăng ký
+    interests = SelectMultipleField('Interests', choices=TAG_CHOICES) 
+    
     submit = SubmitField('Sign Up')
 
     def validate_username(self, username):
         user = User.query.filter_by(username=username.data).first()
         if user:
             raise ValidationError('That username is taken. Please choose another.')
+
+    # [NEW] Validator bắt buộc chọn ít nhất 1 interest
+    def validate_interests(self, interests):
+        if not interests.data or len(interests.data) == 0:
+            raise ValidationError('Please select at least one interest.')
 
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
@@ -38,14 +58,25 @@ class PostForm(FlaskForm):
     media = FileField('Upload Image/Video', validators=[
         FileAllowed(['jpg', 'png', 'jpeg', 'gif', 'mp4', 'mov', 'avi'], 'Images and Videos only!')
     ])
-    tags = SelectMultipleField('Tags', choices=TAG_CHOICES, validators=[Optional()])
+    
+    # [UPDATED] Bắt buộc chọn Tag cho bài viết
+    tags = SelectMultipleField('Tags', choices=TAG_CHOICES)
+    
     submit = SubmitField('Post')
+
+    # [NEW] Validator bắt buộc chọn ít nhất 1 tag
+    def validate_tags(self, tags):
+        if not tags.data or len(tags.data) == 0:
+            raise ValidationError('Please select at least one tag for your post.')
 
 class UpdateAccountForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
     email = StringField('Email', validators=[DataRequired(), Email()])
     picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
-    interests = SelectMultipleField('Update Interests', choices=TAG_CHOICES, validators=[Optional()])
+    
+    # [UPDATED] Bắt buộc chọn sở thích khi update
+    interests = SelectMultipleField('Update Interests', choices=TAG_CHOICES)
+    
     submit = SubmitField('Update Account')
 
     def validate_username(self, username):
@@ -60,7 +91,12 @@ class UpdateAccountForm(FlaskForm):
             if user:
                 raise ValidationError('That email is already in use.')
 
-# --- CÁC FORM CŨ (ĐÃ ĐƯỢC KHÔI PHỤC) ---
+    # [NEW] Validator bắt buộc chọn ít nhất 1 interest
+    def validate_interests(self, interests):
+        if not interests.data or len(interests.data) == 0:
+            raise ValidationError('Please select at least one interest.')
+
+# --- CÁC FORM CŨ ---
 
 class ReviewForm(FlaskForm):
     rating = SelectField('Rating', 
@@ -75,15 +111,14 @@ class CreateRoomForm(FlaskForm):
     description = TextAreaField('Description', 
                                 validators=[Optional(), Length(max=200)])
     
-    # [NEW] Chọn chế độ phòng
     privacy = RadioField('Privacy Setting', 
                          choices=[('public', 'Public (Anyone can join)'), 
                                   ('private', 'Private (Invite only)')],
                          default='public',
                          validators=[DataRequired()])
     
-    # [NEW] Chọn Tags (Multiple)
-    tags = SelectMultipleField('Tags (Max 5)', choices=TAG_CHOICES, validators=[Optional()])
+    # [UPDATED] Bắt buộc chọn tags
+    tags = SelectMultipleField('Tags (Max 5)', choices=TAG_CHOICES)
 
     submit = SubmitField('Create Room')
 
@@ -92,8 +127,10 @@ class CreateRoomForm(FlaskForm):
         if room:
             raise ValidationError('That room name is taken. Please choose another.')
 
-    # [NEW] Validate tối đa 5 tags
+    # [UPDATED] Validate vừa bắt buộc chọn, vừa giới hạn max 5
     def validate_tags(self, tags):
+        if not tags.data or len(tags.data) == 0:
+            raise ValidationError('Please select at least one tag for the room.')
         if len(tags.data) > 5:
             raise ValidationError('You can only select up to 5 tags.')
 
