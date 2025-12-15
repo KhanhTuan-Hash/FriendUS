@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, current_user, login_required
-from app.extensions import db, oauth
-from app.models import User, Post
-from app.forms import LoginForm, RegisterForm, UpdateAccountForm
-from app.utils import save_picture 
+from backend.app.extensions import db, oauth
+from backend.app.models import User, Post
+from backend.app.forms import LoginForm, RegisterForm, UpdateAccountForm
+from backend.app.utils import save_picture 
 import secrets
 
 auth_bp = Blueprint('auth', __name__)

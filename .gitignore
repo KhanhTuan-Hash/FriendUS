@@ -5,3 +5,5 @@ __pycache__/
 .env
 # FriendUS\backend\vietmap-intent-model
 vietmap-intent-model 
+venv/
+.venv/

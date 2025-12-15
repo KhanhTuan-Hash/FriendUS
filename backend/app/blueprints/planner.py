@@ -1,8 +1,8 @@
 from flask import Blueprint, redirect, url_for, flash, jsonify, request
 from flask_login import current_user, login_required
-from app.extensions import db
-from app.models import Room, Activity, Constraint
-from app.forms import ActivityForm, ConstraintForm
+from backend.app.extensions import db
+from backend.app.models import Room, Activity, Constraint
+from backend.app.forms import ActivityForm, ConstraintForm
 import random
 from datetime import datetime, timedelta
 

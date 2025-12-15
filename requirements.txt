@@ -1,0 +1,44 @@
+# --- Core Python (Phiên bản Python được xác định khi tạo môi trường ảo) ---
+# python=3.10
+# pip
+# ------------------------------------------------------------------------
+
+# --- AI Core & Dependencies (Quan trọng cho ai_engine.py) ---
+# Lưu ý: Phiên bản PyTorch mặc định từ PyPI thường hỗ trợ cả CPU và CUDA.
+# Nếu bạn cần PyTorch cho GPU, hãy làm theo hướng dẫn trên trang web PyTorch.
+torch
+torchvision
+torchaudio
+# cpuonly (Không cần trong requirements.txt)
+
+# --- Web Backend (FLASK) ---
+flask
+flask-login
+flask-socketio
+flask-sqlalchemy
+flask-wtf
+email-validator
+eventlet
+flask-cors
+
+# --- AI Backend (FASTAPI) ---
+fastapi
+uvicorn
+pydantic
+python-multipart
+sentence-transformers
+
+# --- Geospatial & DB ---
+osmnx
+geopandas
+pyogrio
+matplotlib  # Dùng 'matplotlib' thay vì 'matplotlib-base'
+sqlalchemy
+Authlib
+requests
+python-dotenv
+Pillow
+bleach
+
+# --- PIP Dependencies (Thư viện không có trên Conda) ---
+pyvi

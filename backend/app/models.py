@@ -1,6 +1,6 @@
 from datetime import datetime
 from flask_login import UserMixin
-from app.extensions import db
+from backend.app.extensions import db
 
 # --- ASSOCIATION TABLES ---
 

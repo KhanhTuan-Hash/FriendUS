@@ -1,23 +1,13 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 from sqlalchemy import desc, or_
 from datetime import datetime
-from app.extensions import db
-from app.models import User, Room, Message, Transaction, Activity
+from backend.app.extensions import db
+from backend.app.models import User, Room, Message, Transaction, Activity
 
-# Import the AI Engine
-# NOTE: Ensure ai_engine.py is in the same directory or Python path
-try:
-    from ai_engine import VietmapAssistant
-    print("⏳ Initializing AI Engine...")
-    ai_bot = VietmapAssistant()
-    print("✅ AI Engine ready!")
-except ImportError:
-    print("⚠️ ai_engine.py not found. Make sure it is in the same folder.")
-    ai_bot = None
-except Exception as e:
-    print(f"⚠️ AI Engine failed to load: {e}")
-    ai_bot = None
+# The AI assistant is initialized during app creation and attached to
+# the Flask app as `app.vietmap_assistant`. We fetch it per-request via
+# `current_app.vietmap_assistant` so the model is only loaded once.
 
 chat_bp = Blueprint('chat', __name__, url_prefix='/api')
 
@@ -34,10 +24,11 @@ def ai_suggest():
     """
     print(f"📩 Received AI request from {current_user.username}")
     
+    ai_bot = getattr(current_app, 'vietmap_assistant', None)
     if not ai_bot:
-        print("❌ AI Bot is not initialized.")
+        print("❌ AI Bot is not initialized on the server.")
         return jsonify({
-            "status": "error", 
+            "status": "error",
             "message": "AI Engine is not initialized on the server."
         }), 503
 
@@ -60,6 +51,35 @@ def ai_suggest():
         })
     except Exception as e:
         print(f"🔥 AI Processing Error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@chat_bp.route('/ai/status', methods=['GET'])
+@login_required
+def ai_status():
+    """Return status about the AI assistant for debugging."""
+    ai_bot = getattr(current_app, 'vietmap_assistant', None)
+    if not ai_bot:
+        return jsonify({"status": "unavailable", "message": "AI not initialized"}), 503
+
+    try:
+        keys_count = len(getattr(ai_bot, 'search_keys', []))
+        return jsonify({"status": "ready", "model": getattr(ai_bot, 'model', None) and getattr(ai_bot.model, 'name', 'loaded'), "search_keys": keys_count})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@chat_bp.route('/ai/public_status', methods=['GET'])
+def ai_public_status():
+    """Public status (no auth) useful for runtime checks."""
+    ai_bot = getattr(current_app, 'vietmap_assistant', None)
+    if not ai_bot:
+        return jsonify({"status": "unavailable", "message": "AI not initialized"}), 503
+
+    try:
+        keys_count = len(getattr(ai_bot, 'search_keys', []))
+        return jsonify({"status": "ready", "search_keys": keys_count})
+    except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ==========================================

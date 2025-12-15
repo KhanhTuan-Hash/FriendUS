@@ -1,9 +1,9 @@
 from flask import Flask
 from flask_cors import CORS
-from config import Config
+from backend.config import Config
 # [REMOVED] bootstrap import
-from app.extensions import db, login_manager, socketio, oauth
-from app.events import register_socketio_events
+from backend.app.extensions import db, login_manager, socketio, oauth
+from backend.app.events import register_socketio_events
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -39,13 +39,13 @@ def create_app(config_class=Config):
     )
 
     # Register Blueprints
-    from app.blueprints.main import main_bp
-    from app.blueprints.auth import auth_bp
-    from app.blueprints.map import map_bp
-    from app.blueprints.chat import chat_bp
-    from app.blueprints.planner import planner_bp
-    from app.blueprints.finance import finance_bp
-    from app.blueprints.weather import weather_bp
+    from backend.app.blueprints.main import main_bp
+    from backend.app.blueprints.auth import auth_bp
+    from backend.app.blueprints.map import map_bp
+    from backend.app.blueprints.chat import chat_bp
+    from backend.app.blueprints.planner import planner_bp
+    from backend.app.blueprints.finance import finance_bp
+    from backend.app.blueprints.weather import weather_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/auth') 
@@ -58,8 +58,20 @@ def create_app(config_class=Config):
     # Register Socket Events
     register_socketio_events(socketio)
 
+    # --- Initialize AI assistant and attach to app ---
+    try:
+        # Import lazily so app can still start if dependencies missing
+        from backend.ai_engine import VietmapAssistant
+        model_path = app.config.get('AI_MODEL_PATH')
+        print(f"⏳ Initializing VietmapAssistant (model_path={model_path})...")
+        app.vietmap_assistant = VietmapAssistant(model_path=model_path)
+        print("✅ VietmapAssistant initialized and attached to app")
+    except Exception as e:
+        app.vietmap_assistant = None
+        print(f"⚠️ Could not initialize VietmapAssistant: {e}")
+
     # Define User Loader
-    from app.models import User, Room
+    from backend.app.models import User, Room
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))

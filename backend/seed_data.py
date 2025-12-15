@@ -1,7 +1,7 @@
 import os
-from app import create_app
-from app.extensions import db
-from app.models import User, Location, Room, Activity, Transaction, Post, Message, Constraint
+from backend.app import create_app
+from backend.app.extensions import db
+from backend.app.models import User, Location, Room, Activity, Transaction, Post, Message, Constraint
 from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
 

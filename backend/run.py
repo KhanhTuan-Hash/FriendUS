@@ -1,4 +1,4 @@
-from app import create_app, socketio
+from backend.app import create_app, socketio
 import os
 from dotenv import load_dotenv
 
@@ -7,6 +7,16 @@ load_dotenv()
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = create_app()
+
+# Log AI assistant status if available
+try:
+    assistant = getattr(app, 'vietmap_assistant', None)
+    if assistant:
+        print("✅ VietmapAssistant is loaded and ready.")
+    else:
+        print("⚠️ VietmapAssistant is not initialized. Some AI routes may be unavailable.")
+except Exception as e:
+    print(f"⚠️ Error checking VietmapAssistant status: {e}")
 
 if __name__ == '__main__':
     print("----------------------------------------------------------------")

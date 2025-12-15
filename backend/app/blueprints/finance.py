@@ -1,9 +1,9 @@
 from flask import Blueprint, redirect, url_for, flash, request, jsonify
 from flask_login import current_user, login_required
-from app.extensions import db
-from app.models import Room, Transaction, Outsider
-from app.forms import TransactionForm
-from app.utils import simplify_debts
+from backend.app.extensions import db
+from backend.app.models import Room, Transaction, Outsider
+from backend.app.forms import TransactionForm
+from backend.app.utils import simplify_debts
 
 finance_bp = Blueprint('finance', __name__)
 

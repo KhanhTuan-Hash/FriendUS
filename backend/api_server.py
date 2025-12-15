@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 
 # Import class từ file ai_engine.py
-from ai_engine import VietmapAssistant 
+from backend.ai_engine import VietmapAssistant 
 
 app = FastAPI()
 

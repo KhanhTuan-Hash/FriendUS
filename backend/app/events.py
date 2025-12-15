@@ -1,8 +1,8 @@
 from flask import request
 from flask_socketio import emit, join_room, leave_room
 from flask_login import current_user
-from app.extensions import db, socketio
-from app.models import Message
+from backend.app.extensions import db, socketio
+from backend.app.models import Message
 
 # Global state for online users
 online_users_in_rooms = {}

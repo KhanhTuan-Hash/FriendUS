@@ -1,7 +1,7 @@
 # File: backend/app/blueprints/main.py
 from flask import Blueprint, jsonify, current_app, url_for, request
-from app.models import Post, Review, Location
-from app.extensions import db
+from backend.app.models import Post, Review, Location
+from backend.app.extensions import db
 from sqlalchemy import func
 import os
 from werkzeug.utils import secure_filename
