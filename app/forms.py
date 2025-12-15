@@ -1,16 +1,25 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, FloatField, SelectField, RadioField
+from wtforms import StringField, PasswordField, SubmitField, BooleanField, TextAreaField, FloatField, SelectField, RadioField, SelectMultipleField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, ValidationError, Optional
 from flask_login import current_user
 from app.models import User, Room
 
+# --- DANH SÁCH TAGS ---
+# (Giữ nguyên danh sách đầy đủ như yêu cầu của bạn)
+GROUP_HANGOUT_TAGS = [
+    "Eating", "Coffee", "Gaming", "Study", "Travel", 
+    "Music", "Movie", "Sports", "Shopping", "Camping",
+    "Billiards", "Karaoke", "Photography", "Just Chatting"
+]
+# Tạo list choices
+TAG_CHOICES = [(tag, tag) for tag in GROUP_HANGOUT_TAGS]
+
 class RegisterForm(FlaskForm):
-    username = StringField('Username',
-                           validators=[DataRequired(), Length(min=2, max=20)])
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
     password = PasswordField('Password', validators=[DataRequired()])
-    confirm_password = PasswordField('Confirm Password',
-                                     validators=[DataRequired(), EqualTo('password')])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    interests = SelectMultipleField('Interests', choices=TAG_CHOICES, validators=[Optional()])
     submit = SubmitField('Sign Up')
 
     def validate_username(self, username):
@@ -25,19 +34,18 @@ class LoginForm(FlaskForm):
     submit = SubmitField('Login')
 
 class PostForm(FlaskForm):
-    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=1000)]) # Increased Max Length for HTML
+    body = TextAreaField('What\'s on your mind?', validators=[DataRequired(), Length(min=1, max=1000)])
     media = FileField('Upload Image/Video', validators=[
         FileAllowed(['jpg', 'png', 'jpeg', 'gif', 'mp4', 'mov', 'avi'], 'Images and Videos only!')
     ])
+    tags = SelectMultipleField('Tags', choices=TAG_CHOICES, validators=[Optional()])
     submit = SubmitField('Post')
 
 class UpdateAccountForm(FlaskForm):
-    username = StringField('Username',
-                           validators=[DataRequired(), Length(min=2, max=20)])
-    email = StringField('Email',
-                        validators=[DataRequired(), Email()])
-    # [NEW] Profile Picture Upload
+    username = StringField('Username', validators=[DataRequired(), Length(min=2, max=20)])
+    email = StringField('Email', validators=[DataRequired(), Email()])
     picture = FileField('Update Profile Picture', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
+    interests = SelectMultipleField('Update Interests', choices=TAG_CHOICES, validators=[Optional()])
     submit = SubmitField('Update Account')
 
     def validate_username(self, username):
@@ -51,6 +59,8 @@ class UpdateAccountForm(FlaskForm):
             user = User.query.filter_by(email=email.data).first()
             if user:
                 raise ValidationError('That email is already in use.')
+
+# --- CÁC FORM CŨ (ĐÃ ĐƯỢC KHÔI PHỤC) ---
 
 class ReviewForm(FlaskForm):
     rating = SelectField('Rating', 

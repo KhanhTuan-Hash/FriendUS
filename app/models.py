@@ -2,6 +2,12 @@ from flask_login import UserMixin
 from datetime import datetime
 from app.extensions import db, login_manager
 
+# [NEW] Bảng phụ lưu quan hệ bạn bè (User A là bạn User B)
+friendship = db.Table('friendship',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('friend_id', db.Integer, db.ForeignKey('user.id'), primary_key=True)
+)
+
 # --- BẢNG QUAN HỆ MỚI CHO "YÊU THÍCH" ---
 user_favorites = db.Table('user_favorites',
     db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
@@ -34,6 +40,47 @@ class User(UserMixin, db.Model):
 
     favorite_locations = db.relationship('Location', secondary=user_favorites,
                                          back_populates='favorited_by', lazy='dynamic')
+    
+    # [NEW] Quan hệ bạn bè (Self-referential)
+    friends = db.relationship('User', secondary=friendship,
+                              primaryjoin=(friendship.c.user_id == id),
+                              secondaryjoin=(friendship.c.friend_id == id),
+                              backref=db.backref('friend_of', lazy='dynamic'), 
+                              lazy='dynamic')
+
+    # [NEW] Các hàm helper xử lý bạn bè
+    def send_request(self, user):
+        if not self.is_friend(user) and not self.has_sent_request(user):
+            req = FriendRequest(sender_id=self.id, receiver_id=user.id)
+            db.session.add(req)
+            db.session.commit()
+
+    def accept_request(self, request_id):
+        req = FriendRequest.query.get(request_id)
+        if req and req.receiver_id == self.id:
+            req.status = 'accepted'
+            # Add to friends list (both ways)
+            self.friends.append(req.sender)
+            req.sender.friends.append(self)
+            db.session.delete(req) # Xóa request sau khi accept
+            db.session.commit()
+
+    def remove_friend(self, user):
+        if self.is_friend(user):
+            self.friends.remove(user)
+            user.friends.remove(self)
+            db.session.commit()
+
+    def is_friend(self, user):
+        return self.friends.filter(friendship.c.friend_id == user.id).count() > 0
+
+    def has_sent_request(self, user):
+        return FriendRequest.query.filter_by(sender_id=self.id, receiver_id=user.id, status='pending').count() > 0
+
+    def has_received_request(self, user):
+        return FriendRequest.query.filter_by(sender_id=user.id, receiver_id=self.id, status='pending').count() > 0
+
+    interests = db.Column(db.String(500), default='')
 
     def __repr__(self):
         return f"User('{self.username}', '{self.email}')"
@@ -49,6 +96,8 @@ class Post(db.Model):
 
     def __repr__(self):
         return f"Post('{self.body}')"
+    
+    tags = db.Column(db.String(200), default='')
 
 class Location(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -159,3 +208,17 @@ class Constraint(db.Model):
 
     def __repr__(self):
         return f"<Constraint {self.type} {self.intensity}>"
+
+# [NEW] Model quản lý lời mời kết bạn
+class FriendRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    receiver_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending') # pending, accepted, rejected
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_requests')
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_requests')
+
+    def __repr__(self):
+        return f"<FriendRequest {self.sender_id}->{self.receiver_id}>"

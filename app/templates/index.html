@@ -11,22 +11,45 @@
                 <form method="POST" action="" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
                     <div class="mb-3">
-                        {{ form.body(class="form-control", id="body", rows="3") }}
-                        {% if form.body.errors %}
-                            <div class="text-danger mt-1">
-                                {% for error in form.body.errors %}<span>{{ error }}</span>{% endfor %}
-                            </div>
-                        {% endif %}
+                        {{ form.body(class="form-control", id="body", rows="3", placeholder="What's on your mind?") }}
                     </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="me-2">
-                            {{ form.media(class="form-control form-control-sm") }}
+                    
+                    <div class="mb-3">
+                        <label class="form-label small text-muted"><i class="bi bi-tags-fill"></i> Select Tags (Max 5):</label>
+                        <div class="d-flex flex-wrap gap-1" id="post-tags-container">
+                            {% for value, label in form.tags.choices %}
+                                <input type="checkbox" class="btn-check tag-checkbox" 
+                                       name="tags" id="tag_post_{{ loop.index }}" value="{{ value }}" autocomplete="off">
+                                <label class="btn btn-outline-primary btn-sm rounded-pill" for="tag_post_{{ loop.index }}">
+                                    {{ label }}
+                                </label>
+                            {% endfor %}
                         </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="input-group input-group-sm w-50">
+                            <label class="input-group-text"><i class="bi bi-image"></i></label>
+                            {{ form.media(class="form-control") }}
+                        </div>
+
                         {{ form.submit(class="btn btn-primary px-4") }}
                     </div>
                 </form>
             </div>
         </div>
+        
+        <script>
+            document.querySelectorAll('#post-tags-container .tag-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const checkedCount = document.querySelectorAll('#post-tags-container .tag-checkbox:checked').length;
+                    if (checkedCount > 5) {
+                        this.checked = false; // Bỏ chọn nếu vượt quá 5
+                        alert("You can only select up to 5 tags.");
+                    }
+                });
+            });
+        </script>
         {% endif %}
 
         <h3 class="mb-3">News Feed</h3>
@@ -51,6 +74,16 @@
             <div class="card-body pt-1">
                 <div class="card-text mb-2">{{ post.body | safe }}</div>
                 
+                {% if post.tags %}
+                <div class="mb-2">
+                    {% for tag in post.tags.split(',') %}
+                        {% if tag %}
+                            <span class="badge bg-light text-primary border border-primary me-1 fw-normal">#{{ tag }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 {% if post.media_filename %}
                     <div class="mt-2">
                         {% if post.media_filename.lower().endswith(('.mp4', '.mov', '.avi')) %}
@@ -69,52 +102,10 @@
             <div class="alert alert-info">No posts found.</div>
         {% endfor %}
         
-        {% if prev_url or next_url %}
-        <nav class="mt-4">
-            <ul class="pagination justify-content-center">
-                <li class="page-item {% if not prev_url %}disabled{% endif %}">
-                    <a class="page-link" href="{{ prev_url or '#' }}">Previous</a>
-                </li>
-                <li class="page-item {% if not next_url %}disabled{% endif %}">
-                    <a class="page-link" href="{{ next_url or '#' }}">Next</a>
-                </li>
-            </ul>
-        </nav>
-        {% endif %}
-    </div>
+        </div>
 
     <div class="col-md-4">
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-star-fill me-2"></i>Top Rated Places</h5>
-            </div>
-            <div class="list-group list-group-flush">
-                {% if top_locations %}
-                    {% for place in top_locations %}
-                        <a href="#" class="list-group-item list-group-item-action flex-column align-items-start">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h6 class="mb-1 fw-bold text-primary">{{ place.name }}</h6>
-                                <small class="text-warning">
-                                    <i class="bi bi-star-fill"></i> 5.0 </small>
-                            </div>
-                            <p class="mb-1 small text-muted text-truncate">{{ place.description }}</p>
-                        </a>
-                    {% endfor %}
-                {% else %}
-                    <div class="list-group-item text-center text-muted">
-                        No recommendations yet.
-                    </div>
-                {% endif %}
-            </div>
         </div>
-        
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h6 class="card-title">About FriendUS</h6>
-                <p class="card-text small">Connect with friends, plan trips, and share expenses seamlessly.</p>
-            </div>
-        </div>
-    </div>
 
 </div>
 {% endblock %}
