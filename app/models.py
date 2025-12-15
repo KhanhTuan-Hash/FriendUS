@@ -134,13 +134,19 @@ class Room(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(200), nullable=True)
+    
+    # [NEW] Các trường mới
+    is_private = db.Column(db.Boolean, default=False) # False = Public, True = Private
+    tags = db.Column(db.String(200), default='') # Lưu dạng chuỗi: "Travel,Eating"
+    summary = db.Column(db.Text, nullable=True) # Nội dung tóm tắt (ẩn với user khi tạo)
+
     creator_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     creator = db.relationship('User', back_populates='created_rooms')
     members = db.relationship('User', secondary=room_members,
                               back_populates='rooms', lazy='dynamic')
 
     def __repr__(self):
-        return f"Room('{self.name}')"
+        return f"Room('{self.name}', Private={self.is_private})"
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -1,81 +1,174 @@
 {% extends "layout.html" %}
-{% from 'bootstrap5/form.html' import render_form %}
 
 {% block content %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2 class="mb-3"><i class="bi bi-chat-square-text-fill"></i> Chat Lobby</h2>
+        <p class="text-muted">Join existing rooms or create your own to start planning trips!</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+            <i class="bi bi-plus-circle"></i> Create New Room
+        </button>
+    </div>
+</div>
 
-<style>
-    /* Thêm hiệu ứng hover mượt mà cho danh sách phòng */
-    .list-group-item-action:hover {
-        background-color: #f8f9fa;
-        transform: translateY(-2px);
-        transition: all 0.2s ease-out;
-    }
-</style>
+<div class="modal fade" id="createRoomModal" tabindex="-1" aria-labelledby="createRoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg"> <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createRoomModalLabel">Create a New Room</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label fw-bold") }}
+                        {% if form.name.errors %}
+                            {{ form.name(class="form-control is-invalid") }}
+                            <div class="invalid-feedback">
+                                {% for error in form.name.errors %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            {{ form.name(class="form-control") }}
+                        {% endif %}
+                    </div>
 
-<div class="row">
-    <div class="col-lg-4">
-        
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header h5">
-                <i class="bi bi-plus-lg me-2"></i>Create New Room
-            </div>
-            <div class="card-body">
-                {{ render_form(form, action=url_for('chat.chat')) }}
-            </div>
-        </div>
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label fw-bold") }}
+                        {{ form.description(class="form-control", rows="3") }}
+                    </div>
 
-        <div class="card mb-4 shadow-sm">
-            <div class="card-header h5">
-                <i class="bi bi-person-video me-2"></i>My Rooms
-            </div>
-            <ul class="list-group list-group-flush">
-                {% for room in my_rooms %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center list-group-item-action">
-                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none fw-bold">{{ room.name }}</a>
-                        <span class="badge bg-primary rounded-pill">
-                            <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }}
-                        </span>
-                    </li>
-                {% else %}
-                    <li class="list-group-item text-muted">You haven't joined any rooms.</li>
-                {% endfor %}
-            </ul>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold"><i class="bi bi-shield-lock"></i> Privacy Setting</label>
+                        <div class="d-flex gap-3">
+                            {% for subfield in form.privacy %}
+                                <div class="form-check">
+                                    {{ subfield(class="form-check-input") }}
+                                    {{ subfield.label(class="form-check-label") }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted"><i class="bi bi-tags-fill"></i> Select Tags (Max 5):</label>
+                        <div class="d-flex flex-wrap gap-1" id="room-tags-container">
+                            {% for value, label in form.tags.choices %}
+                                <input type="checkbox" class="btn-check room-tag-checkbox" 
+                                       name="tags" id="tag_room_{{ loop.index }}" value="{{ value }}" autocomplete="off">
+                                <label class="btn btn-outline-primary btn-sm rounded-pill" for="tag_room_{{ loop.index }}">
+                                    {{ label }}
+                                </label>
+                            {% endfor %}
+                        </div>
+                        {% if form.tags.errors %}
+                            <div class="text-danger small mt-1">
+                                {% for error in form.tags.errors %}
+                                    <span>{{ error }}</span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+            </form>
         </div>
     </div>
+</div>
 
-    <div class="col-lg-8">
-        <h2 class="mb-4"><i class="bi bi-globe me-2"></i>All Rooms</h2>
+<div class="row">
+    <div class="col-md-12 mb-5">
+        <h4 class="border-bottom pb-2 mb-3">My Rooms</h4>
+        {% if my_rooms %}
+            <div class="row row-cols-1 row-cols-md-3 g-4">
+                {% for room in my_rooms %}
+                    <div class="col">
+                        <div class="card h-100 shadow-sm border-primary">
+                            <div class="card-body">
+                                <h5 class="card-title d-flex justify-content-between align-items-center">
+                                    {{ room.name }}
+                                    {% if room.is_private %}
+                                        <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Private</span>
+                                    {% else %}
+                                        <span class="badge bg-success"><i class="bi bi-globe"></i> Public</span>
+                                    {% endif %}
+                                </h5>
+                                <p class="card-text text-muted small">{{ room.description }}</p>
+                                
+                                {% if room.tags %}
+                                <div class="mb-3">
+                                    {% for tag in room.tags.split(',') %}
+                                        {% if tag %}
+                                            <span class="badge bg-light text-primary border border-primary me-1 fw-normal" style="font-size: 0.7rem;">#{{ tag }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+
+                                <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="btn btn-outline-primary w-100">
+                                    Go to Chat
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted">You haven't joined any rooms yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="col-md-12">
+        <h4 class="border-bottom pb-2 mb-3">Explore Public Rooms</h4>
         <div class="list-group">
             {% for room in all_rooms %}
-                <div class="list-group-item list-group-item-action flex-column align-items-start mb-3 shadow-sm p-3">
-                    <div class="d-flex w-100 justify-content-between">
-                        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="text-decoration-none">
-                            <h5 class="mb-1 text-primary">{{ room.name }}</h5>
-                        </a>
-                        
-                        <div>
-                            <small class="text-muted me-3">
-                                <i class="bi bi-people-fill me-1"></i>{{ room.members.count() }} member(s)
-                            </small>
-                            {% if room.creator == current_user %}
-                                <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" style="display: inline;" 
-                                      onsubmit="return confirm('Are you sure you want to permanently delete this room and all its messages? This cannot be undone.');">
-                                    <button type="submit" class="btn btn-danger btn-sm py-0 px-2"><i class="bi bi-trash"></i> Delete</button>
-                                </form>
+                {% if not room.is_private or room in my_rooms %} <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold fs-5">
+                                {{ room.name }}
+                                {% if room.is_private %} <i class="bi bi-lock-fill text-muted small"></i> {% endif %}
+                            </div>
+                            <span class="text-muted">{{ room.description }}</span>
+                            
+                            {% if room.tags %}
+                            <div class="mt-2">
+                                {% for tag in room.tags.split(',') %}
+                                    {% if tag %}
+                                        <span class="badge bg-light text-secondary border me-1 fw-normal" style="font-size: 0.7rem;">{{ tag }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
                             {% endif %}
                         </div>
-                        
-                    </div>
-                    <p class="mb-1">{{ room.description or "No description." }}</p>
-                    <small class="text-muted">Created by: {{ room.creator.username if room.creator else 'System' }}</small>
-                </div>
-            {% else %}
-                <div class="alert alert-info">
-                    <i class="bi bi-info-circle-fill me-2"></i>No rooms found. Why not create one?
-                </div>
+                        <span class="badge bg-primary rounded-pill">{{ room.members.count() }} Members</span>
+                    </a>
+                {% endif %}
             {% endfor %}
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const checkboxes = document.querySelectorAll('#room-tags-container .room-tag-checkbox');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const checkedCount = document.querySelectorAll('#room-tags-container .room-tag-checkbox:checked').length;
+                if (checkedCount > 5) {
+                    this.checked = false; // Bỏ chọn nếu vượt quá 5
+                    alert("You can only select up to 5 tags for a room.");
+                }
+            });
+        });
+    });
+</script>
+
 {% endblock %}

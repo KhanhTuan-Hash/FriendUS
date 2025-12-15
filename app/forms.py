@@ -74,12 +74,28 @@ class CreateRoomForm(FlaskForm):
                          validators=[DataRequired(), Length(min=3, max=50)])
     description = TextAreaField('Description', 
                                 validators=[Optional(), Length(max=200)])
+    
+    # [NEW] Chọn chế độ phòng
+    privacy = RadioField('Privacy Setting', 
+                         choices=[('public', 'Public (Anyone can join)'), 
+                                  ('private', 'Private (Invite only)')],
+                         default='public',
+                         validators=[DataRequired()])
+    
+    # [NEW] Chọn Tags (Multiple)
+    tags = SelectMultipleField('Tags (Max 5)', choices=TAG_CHOICES, validators=[Optional()])
+
     submit = SubmitField('Create Room')
 
     def validate_name(self, name):
         room = Room.query.filter_by(name=name.data).first()
         if room:
             raise ValidationError('That room name is taken. Please choose another.')
+
+    # [NEW] Validate tối đa 5 tags
+    def validate_tags(self, tags):
+        if len(tags.data) > 5:
+            raise ValidationError('You can only select up to 5 tags.')
 
 class TransactionForm(FlaskForm):
     amount = FloatField('Amount (VNĐ)', validators=[DataRequired()])

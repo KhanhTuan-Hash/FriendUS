@@ -41,6 +41,7 @@ FRIENDUS
 │   │   ├── index.html
 │   │   ├── layout.html
 │   │   ├── location_detail.html
+|   |   |__ friends.html
 │   │   ├── login.html
 │   │   ├── map.html
 │   │   ├── planner.html
