@@ -1,0 +1,188 @@
+<div class="tab-pane fade" id="weather-panel" role="tabpanel">
+    <div class="container-fluid p-3">
+        <div class="position-relative mb-3" style="max-width: 500px; margin: 0 auto;">
+            <div class="input-group">
+                <input type="text" id="weather-search-input" class="form-control" placeholder="Nhập tên thành phố (VD: Hanoi, Tokyo)..." autocomplete="off" onkeydown="if(event.key === 'Enter') handleSearch()">
+                <button class="btn btn-primary" type="button" onclick="handleSearch()">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+            <div id="search-results-list" class="list-group position-absolute w-100 shadow mt-1" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+
+        <div id="weather-loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
+        </div>
+        <div id="weather-error" class="alert alert-danger" style="display: none;"></div>
+
+        <div id="weather-content" style="display: none;">
+            <div class="card text-white mb-4 shadow" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 20px;">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h4 class="fw-light opacity-75"><i class="bi bi-geo-alt-fill"></i> <span id="w-location">Hồ Chí Minh, VN</span></h4>
+                            <h1 style="font-size: 4rem; font-weight: bold;"><span id="w-temp">--</span>°C</h1>
+                            <p class="fs-5 mb-0" id="w-desc">--</p>
+                            <div class="mt-3">
+                                <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25 me-2">
+                                    💧 <span id="w-precip">0</span>mm mưa
+                                </span>
+                                <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25">
+                                    💨 <span id="w-wind">0</span> km/h
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-center text-md-end">
+                            <div style="font-size: 6rem; line-height: 1;" id="w-icon">🌤️</div>
+                            <div class="mt-3 text-end" id="w-risks"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
+            <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- CONSTANTS ---
+    const API_SEARCH_URL = "{{ url_for('weather.search_city') }}"; 
+    const API_FORECAST_URL = "{{ url_for('weather.get_forecast') }}"; 
+    const DEFAULT_LAT = 10.762622;
+    const DEFAULT_LON = 106.660172;
+    const DEFAULT_NAME = "Hồ Chí Minh, VN";
+
+    // --- HELPER FUNCTIONS ---
+    function getWeatherIcon(desc) {
+        if (!desc) return '🌤️';
+        if (desc.includes('Mưa')) return '🌧️';
+        if (desc.includes('Nắng') || desc.includes('Quang')) return '☀️';
+        if (desc.includes('Mây')) return '⛅';
+        if (desc.includes('Dông') || desc.includes('bão')) return '⛈️';
+        return '🌤️';
+    }
+
+    function getRiskBadge(risk) {
+        if (risk === 'RISK_HEAVY_RAIN') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☔ Mưa lớn</div>';
+        if (risk === 'RISK_EXTREME_HEAT') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☀️ Nắng gắt</div>';
+        if (risk === 'WARNING_LIGHT_RAIN') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">🌧️ Mưa nhẹ</div>';
+        if (risk === 'RISK_HIGH_WIND') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">💨 Gió to</div>';
+        if (risk === 'WARNING_CHILLY') return '<div class="alert alert-info d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">❄️ Trời lạnh</div>';
+        return '';
+    }
+
+    // --- 1. SEARCH FUNCTION ---
+    function handleSearch() {
+        const query = document.getElementById('weather-search-input').value.trim();
+        const resultsList = document.getElementById('search-results-list');
+        
+        if (!query) { resultsList.style.display = 'none'; return; }
+
+        fetch(`${API_SEARCH_URL}?q=${encodeURIComponent(query)}`)
+            .then(res => res.json())
+            .then(data => {
+                resultsList.innerHTML = '';
+                if (data.length > 0) {
+                    data.forEach(item => {
+                        const a = document.createElement('a');
+                        a.href = "#";
+                        a.className = "list-group-item list-group-item-action";
+                        a.innerHTML = `<strong>${item.name}</strong>`;
+                        a.onclick = (e) => { e.preventDefault(); selectLocation(item.lat, item.lon, item.name); };
+                        resultsList.appendChild(a);
+                    });
+                    resultsList.style.display = 'block';
+                } else {
+                    resultsList.innerHTML = '<div class="list-group-item text-muted">Không tìm thấy kết quả</div>';
+                    resultsList.style.display = 'block';
+                }
+            })
+            .catch(err => console.error(err));
+    }
+
+    // --- 2. SELECT & LOAD WEATHER ---
+    function selectLocation(lat, lon, name) {
+        document.getElementById('search-results-list').style.display = 'none';
+        document.getElementById('weather-search-input').value = name;
+        loadWeatherData(lat, lon, name);
+    }
+
+    function loadWeatherData(lat = DEFAULT_LAT, lon = DEFAULT_LON, name = DEFAULT_NAME) {
+        const contentDiv = document.getElementById('weather-content');
+        const loadingDiv = document.getElementById('weather-loading');
+        const errorDiv = document.getElementById('weather-error');
+        
+        contentDiv.style.display = 'none'; errorDiv.style.display = 'none'; loadingDiv.style.display = 'block';
+
+        const url = `${API_FORECAST_URL}?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`;
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                
+                document.getElementById('w-location').innerText = data.location_name;
+                const cur = data.current_weather;
+                document.getElementById('w-temp').innerText = cur.temperature;
+                document.getElementById('w-desc').innerText = cur.weather_desc;
+                document.getElementById('w-precip').innerText = cur.precipitation_sum;
+                document.getElementById('w-wind').innerText = cur.wind_max_kmh;
+                document.getElementById('w-icon').innerText = getWeatherIcon(cur.weather_desc);
+                
+                const riskContainer = document.getElementById('w-risks');
+                riskContainer.innerHTML = '';
+                if (cur.daily_risks && cur.daily_risks.length > 0) {
+                    cur.daily_risks.forEach(r => riskContainer.innerHTML += getRiskBadge(r));
+                } else {
+                    riskContainer.innerHTML = '<div class="alert alert-success d-inline-block py-1 px-3 m-0 border-0 shadow-sm">✅ Thời tiết đẹp</div>';
+                }
+
+                const forecastDiv = document.getElementById('forecast-container');
+                forecastDiv.innerHTML = '';
+                if (data.hourly_forecast && data.hourly_forecast.length > 0) {
+                    data.hourly_forecast.forEach(h => {
+                        const icon = getWeatherIcon(h.weather_desc);
+                        const html = `
+                            <div class="col-3 col-md-2 px-1 mb-2" style="min-width: 100px;">
+                                <div class="card h-100 border-0 shadow-sm text-center py-3" style="background-color: #f8f9fa;">
+                                    <div class="text-muted fw-bold">${h.hour}</div>
+                                    <div class="my-2 fs-2">${icon}</div>
+                                    <div class="fw-bold fs-5">${h.temp}°</div>
+                                    <div class="small text-muted text-truncate px-1" style="font-size: 0.8rem;" title="${h.weather_desc}">${h.weather_desc}</div>
+                                </div>
+                            </div>`;
+                        forecastDiv.innerHTML += html;
+                    });
+                } else { forecastDiv.innerHTML = '<div class="alert alert-warning">Không có dữ liệu dự báo theo giờ.</div>'; }
+
+                loadingDiv.style.display = 'none'; contentDiv.style.display = 'block';
+            })
+            .catch(err => {
+                console.error(err);
+                loadingDiv.style.display = 'none'; errorDiv.innerText = "Lỗi: " + err.message; errorDiv.style.display = 'block';
+            });
+    }
+
+    // --- 3. EVENT LISTENERS ---
+    document.addEventListener('click', function(e) {
+        const searchContainer = document.querySelector('.position-relative');
+        if (searchContainer && !searchContainer.contains(e.target)) {
+            document.getElementById('search-results-list').style.display = 'none';
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const weatherTabBtn = document.getElementById('weather-tab');
+        if (weatherTabBtn) {
+            weatherTabBtn.addEventListener('shown.bs.tab', function (e) {
+                document.getElementById('weather-search-input').value = '';
+                document.getElementById('search-results-list').style.display = 'none';
+                loadWeatherData(); 
+            });
+        }
+    });
+</script>

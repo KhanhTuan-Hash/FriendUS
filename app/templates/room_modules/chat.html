@@ -1,0 +1,160 @@
+<div class="tab-pane fade show active" id="chat-panel" role="tabpanel">
+    <div id="chat-container">
+        <div id="user-sidebar">
+            <h6 class="mb-3">Members (<span id="user-count">0</span>)</h6>
+            <div id="user-list-container">
+            </div>
+        </div>
+        <div id="chat-main">
+            <div id="messages" class="d-flex flex-column"></div>
+            <div id="typing-status" class="small text-muted px-3 py-1 bg-light"></div>
+            <div id="emoji-picker" style="display:none; position: absolute; bottom: 60px; right: 10px; z-index: 100;">
+                <emoji-picker></emoji-picker>
+            </div>
+            <div class="p-2 bg-light border-top">
+                <form id="chat-form">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="message-input" placeholder="Message..." autocomplete="off">
+
+                        <button class="btn btn-outline-primary" type="button" id="btn-summarize" title="Summarize recent chat with AI">
+                            <i class="bi bi-magic"></i> AI Summary
+                        </button>
+                        <button class="btn btn-outline-secondary" type="button" id="emoji-btn">😊</button>
+                        <button class="btn btn-primary" type="submit">Send</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', (event) => {
+    // --- 1. SUMMARIZE LOGIC ---
+    const summarizeBtn = document.getElementById('btn-summarize');
+    const summaryModalEl = document.getElementById('summaryModal');
+    
+    if (summarizeBtn && summaryModalEl) {
+        const summaryModal = new bootstrap.Modal(summaryModalEl);
+        const summaryLoading = document.getElementById('summary-loading');
+        const summaryContent = document.getElementById('summary-content');
+        const summaryShortText = document.getElementById('summary-short-text');
+        const summaryFullText = document.getElementById('summary-full-text');
+        
+        summarizeBtn.addEventListener('click', function() {
+            summaryLoading.style.display = 'block';
+            summaryContent.style.display = 'none';
+            summaryModal.show();
+
+            // Dùng biến global ROOM_ID đã khai báo ở file chính
+            fetch(`/chat/summary/${ROOM_ID}`)
+                .then(response => response.json())
+                .then(data => {
+                    summaryLoading.style.display = 'none';
+                    summaryContent.style.display = 'block';
+                    
+                    if (data.error) {
+                        summaryShortText.innerText = "Error";
+                        summaryFullText.innerText = data.error;
+                    } else {
+                        summaryShortText.innerText = data.short || "No summary available.";
+                        summaryFullText.innerText = data.full || "No details available.";
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    summaryLoading.style.display = 'none';
+                    summaryContent.style.display = 'block';
+                    summaryShortText.innerText = "Connection Error";
+                    summaryFullText.innerText = "Could not connect to AI server.";
+                });
+        });
+    }
+
+    // --- 2. SOCKET IO LOGIC ---
+    var socket = io(); // Tự động kết nối namespace '/'
+    
+    const messageContainer = document.getElementById('messages');
+    const chatForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const typingStatus = document.getElementById('typing-status');
+    const emojiPicker = document.getElementById('emoji-picker');
+    const emojiBtn = document.getElementById('emoji-btn');
+    let typingTimer;
+
+    function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
+    function isImageUrl(url) { return(url.match(/\.(jpeg|jpg|gif|png)$/) != null); }
+    
+    function addMessage(data) {
+        let isSelf = data.username === CURRENT_USERNAME;
+        let bubbleClass = isSelf ? 'message-self' : 'message-other';
+        let content = isImageUrl(data.msg) ? `<img src="${data.msg}" style="max-width:100%; border-radius:5px;">` : data.msg;
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('message-bubble', bubbleClass);
+        msgDiv.innerHTML = `<div class="message-info text-${isSelf ? 'end text-white-50' : 'start'}"><strong>${isSelf ? 'You' : data.username}</strong> <small>${data.timestamp}</small></div><div>${content}</div>`;
+        messageContainer.appendChild(msgDiv);
+        scrollToBottom();
+    }
+
+    // Emoji Actions
+    emojiBtn.addEventListener('click', () => { emojiPicker.style.display = (emojiPicker.style.display === 'none') ? 'block' : 'none'; });
+    emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; });
+    
+    // Typing Indicator
+    messageInput.addEventListener('input', () => {
+        clearTimeout(typingTimer); socket.emit('typing', { room: ROOM_NAME });
+        typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: ROOM_NAME }); }, 2000);
+    });
+    
+    // Socket Events
+    socket.on('connect', () => socket.emit('join', { 'room': ROOM_NAME }));
+    socket.on('typing_status', (data) => { typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : ''; });
+    socket.on('load_history', msgs => { messageContainer.innerHTML=''; msgs.forEach(addMessage); });
+    socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
+    socket.on('status', data => { const div = document.createElement('div'); div.className = 'text-center small text-muted my-1'; div.innerHTML = `<em>${data.msg}</em>`; messageContainer.appendChild(div); });
+    
+    socket.on('user_list', data => {
+        const container = document.getElementById('user-list-container');
+        const userCount = document.getElementById('user-count');
+        
+        if (data.total_count) userCount.textContent = data.total_count;
+        else userCount.textContent = data.online.length + data.offline.length;
+
+        container.innerHTML = ''; 
+        const createList = (title, users, isOnline) => {
+            if (users.length === 0) return;
+            const label = document.createElement('small');
+            label.className = 'text-muted fw-bold text-uppercase mt-2 d-block';
+            label.style.fontSize = '0.7rem';
+            label.innerText = title;
+            container.appendChild(label);
+            const ul = document.createElement('ul');
+            ul.className = 'list-group list-group-flush small mb-2';
+            users.forEach(u => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item px-0 py-1 bg-transparent border-0';
+                const color = isOnline ? '#28a745' : '#6c757d'; 
+                li.innerHTML = `<span style="height:8px;width:8px;background:${color};border-radius:50%;display:inline-block;margin-right:6px;"></span><span class="${!isOnline ? 'text-muted' : ''}">${u}</span>`;
+                ul.appendChild(li);
+            });
+            container.appendChild(ul);
+        };
+        createList('Online', data.online, true);
+        createList('Offline', data.offline, false);
+    });
+
+    // Send Message
+    chatForm.addEventListener('submit', e => {
+        e.preventDefault(); let msg = messageInput.value.trim();
+        if (msg) { 
+            socket.emit('send_message', { 'msg': msg, 'room': ROOM_NAME }); 
+            clearTimeout(typingTimer); 
+            socket.emit('stopped_typing', { room: ROOM_NAME }); 
+            messageInput.value = ''; 
+            emojiPicker.style.display = 'none'; 
+        }
+    });
+
+    window.addEventListener('beforeunload', () => socket.emit('leave', { 'room': ROOM_NAME }));
+});
+</script>
