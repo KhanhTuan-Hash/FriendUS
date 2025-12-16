@@ -185,17 +185,20 @@ def auto_update_user_interest(user_id, tags_list, weight_increment=1.0):
         record = UserTagScore.query.filter_by(user_id=user_id, tag=tag_clean).first()
         
         if record:
-            # --- [SỬA ĐOẠN NÀY] ---
-            # Cũ: record.score += weight_increment
-            # Mới: Cộng điểm nhưng dùng min() để đảm bảo không vượt quá MAX_INTEREST_SCORE
             new_score = record.score + weight_increment
-            record.score = min(new_score, MAX_INTEREST_SCORE)
-            record.last_interaction = datetime.datetime.utcnow()
+            # [LOGIC MỚI] Kẹp giá trị trong khoảng từ 0 đến MAX
+            # max(0.0, ...) -> Không cho xuống dưới 0
+            # min(..., MAX) -> Không cho vượt quá MAX
+            record.score = max(0.0, min(new_score, MAX_INTEREST_SCORE))
+            # Chỉ cập nhật thời gian nếu là hành động tích cực (tăng điểm)
+            if weight_increment > 0:
+                record.last_interaction = datetime.datetime.utcnow()
         else:
-            # Nếu chưa có, tạo mới (Điểm khởi tạo cũng không nên vượt quá max)
-            initial_score = min(weight_increment, MAX_INTEREST_SCORE)
-            new_record = UserTagScore(user_id=user_id, tag=tag_clean, score=initial_score)
-            db.session.add(new_record)
+            # Nếu chưa có record mà lại trừ điểm thì bỏ qua (hoặc tạo mới = 0)
+            if weight_increment > 0:
+                initial_score = min(weight_increment, MAX_INTEREST_SCORE)
+                new_record = UserTagScore(user_id=user_id, tag=tag_clean, score=initial_score)
+                db.session.add(new_record)
     
     db.session.commit()
 

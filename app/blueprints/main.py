@@ -15,22 +15,25 @@ main_bp = Blueprint('main', __name__)
 @login_required
 def like_post(post_id):
     post = Post.query.get_or_404(post_id)
+    
+    # Lấy tags để tính toán
+    tags_list = post.tags.split(',') if post.tags else []
+
     if post.is_liked_by(current_user):
-        # Nếu đã like rồi thì unlike
+        # --- UNLIKE ---
         post.likes.remove(current_user)
         action = 'unliked'
+        # [ALGORITHM] Bỏ like -> Giảm sự quan tâm (-1.0)
+        auto_update_user_interest(current_user.id, tags_list, weight_increment=-1.0)
     else:
-        # Nếu chưa like thì add like
+        # --- LIKE ---
         post.likes.append(current_user)
         action = 'liked'
-        
-        # [ALGORITHM] User like bài viết -> Tăng mạnh trọng số sở thích (+1.0)
-        # Lấy tags của bài viết để cập nhật cho user
-        if post.tags:
-            auto_update_user_interest(current_user.id, post.tags.split(','), weight_increment=1.0)
+        # [ALGORITHM] Like -> Tăng sự quan tâm (+1.0)
+        auto_update_user_interest(current_user.id, tags_list, weight_increment=1.0)
 
     db.session.commit()
-    return jsonify({'status': 'success', 'action': action, 'count': post.likes.count()})
+    return jsonify({'status': 'success', 'action': action, 'count': len(post.likes)})
 
 # --- 2. Route xử lý COMMENT ---
 @main_bp.route('/post/<int:post_id>/comment', methods=['POST'])
@@ -52,6 +55,30 @@ def comment_post(post_id):
     
     flash('Error posting comment.', 'danger')
     return redirect(url_for('main.index'))
+
+# --- Route xử lý DELETE COMMENT ---
+@main_bp.route('/comment/<int:comment_id>/delete', methods=['POST'])
+@login_required
+def delete_comment(comment_id):
+    comment = Comment.query.get_or_404(comment_id)
+    
+    # Kiểm tra quyền: Chỉ chủ comment HOẶC chủ bài viết mới được xóa
+    if comment.author != current_user and comment.post.author != current_user:
+        flash('You do not have permission to delete this comment.', 'danger')
+        return redirect(url_for('main.index'))
+
+    post = comment.post 
+    # [ALGORITHM] Xóa comment -> Giảm mạnh sự quan tâm (-2.0)
+    # Logic: Nếu lúc comment được +2, thì xóa comment (hết quan tâm/ghét) sẽ bị trừ 2
+    if post.tags:
+        auto_update_user_interest(current_user.id, post.tags.split(','), weight_increment=-2.0)
+
+    db.session.delete(comment)
+    db.session.commit()
+    
+    flash('Comment deleted.', 'success')
+    # Quay lại trang trước đó (hoặc trang chủ nếu không xác định được)
+    return redirect(request.referrer or url_for('main.index'))
 
 # --- 3. Route xử lý SHARE (Đếm số) ---
 @main_bp.route('/post/<int:post_id>/share', methods=['POST'])
