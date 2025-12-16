@@ -60,10 +60,5 @@ def create_app(config_class=Config):
     # Create DB and Populate if empty
     with app.app_context():
         db.create_all()
-        if not Room.query.filter_by(name='general').first():
-            general_room = Room(name='general', description='A general chat room for all users.')
-            db.session.add(general_room)
-            db.session.commit()
-            print("Created 'general' room.")
 
     return app

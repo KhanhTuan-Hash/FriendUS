@@ -196,10 +196,6 @@ def invite_to_room(room_id):
 def delete_chat_room(room_id):
     room_to_delete = Room.query.get_or_404(room_id)
     
-    if room_to_delete.name == 'general':
-          flash('The general room cannot be deleted.', 'danger')
-          return redirect(url_for('chat.chat'))
-    
     if room_to_delete.creator != current_user:
         flash('You do not have permission to delete this room.', 'danger')
         return redirect(url_for('chat.chat'))
