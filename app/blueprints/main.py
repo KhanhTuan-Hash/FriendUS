@@ -1,5 +1,5 @@
 import os
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app, jsonify
 from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_ # [NEW] Import để query OR cho tìm kiếm 
@@ -104,6 +104,7 @@ def track_interest():
 @login_required
 def index():
     form = PostForm()
+    comment_form = CommentForm()
     if form.validate_on_submit():
         filename = None
         if form.media.data:
@@ -146,7 +147,11 @@ def index():
     suggestions = User.query.filter(User.id != current_user.id).order_by(func.random()).limit(3).all()
     # -------------------------------------------------------
 
-    return render_template('index.html', title='Home', form=form, posts=final_posts, suggestions=suggestions)
+    return render_template('index.html', title='Home', 
+                           form=form, 
+                           comment_form=comment_form, 
+                           posts=final_posts, 
+                           suggestions=suggestions)
 
 # --- FRIEND SYSTEM ROUTES ---
 

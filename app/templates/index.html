@@ -82,7 +82,7 @@
                             {{ 'text-danger' if post.is_liked_by(current_user) else 'text-secondary' }}" 
                             data-post-id="{{ post.id }}">
                         <i class="bi {{ 'bi-heart-fill' if post.is_liked_by(current_user) else 'bi-heart' }}"></i> 
-                        <span class="like-count">{{ post.likes.count() }}</span>
+                        <span class="like-count">{{ post.likes|length }}</span>
                     </button>
 
                     <button class="btn btn-link text-decoration-none p-0 text-secondary" 

@@ -135,7 +135,7 @@ class Post(db.Model):
 
     # Helper function để check user đã like chưa
     def is_liked_by(self, user):
-        return self.likes.filter(post_likes.c.user_id == user.id).count() > 0
+        return user in self.likes
 
     def __repr__(self):
         return f"Post('{self.body}')"

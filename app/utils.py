@@ -190,8 +190,7 @@ def auto_update_user_interest(user_id, tags_list, weight_increment=1.0):
             # Mới: Cộng điểm nhưng dùng min() để đảm bảo không vượt quá MAX_INTEREST_SCORE
             new_score = record.score + weight_increment
             record.score = min(new_score, MAX_INTEREST_SCORE)
-            # ----------------------
-            record.last_interaction = datetime.utcnow()
+            record.last_interaction = datetime.datetime.utcnow()
         else:
             # Nếu chưa có, tạo mới (Điểm khởi tạo cũng không nên vượt quá max)
             initial_score = min(weight_increment, MAX_INTEREST_SCORE)
