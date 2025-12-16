@@ -34,6 +34,12 @@
 
     /* --- MAP PICKER STYLING --- */
     #picker-map { width: 100%; height: 400px; border-radius: 0.25rem; }
+
+    /* --- WEATHER SCROLL STYLING --- */
+    .hourly-scroll::-webkit-scrollbar { height: 6px; }
+    .hourly-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    .hourly-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    .hourly-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
 </style>
 
 <div class="container-fluid mt-2">
@@ -393,8 +399,8 @@
                         </div>
                     </div>
 
-                    <h5 class="mb-3 text-muted">Dự báo 5 ngày tới</h5>
-                    <div class="row row-cols-1 row-cols-md-5 g-3" id="forecast-container">
+                    <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
+                    <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;">
                         </div>
                 </div>
             </div>
@@ -783,7 +789,9 @@
 
     <script>
         // 1. Cấu hình & Helper Functions
-        const WEATHER_API_URL = "{{ url_for('weather.get_forecast') }}"; // Route trong weather.py
+        // LƯU Ý: Đây là endpoint lấy JSON API, tên function trong Python phải là 'get_forecast' (hoặc bạn đổi trong url_for)
+        const WEATHER_API_URL = "{{ url_for('weather.get_forecast') }}"; 
+        
         // Tạm dùng tọa độ HCM giống planner.py. Sau này bạn có thể lấy {{ room.lat }} nếu có.
         const DEFAULT_LAT = 10.762622;
         const DEFAULT_LON = 106.660172;
@@ -811,7 +819,6 @@
             const contentDiv = document.getElementById('weather-content');
             const loadingDiv = document.getElementById('weather-loading');
             
-            // Nếu đã load rồi thì không load lại để tiết kiệm API
             if (contentDiv.style.display === 'block') return;
 
             fetch(`${WEATHER_API_URL}?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}`)
@@ -840,24 +847,29 @@
                         riskContainer.innerHTML = '<div class="alert alert-success d-inline-block py-1 px-3 m-0 border-0 shadow-sm">✅ Thời tiết đẹp</div>';
                     }
 
-                    // --- Xử lý 5-Day Forecast ---
+                    // --- Xử lý HOURLY Forecast (24H) ---
                     const forecastDiv = document.getElementById('forecast-container');
                     forecastDiv.innerHTML = '';
                     
-                    data.five_day_forecast.forEach(day => {
-                        const icon = getWeatherIcon(day.weather_desc);
-                        const html = `
-                            <div class="col">
-                                <div class="card h-100 border-0 shadow-sm text-center py-3">
-                                    <div class="text-muted small">${day.date}</div>
-                                    <div class="my-2 fs-1">${icon}</div>
-                                    <div class="fw-bold">${day.temp_max}° / ${day.temp_min}°</div>
-                                    <div class="small text-muted text-truncate px-1" title="${day.weather_desc}">${day.weather_desc}</div>
+                    // Lưu ý: Backend trả về 'hourly_forecast'
+                    if (data.hourly_forecast && data.hourly_forecast.length > 0) {
+                        data.hourly_forecast.forEach(h => {
+                            const icon = getWeatherIcon(h.weather_desc);
+                            const html = `
+                                <div class="col-3 col-md-2 px-1 mb-2" style="min-width: 100px;">
+                                    <div class="card h-100 border-0 shadow-sm text-center py-3" style="background-color: #f8f9fa;">
+                                        <div class="text-muted fw-bold">${h.hour}</div>
+                                        <div class="my-2 fs-2">${icon}</div>
+                                        <div class="fw-bold fs-5">${h.temp}°</div>
+                                        <div class="small text-muted text-truncate px-1" style="font-size: 0.8rem;" title="${h.weather_desc}">${h.weather_desc}</div>
+                                    </div>
                                 </div>
-                            </div>
-                        `;
-                        forecastDiv.innerHTML += html;
-                    });
+                            `;
+                            forecastDiv.innerHTML += html;
+                        });
+                    } else {
+                         forecastDiv.innerHTML = '<div class="alert alert-warning">Không có dữ liệu dự báo theo giờ.</div>';
+                    }
 
                     // Hiển thị UI
                     loadingDiv.style.display = 'none';
