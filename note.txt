@@ -16,13 +16,7 @@ FRIENDUS
 │   ├── templates
 │   │   ├── account.html
 │   │   ├── chat_lobby.html
-│   │   ├── chat_room.html  (File chính, giữ khung sườn)
-        └── room_modules/   (Thư mục mới)
-            ├── chat.html       (Chứa tab chat + JS socket)
-            ├── planner.html    (Chứa tab planner + JS timeline)
-            ├── finance.html    (Chứa tab finance + JS graph)
-            ├── weather.html    (Chứa tab weather + JS api)
-            └── modals.html     (Chứa các popup: Invite, Map, Summary)
+│   │   ├── chat_room.html  
 │   │   ├── chat.html
 │   │   ├── finance.html
 │   │   ├── index.html
