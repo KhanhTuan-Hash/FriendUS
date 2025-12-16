@@ -1,12 +1,31 @@
+# ---- Core ----
 Flask==3.0.3
-Flask-SQLAlchemy
+gunicorn
+eventlet
+
+# ---- Flask Extensions ----
+bootstrap-flask
 Flask-Login
-Flask-Bootstrap
 Flask-SocketIO
-Flask-Dance
+Flask-SQLAlchemy
+Flask-WTF
+email-validator
+
+# ---- Database ----
+SQLAlchemy
+
+# ---- Auth / OAuth ----
+Authlib
+requests
 python-dotenv
 
-eventlet
-gunicorn
+# ---- Utilities ----
+Pillow
+Markdown
+bleach
 
-requests
+# ---- Google Generative AI ----
+google-generativeai
+grpcio
+protobuf
+google-api-core
