@@ -19,9 +19,7 @@ def create_app(config_class=Config):
     oauth.register(
         name='google',
         server_metadata_url=CONF_URL,
-        # --- ADDED THIS LINE ---
         api_base_url='https://www.googleapis.com/oauth2/v3/',
-        # -----------------------
         client_id=app.config.get('GOOGLE_CLIENT_ID'),
         client_secret=app.config.get('GOOGLE_CLIENT_SECRET'),
         client_kwargs={
@@ -36,17 +34,15 @@ def create_app(config_class=Config):
     from app.blueprints.chat import chat_bp
     from app.blueprints.planner import planner_bp
     from app.blueprints.finance import finance_bp
+    from app.blueprints.weather import weather_bp 
 
     app.register_blueprint(main_bp)
-    
-    # --- THIS IS THE CRITICAL FIX ---
     app.register_blueprint(auth_bp, url_prefix='/auth') 
-    # --------------------------------
-    
     app.register_blueprint(map_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(planner_bp)
     app.register_blueprint(finance_bp)
+    app.register_blueprint(weather_bp, url_prefix='/weather')
 
     # Register Socket Events
     register_socketio_events(socketio)
