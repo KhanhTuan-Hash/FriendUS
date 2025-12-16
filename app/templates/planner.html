@@ -3,218 +3,335 @@
 {% block content %}
 
 <style>
-    /* Cấu trúc Timeline dọc */
-    .timeline {
+    /* === TIMELINE STYLE === */
+    .timeline-container {
         position: relative;
-        padding-left: 30px;
-        border-left: 2px solid #e9ecef; /* Đường kẻ dọc */
+        padding: 20px 0;
+    }
+    .timeline-line {
+        position: absolute;
+        left: 50px;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: #e9ecef;
+        z-index: 0;
     }
     .timeline-item {
         position: relative;
-        margin-bottom: 25px;
+        margin-bottom: 30px;
+        z-index: 1;
     }
-    .timeline-marker {
+    .timeline-time {
         position: absolute;
-        left: -36px;
-        top: 20px;
-        width: 14px;
-        height: 14px;
+        left: 0;
+        width: 45px;
+        text-align: right;
+        font-weight: bold;
+        color: #495057;
+        font-size: 0.9rem;
+        top: 2px;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: 42px; /* Canh giữa line */
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
-        background-color: #0d6efd;
-        border: 2px solid #fff;
-        box-shadow: 0 0 0 2px #0d6efd;
+        background: #0d6efd;
+        border: 4px solid #fff;
+        box-shadow: 0 0 0 1px #dee2e6;
     }
-    /* Box chứa nội dung Activity */
-    .timeline-content {
+    .timeline-card {
+        margin-left: 75px;
         background: #fff;
-        padding: 20px;
-        border-radius: 8px;
-        border: 1px solid #dee2e6;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        transition: transform 0.2s, box-shadow 0.2s;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+        transition: transform 0.2s;
     }
-    .timeline-content:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    .timeline-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }
-    .act-icon {
-        width: 20px;
-        display: inline-block;
-        text-align: center;
-        margin-right: 8px;
-        color: #6c757d;
+    
+    /* === AI SECTION STYLE === */
+    .ai-wrapper {
+        background: linear-gradient(135deg, #f6f9fc 0%, #edf2f7 100%);
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 30px;
+        border: 1px solid #e1e4e8;
+    }
+    .suggestion-item {
+        border-left: 3px solid #0d6efd;
+        background: white;
+        margin-bottom: 8px;
     }
 </style>
 
-<div class="container mt-4" style="max-width: 900px;">
-    
+<div class="container py-4">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
           <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
             {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
           </div>
         {% endfor %}
       {% endif %}
     {% endwith %}
-    
+
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><span class="text-muted">Itinerary for:</span> {{ room.name }}</h2>
-        <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="btn btn-outline-secondary btn-sm">
-            ← Back to Chat
-        </a>
+        <h2 class="fw-bold"><i class="bi bi-map"></i> Lịch Trình: {{ room.name }}</h2>
+        <div>
+            <a href="{{ url_for('chat.chat_room', room_name=room.name) }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-chat-left"></i> Chat
+            </a>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addActivityModal">
+                <i class="bi bi-plus-lg"></i> Thêm Hoạt Động
+            </button>
+        </div>
     </div>
 
     <div class="row">
-        <div class="col-md-8">
-            <div class="card shadow-sm mb-4 border-0 bg-transparent">
-                <div class="mb-3">
-                    <h5 class="text-primary fw-bold"><i class="bi bi-calendar-event"></i> Activities Timeline</h5>
+        <div class="col-lg-5">
+            <div class="ai-wrapper shadow-sm">
+                <h5 class="fw-bold text-primary mb-3"><i class="bi bi-stars"></i> Tạo lịch trình với AI</h5>
+                <div class="input-group mb-3">
+                    <input type="text" id="wishInput" class="form-control" 
+                           placeholder="VD: Ăn phở, rồi cafe, sau đó xem phim...">
+                    <button class="btn btn-primary" type="button" id="btnGeneratePlan">
+                        <span id="btnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+                        Tạo
+                    </button>
                 </div>
                 
-                {% if activities|length > 0 %}
-                <div class="timeline">
-                    {% for act in activities %}
-                    <div class="timeline-item">
-                        <div class="timeline-marker"></div>
-                        
-                        <div class="timeline-content">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h4 class="mb-0 fw-bold text-dark">{{ act.name }}</h4>
-                                <a href="{{ url_for('planner.delete_activity', id=act.id) }}" 
-                                   class="text-danger fw-bold text-decoration-none"
-                                   style="font-size: 0.9rem;"
-                                   onclick="return confirm('Are you sure you want to delete {{ act.name }}?');">
-                                    Delete
-                                </a>
-                            </div>
-
-                            <div class="mb-2 text-secondary">
-                                <span class="act-icon">🕒</span> 
-                                {% if act.start_time or act.end_time %}
-                                    {{ act.start_time }} - {{ act.end_time }}
-                                {% else %}
-                                    -
-                                {% endif %}
-                            </div>
-
-                            <div class="mb-2 text-secondary">
-                                <span class="act-icon">📍</span>
-                                {% if act.location %}
-                                    {{ act.location }}
-                                {% else %}
-                                    <span class="fst-italic text-muted">No location set</span>
-                                {% endif %}
-                            </div>
-
-                            <div class="d-flex align-items-center text-dark fw-bold">
-                                <div class="me-3">
-                                    <span class="act-icon">💵</span>
-                                    {% if act.price > 0 %}
-                                        {{ "{:,.0f}".format(act.price) }} VND
-                                    {% else %}
-                                        Free / Unknown
-                                    {% endif %}
-                                </div>
-                                <div class="text-warning">
-                                    {% if act.rating > 0 %}
-                                        {{ act.rating }} ★
-                                    {% else %}
-                                        <span class="text-muted fw-normal" style="font-size: 0.8rem;">(No rating)</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-
-                            {% if conflicts.get(act.id) or (weather_impacts and weather_impacts.get(act.id)) %}
-                                <div class="mt-3 pt-2 border-top">
-                                    {% if conflicts.get(act.id) %}
-                                        {% for err in conflicts[act.id] %}
-                                            <div class="text-{{ 'danger' if err.level == 'critical' else 'warning' }} small mb-1">
-                                                <i class="bi bi-exclamation-triangle-fill"></i> {{ err.msg }}
-                                            </div>
-                                        {% endfor %}
-                                    {% endif %}
-
-                                    {% if weather_impacts and weather_impacts.get(act.id) %}
-                                        {% for impact in weather_impacts[act.id] %}
-                                            <div class="text-{{ 'danger' if impact.level == 'critical' else 'info' }} small">
-                                                <i class="bi bi-cloud-lightning-rain-fill"></i> {{ impact.msg }}
-                                            </div>
-                                        {% endfor %}
-                                    {% endif %}
-                                </div>
-                            {% endif %}
+                <div id="aiResultArea" class="d-none bg-white p-3 rounded border">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="text-success">Gợi ý từ AI:</strong>
+                        <span class="badge bg-warning text-dark" id="scoreBadge"></span>
+                    </div>
+                    <div id="proposedTimeline" class="list-group list-group-flush mb-3" style="max-height: 300px; overflow-y: auto;">
                         </div>
-                    </div>
-                    {% endfor %}
+                    <button class="btn btn-success w-100" id="btnSaveToDb">
+                        <i class="bi bi-check-circle"></i> Chấp nhận & Lưu
+                    </button>
                 </div>
-                {% endif %}
-                <button class="btn btn-primary w-100 mt-4 rounded-pill shadow-sm py-2 fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#addActivityBox">
-                    + Add New Activity
-                </button>
-                
-                <div class="collapse mt-3" id="addActivityBox">
-                    <div class="card card-body bg-light border-0">
-                        <form method="POST" action="{{ url_for('planner.add_room_activity', room_id=room.id) }}">
-                            {{ act_form.hidden_tag() }}
-                            <div class="row g-2">
-                                <div class="col-8">{{ act_form.name(class="form-control", placeholder="Activity Name") }}</div>
-                                <div class="col-4">{{ act_form.price(class="form-control", placeholder="Price (VND)") }}</div>
-                                
-                                <div class="col-6">{{ act_form.start_time(class="form-control", placeholder="Start (e.g. 09:00)") }}</div>
-                                <div class="col-6">{{ act_form.end_time(class="form-control", placeholder="End (e.g. 11:00)") }}</div>
-                                
-                                <div class="col-12">{{ act_form.location(class="form-control", placeholder="Location") }}</div>
-                                <div class="d-none">{{ act_form.rating(value=0) }}</div>
-
-                                <div class="col-12 mt-2">
-                                    {{ act_form.submit(class="btn btn-dark w-100") }}
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
             </div>
-        </div>
 
-        <div class="col-md-4">
-            <div class="card shadow-sm border-0 bg-light">
+            <div class="card border-0 shadow-sm bg-light">
                 <div class="card-body">
-                    <h6 class="fw-bold text-secondary text-uppercase mb-3 small">My Constraints</h6>
-                    
+                    <h6 class="fw-bold text-secondary mb-3"><i class="bi bi-sliders"></i> Ràng buộc (Constraints)</h6>
                     {% for cons in constraints %}
                     <div class="d-flex justify-content-between align-items-center mb-2 bg-white p-2 rounded border">
-                        <div>
-                            {% if cons.intensity == 'rough' %}
-                                <span class="text-danger fw-bold me-1">!!</span>
-                            {% else %}
-                                <span class="text-warning fw-bold me-1">!</span>
-                            {% endif %}
-                            <span class="fw-bold">{{ cons.type|capitalize }}:</span> {{ cons.value }}
-                        </div>
-                        <a href="{{ url_for('planner.delete_constraint', id=cons.id) }}" class="text-muted text-decoration-none px-2">&times;</a>
+                        <span><b>{{ cons.type }}:</b> {{ cons.value }}</span>
+                        <a href="{{ url_for('planner.delete_constraint', id=cons.id) }}" class="text-danger">&times;</a>
                     </div>
-                    {% else %}
-                        <p class="text-muted small">No personal constraints set.</p>
                     {% endfor %}
-
                     <hr>
-                    <small class="text-muted d-block mb-2">Add Constraint:</small>
                     <form method="POST" action="{{ url_for('planner.add_room_constraint', room_id=room.id) }}">
                         {{ cons_form.hidden_tag() }}
-                        <div class="mb-2">
-                            {{ cons_form.type(class="form-select form-select-sm mb-1") }}
-                            {{ cons_form.value(class="form-control form-control-sm", placeholder="Value") }}
-                        </div>
-                        <div class="d-grid">
-                            {{ cons_form.submit(class="btn btn-sm btn-outline-dark") }}
+                        <div class="input-group input-group-sm">
+                            {{ cons_form.type(class="form-select", style="max-width: 100px;") }}
+                            {{ cons_form.value(class="form-control", placeholder="Giá trị") }}
+                            <button class="btn btn-outline-secondary" type="submit">+</button>
                         </div>
                     </form>
                 </div>
             </div>
         </div>
+
+        <div class="col-lg-7">
+            <h4 class="fw-bold mb-4 ps-2 border-start border-4 border-primary">Chi tiết hành trình</h4>
+            
+            {% if activities|length > 0 %}
+            <div class="timeline-container">
+                <div class="timeline-line"></div>
+                
+                {% for act in activities %}
+                <div class="timeline-item">
+                    <div class="timeline-time">
+                        {% if act.start_time and act.start_time.strftime %}
+                            {{ act.start_time.strftime('%H:%M') }}
+                        {% else %}
+                            {{ act.start_time }}
+                        {% endif %}
+                    </div>
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-card">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="fw-bold mb-1">{{ act.name }}</h5>
+                            <a href="{{ url_for('planner.delete_activity', id=act.id) }}" 
+                               class="text-muted" onclick="return confirm('Xóa hoạt động này?');">
+                               <i class="bi bi-trash"></i>
+                            </a>
+                        </div>
+                        <div class="text-secondary small mb-2">
+                            <i class="bi bi-geo-alt-fill text-danger"></i> {{ act.location or 'Chưa có địa điểm' }}
+                        </div>
+                        
+                        {% if weather_impacts and weather_impacts.get(act.id) %}
+                            <div class="mt-2 p-2 bg-warning bg-opacity-10 rounded border border-warning">
+                                {% for impact in weather_impacts[act.id] %}
+                                    <div class="small text-dark">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> {{ impact.msg }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between mt-2 pt-2 border-top">
+                            <small class="text-muted">Đến: 
+                                {% if act.end_time and act.end_time.strftime %}
+                                    {{ act.end_time.strftime('%H:%M') }}
+                                {% else %}
+                                    {{ act.end_time }}
+                                {% endif %}
+                            </small>
+                            {% if act.price and act.price > 0 %}
+                            <span class="badge bg-light text-dark border">{{ "{:,.0f}".format(act.price) }} đ</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+                <div class="text-center py-5 bg-light rounded border border-dashed text-muted">
+                    <i class="bi bi-calendar-x display-1 d-block mb-3 opacity-25"></i>
+                    <p>Chưa có lịch trình nào.</p>
+                </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<div class="modal fade" id="addActivityModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold">Thêm Hoạt Động Mới</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('planner.add_room_activity', room_id=room.id) }}">
+                    {{ act_form.hidden_tag() }}
+                    <div class="mb-3">
+                        <label class="form-label">Tên hoạt động</label>
+                        <input type="text" name="name" class="form-control" placeholder="VD: Check-in khách sạn" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Địa điểm</label>
+                        <input type="text" name="location" class="form-control" placeholder="Địa chỉ...">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">Bắt đầu</label>
+                            <input type="datetime-local" name="start_time" class="form-control" required>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Kết thúc</label>
+                            <input type="datetime-local" name="end_time" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Chi phí (VND)</label>
+                        <input type="number" name="price" class="form-control" value="0">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Lưu Hoạt Động</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var socket = io();
+        var roomId = "{{ room.id }}"; 
+        var currentPlanSteps = [];
+
+        socket.emit('join_planner', { room_id: roomId });
+
+        const btnGen = document.getElementById('btnGeneratePlan');
+        const input = document.getElementById('wishInput');
+        const spinner = document.getElementById('btnSpinner');
+        const resultArea = document.getElementById('aiResultArea');
+        const timelineList = document.getElementById('proposedTimeline');
+        const scoreBadge = document.getElementById('scoreBadge');
+        const btnSave = document.getElementById('btnSaveToDb');
+
+        btnGen.addEventListener('click', function() {
+            const wish = input.value.trim();
+            if (!wish) return alert("Vui lòng nhập mong muốn của bạn!");
+
+            btnGen.disabled = true;
+            spinner.classList.remove('d-none');
+            resultArea.classList.add('d-none');
+            timelineList.innerHTML = '';
+
+            socket.emit('request_ai_plan', {
+                room_id: roomId,
+                message: wish,
+                lat: 10.762622, lon: 106.660172
+            });
+        });
+
+        socket.on('plan_generated', function(response) {
+            btnGen.disabled = false;
+            spinner.classList.add('d-none');
+
+            if (response.status === 'success') {
+                resultArea.classList.remove('d-none');
+                currentPlanSteps = response.data.steps;
+                scoreBadge.innerText = `Score: ${parseFloat(response.data.total_score).toFixed(1)}`;
+
+                let html = '';
+                if(!currentPlanSteps || currentPlanSteps.length === 0) {
+                    html = '<div class="alert alert-warning small">Không tìm thấy địa điểm phù hợp. Hãy thử từ khóa khác.</div>';
+                    btnSave.disabled = true;
+                } else {
+                    btnSave.disabled = false;
+                    currentPlanSteps.forEach(step => {
+                        html += `
+                            <div class="list-group-item suggestion-item p-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <strong class="text-dark small">${step.place.name}</strong>
+                                    <span class="badge bg-light text-dark border">${step.time.start}</span>
+                                </div>
+                                <div class="small text-muted text-truncate"><i class="bi bi-geo-alt"></i> ${step.place.address}</div>
+                                <div class="small fst-italic text-secondary mt-1">Mục đích: ${step.intent}</div>
+                            </div>
+                        `;
+                    });
+                }
+                timelineList.innerHTML = html;
+            }
+        });
+
+        btnSave.addEventListener('click', function() {
+            if(currentPlanSteps.length === 0) return;
+            socket.emit('save_ai_plan', {
+                room_id: roomId,
+                plan_steps: currentPlanSteps
+            });
+            btnSave.disabled = true;
+            btnSave.innerText = "Đang lưu...";
+        });
+
+        socket.on('plan_saved_success', function() {
+            location.reload(); 
+        });
+
+        socket.on('plan_error', function(data) {
+            btnGen.disabled = false;
+            spinner.classList.add('d-none');
+            alert('Lỗi: ' + data.message);
+        });
+    });
+</script>
+
 {% endblock %}
