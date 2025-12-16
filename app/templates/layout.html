@@ -89,7 +89,16 @@
             <li class="nav-item"><a class="nav-link" href="{{ url_for('map.map') }}">Map</a></li>
             <li class="nav-item"> <a class="nav-link" href="{{ url_for('main.friends') }}">Friends</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('chat.chat') }}">Chat</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.profile', username=current_user.username) }}">Profile</a></li>
+            <li class="nav-item">
+                <a class="nav-link d-flex align-items-center gap-2" href="{{ url_for('auth.profile', username=current_user.username) }}">
+                    {% if 'http' in current_user.image_file %}
+                        <img src="{{ current_user.image_file }}" class="rounded-circle" width="25" height="25" style="object-fit: cover;">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='profile_pics/' + current_user.image_file) }}" class="rounded-circle" width="25" height="25" style="object-fit: cover;">
+                    {% endif %}
+                    Profile
+                </a>
+            </li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a></li>
           {% else %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('auth.login') }}">Login</a></li>
