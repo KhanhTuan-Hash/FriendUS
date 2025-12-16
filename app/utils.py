@@ -19,6 +19,9 @@ except Exception as e:
     print(f"Warning: Google AI Key missing or invalid. {e}")
     model = None
 
+# [THÊM] Định nghĩa mức điểm tối đa ở đầu file hoặc ngay trên hàm
+MAX_INTEREST_SCORE = 20.0
+
 # --- 1. DANH SÁCH TAGS CHUẨN (Dùng cho cả Giao diện và AI) ---
 TAG_CHOICES = [
     ('Travel', 'Travel ✈️'),
@@ -182,22 +185,36 @@ def auto_update_user_interest(user_id, tags_list, weight_increment=1.0):
         record = UserTagScore.query.filter_by(user_id=user_id, tag=tag_clean).first()
         
         if record:
-            record.score += weight_increment
+            # --- [SỬA ĐOẠN NÀY] ---
+            # Cũ: record.score += weight_increment
+            # Mới: Cộng điểm nhưng dùng min() để đảm bảo không vượt quá MAX_INTEREST_SCORE
+            new_score = record.score + weight_increment
+            record.score = min(new_score, MAX_INTEREST_SCORE)
+            # ----------------------
             record.last_interaction = datetime.utcnow()
         else:
-            # Nếu chưa có, tạo mới
-            new_record = UserTagScore(user_id=user_id, tag=tag_clean, score=weight_increment)
+            # Nếu chưa có, tạo mới (Điểm khởi tạo cũng không nên vượt quá max)
+            initial_score = min(weight_increment, MAX_INTEREST_SCORE)
+            new_record = UserTagScore(user_id=user_id, tag=tag_clean, score=initial_score)
             db.session.add(new_record)
     
     db.session.commit()
 
 # [UPDATED] Hàm tính điểm có xét đến trọng số cá nhân
-def score_from_matrix_personalized(user_id, item_tags):
+def score_from_matrix_personalized(user_id, item_tags, user_scores_cache=None):
     """
     user_id: ID người dùng để lấy bảng điểm cá nhân
     item_tags: Tags của bài post hoặc room cần chấm điểm
     """
     if W is None: return 0.0
+
+    # Nếu được truyền cache thì dùng, không thì mới query DB
+    if user_scores_cache is not None:
+        user_scores = user_scores_cache
+    else:
+        user_scores = UserTagScore.query.filter_by(user_id=user_id).all()
+        
+    if not user_scores: return 0.0
 
     # 1. Lấy tất cả các tag mà user này CÓ ĐIỂM trong database
     user_scores = UserTagScore.query.filter_by(user_id=user_id).all()
@@ -232,13 +249,12 @@ def score_from_matrix_personalized(user_id, item_tags):
 
     if not rows: return 0.0
 
-    # Logic Max-Pooling cũ của bạn
-    row_max_sum = sum(max(r) for r in rows)
-    if len(rows) > 0:
-        score_row = row_max_sum / len(rows)
-    else: 
-        score_row = 0
+    # [FIX SUGGESTION] Thay vì chia trung bình, hãy lấy điểm cao nhất tìm được
+    # Logic: Nếu bài viết có 1 tag trúng "tủ" (điểm 10) và 3 tag không liên quan (điểm 0)
+    # Trung bình = 2.5 (Thấp -> Sai) | Max = 10 (Cao -> Đúng)
+    
+    # Lấy max của từng dòng, sau đó lấy max của toàn bộ các dòng
+    max_scores = [max(r) for r in rows]
+    final_score = max(max_scores) if max_scores else 0.0
 
-    # Normalize lại điểm (vì u_score có thể tăng vô tận)
-    # Ta có thể dùng log hoặc sigmoid nếu điểm quá lớn, tạm thời để nguyên
-    return round(score_row * 10, 2)
+    return round(final_score, 2)

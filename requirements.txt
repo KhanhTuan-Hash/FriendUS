@@ -1,5 +1,5 @@
 # --- Core Web Framework & Extensions ---
-flask
+flask==3.0.0
 bootstrap-flask
 flask-login
 flask-socketio

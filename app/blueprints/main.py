@@ -4,11 +4,68 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 from sqlalchemy import func, or_ # [NEW] Import để query OR cho tìm kiếm 
 from app.extensions import db
-from app.models import Post, Review, Location, User, FriendRequest
-from app.forms import PostForm
-from app.utils import score_from_matrix_personalized
+from app.models import Post, Review, Location, User, FriendRequest, Comment
+from app.forms import PostForm, CommentForm
+from app.utils import score_from_matrix_personalized, auto_update_user_interest
 
 main_bp = Blueprint('main', __name__)
+
+# --- 1. Route xử lý LIKE ---
+@main_bp.route('/post/<int:post_id>/like', methods=['POST'])
+@login_required
+def like_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.is_liked_by(current_user):
+        # Nếu đã like rồi thì unlike
+        post.likes.remove(current_user)
+        action = 'unliked'
+    else:
+        # Nếu chưa like thì add like
+        post.likes.append(current_user)
+        action = 'liked'
+        
+        # [ALGORITHM] User like bài viết -> Tăng mạnh trọng số sở thích (+1.0)
+        # Lấy tags của bài viết để cập nhật cho user
+        if post.tags:
+            auto_update_user_interest(current_user.id, post.tags.split(','), weight_increment=1.0)
+
+    db.session.commit()
+    return jsonify({'status': 'success', 'action': action, 'count': post.likes.count()})
+
+# --- 2. Route xử lý COMMENT ---
+@main_bp.route('/post/<int:post_id>/comment', methods=['POST'])
+@login_required
+def comment_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    form = CommentForm()
+    
+    if form.validate_on_submit():
+        comment = Comment(body=form.body.data, author=current_user, post=post)
+        db.session.add(comment)
+        
+        # [ALGORITHM] Comment thể hiện sự quan tâm sâu -> Tăng trọng số rất mạnh (+2.0)
+        if post.tags:
+            auto_update_user_interest(current_user.id, post.tags.split(','), weight_increment=2.0)
+            
+        db.session.commit()
+        return redirect(url_for('main.index')) # Hoặc dùng Ajax nếu muốn xịn hơn
+    
+    flash('Error posting comment.', 'danger')
+    return redirect(url_for('main.index'))
+
+# --- 3. Route xử lý SHARE (Đếm số) ---
+@main_bp.route('/post/<int:post_id>/share', methods=['POST'])
+@login_required
+def share_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    post.shares_count += 1
+    
+    # [ALGORITHM] Share là hành động cao nhất -> Tăng trọng số (+3.0)
+    if post.tags:
+        auto_update_user_interest(current_user.id, post.tags.split(','), weight_increment=3.0)
+        
+    db.session.commit()
+    return jsonify({'status': 'success', 'shares': post.shares_count})
 
 @main_bp.route('/update_interests', methods=['POST'])
 @login_required

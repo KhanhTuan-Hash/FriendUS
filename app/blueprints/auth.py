@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, current_user, login_required
 from app.extensions import db, oauth
-from app.models import User, Post
+from app.models import User, Post, UserTagScore
 # [QUAN TRỌNG] Đảm bảo đã import OnboardingForm
 from app.forms import LoginForm, RegisterForm, UpdateAccountForm, OnboardingForm
 from app.utils import save_picture
@@ -26,25 +26,30 @@ def check_onboarding():
             if request.endpoint and request.endpoint not in allowed_endpoints:
                 return redirect(url_for('auth.onboarding'))
 
-# --- [SỬA LỖI CHÍNH TẠI ĐÂY] ---
 @auth_bp.route('/onboarding', methods=['GET', 'POST'])
 @login_required
 def onboarding():
-    # Nếu user đã có interests -> Đẩy về trang chủ luôn
     if current_user.interests:
         return redirect(url_for('main.index'))
 
-    # 1. Khởi tạo Form (Để HTML có biến 'form' mà dùng)
     form = OnboardingForm()
 
-    # 2. Xử lý khi user bấm nút Submit
     if form.validate_on_submit():
-        # Lấy danh sách tags người dùng chọn (List: ['Travel', 'Food'])
         selected_tags = form.interests.data
         
-        # Chuyển thành chuỗi để lưu vào Database
         if selected_tags:
+            # 1. Lưu dạng chuỗi (để hiển thị profile cho dễ)
             current_user.interests = ','.join(selected_tags)
+            
+            # 2. [FIX QUAN TRỌNG] Khởi tạo điểm số ban đầu vào bảng UserTagScore
+            # Cho điểm cao (ví dụ 5.0) vì đây là cái họ chủ động chọn
+            for tag in selected_tags:
+                # Kiểm tra tránh duplicate
+                exists = UserTagScore.query.filter_by(user_id=current_user.id, tag=tag).first()
+                if not exists:
+                    init_score = UserTagScore(user_id=current_user.id, tag=tag, score=5.0)
+                    db.session.add(init_score)
+            
             db.session.commit()
             flash('Welcome! Your profile is ready.', 'success')
             return redirect(url_for('main.index'))

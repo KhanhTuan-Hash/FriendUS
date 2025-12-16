@@ -6,6 +6,10 @@ from flask_login import current_user
 from app.models import User, Room
 from app.utils import TAG_CHOICES
 
+class CommentForm(FlaskForm):
+    body = StringField('Comment', validators=[DataRequired(), Length(min=1, max=200)])
+    submit = SubmitField('Post')
+
 class OnboardingForm(FlaskForm):
     # Dùng SelectMultipleField để chọn nhiều tag
     interests = SelectMultipleField('Choose your interests (1-5 tags)', choices=TAG_CHOICES)

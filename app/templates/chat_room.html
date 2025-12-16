@@ -146,6 +146,10 @@
                         <form id="chat-form">
                             <div class="input-group">
                                 <input type="text" class="form-control" id="message-input" placeholder="Message..." autocomplete="off">
+
+                                <button class="btn btn-outline-primary" type="button" id="btn-summarize" title="Summarize recent chat with AI">
+                                    <i class="bi bi-magic"></i> AI Summary
+                                </button>
                                 <button class="btn btn-outline-secondary" type="button" id="emoji-btn">😊</button>
                                 <button class="btn btn-primary" type="submit">Send</button>
                             </div>
@@ -409,6 +413,36 @@
     </div>
 </div>
 
+<div class="modal fade" id="summaryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-magic"></i> AI Chat Summary</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="summary-loading" class="text-center py-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">AI is reading recent messages...</p>
+                </div>
+
+                <div id="summary-content" style="display: none;">
+                    <h6 class="fw-bold text-dark"><i class="bi bi-lightning-charge-fill text-warning"></i> TL;DR (Short Summary)</h6>
+                    <p id="summary-short-text" class="lead fst-italic p-3 bg-light border rounded fs-6"></p>
+                    <hr>
+                    <h6 class="fw-bold text-dark"><i class="bi bi-file-text-fill text-info"></i> Full Overview</h6>
+                    <p id="summary-full-text" class="p-3 bg-light border rounded" style="white-space: pre-line;"></p>
+                    <p class="text-muted small text-end">Based on the last 40 messages.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -556,6 +590,51 @@
 
         // --- 6. CHAT LOGIC ---
         document.addEventListener('DOMContentLoaded', (event) => {
+            
+            // === [ĐÃ SỬA] THÊM ĐOẠN JS XỬ LÝ SUMMARIZE VÀO ĐÂY ===
+            const summarizeBtn = document.getElementById('btn-summarize');
+            const summaryModalEl = document.getElementById('summaryModal');
+            
+            if (summarizeBtn && summaryModalEl) {
+                const summaryModal = new bootstrap.Modal(summaryModalEl);
+                const summaryLoading = document.getElementById('summary-loading');
+                const summaryContent = document.getElementById('summary-content');
+                const summaryShortText = document.getElementById('summary-short-text');
+                const summaryFullText = document.getElementById('summary-full-text');
+                
+                // Lấy ID phòng
+                const currentRoomId = '{{ room.id }}'; 
+
+                summarizeBtn.addEventListener('click', function() {
+                    summaryLoading.style.display = 'block';
+                    summaryContent.style.display = 'none';
+                    summaryModal.show();
+
+                    fetch(`/chat/summary/${currentRoomId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            summaryLoading.style.display = 'none';
+                            summaryContent.style.display = 'block';
+                            
+                            if (data.error) {
+                                summaryShortText.innerText = "Error";
+                                summaryFullText.innerText = data.error;
+                            } else {
+                                summaryShortText.innerText = data.short || "No summary available.";
+                                summaryFullText.innerText = data.full || "No details available.";
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            summaryLoading.style.display = 'none';
+                            summaryContent.style.display = 'block';
+                            summaryShortText.innerText = "Connection Error";
+                            summaryFullText.innerText = "Could not connect to AI server.";
+                        });
+                });
+            }
+            // === [HẾT PHẦN SỬA JS] ===
+
             var socket = io();
             const roomName = '{{ room.name }}';
             const currentUsername = '{{ current_user.username }}';
