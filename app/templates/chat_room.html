@@ -366,44 +366,50 @@
 
         <div class="tab-pane fade" id="weather-panel" role="tabpanel">
             <div class="container-fluid p-3">
-                <div id="weather-loading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
-                </div>
+        
+        <div class="input-group mb-3" style="max-width: 500px; margin: 0 auto;">
+            <input type="text" id="weather-search-input" class="form-control" placeholder="Tìm thành phố (VD: Hanoi, London)..." onkeydown="if(event.key === 'Enter') searchWeather()">
+            <button class="btn btn-primary" type="button" onclick="searchWeather()"><i class="bi bi-search"></i> Tìm</button>
+        </div>
 
-                <div id="weather-error" class="alert alert-danger" style="display: none;"></div>
+        <div id="weather-loading" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
+        </div>
 
-                <div id="weather-content" style="display: none;">
-                    <div class="card text-white mb-4 shadow" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 20px;">
-                        <div class="card-body p-4">
-                            <div class="row align-items-center">
-                                <div class="col-md-6">
-                                    <h4 class="fw-light opacity-75" id="w-location">Hồ Chí Minh, VN</h4>
-                                    <h1 style="font-size: 4rem; font-weight: bold;"><span id="w-temp">--</span>°C</h1>
-                                    <p class="fs-5 mb-0" id="w-desc">--</p>
-                                    <div class="mt-3">
-                                        <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25 me-2">
-                                            💧 <span id="w-precip">0</span>mm mưa
-                                        </span>
-                                        <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25">
-                                            💨 <span id="w-wind">0</span> km/h
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="col-md-6 text-center text-md-end">
-                                    <div style="font-size: 6rem; line-height: 1;" id="w-icon">🌤️</div>
-                                    <div class="mt-3 text-end" id="w-risks">
-                                        </div>
-                                </div>
+        <div id="weather-error" class="alert alert-danger" style="display: none;"></div>
+
+        <div id="weather-content" style="display: none;">
+            <div class="card text-white mb-4 shadow" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 20px;">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h4 class="fw-light opacity-75"><i class="bi bi-geo-alt-fill"></i> <span id="w-location">Hồ Chí Minh, VN</span></h4>
+                            <h1 style="font-size: 4rem; font-weight: bold;"><span id="w-temp">--</span>°C</h1>
+                            <p class="fs-5 mb-0" id="w-desc">--</p>
+                            <div class="mt-3">
+                                <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25 me-2">
+                                    💧 <span id="w-precip">0</span>mm mưa
+                                </span>
+                                <span class="badge bg-white text-primary bg-opacity-25 border border-white border-opacity-25">
+                                    💨 <span id="w-wind">0</span> km/h
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-center text-md-end">
+                            <div style="font-size: 6rem; line-height: 1;" id="w-icon">🌤️</div>
+                            <div class="mt-3 text-end" id="w-risks">
                             </div>
                         </div>
                     </div>
-
-                    <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
-                    <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;">
-                        </div>
                 </div>
             </div>
+
+            <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
+            <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;">
+            </div>
+        </div>
+    </div>
         </div>
 
     </div>
@@ -788,110 +794,133 @@
     </script>
 
     <script>
-        // 1. Cấu hình & Helper Functions
-        // LƯU Ý: Đây là endpoint lấy JSON API, tên function trong Python phải là 'get_forecast' (hoặc bạn đổi trong url_for)
-        const WEATHER_API_URL = "{{ url_for('weather.get_forecast') }}"; 
+    // 1. Cấu hình & Helper Functions
+    const WEATHER_API_URL = "{{ url_for('weather.get_forecast') }}"; 
+    const DEFAULT_LAT = 10.762622;
+    const DEFAULT_LON = 106.660172;
+
+    function getWeatherIcon(desc) {
+        if (!desc) return '🌤️';
+        if (desc.includes('Mưa')) return '🌧️';
+        if (desc.includes('Nắng') || desc.includes('Quang')) return '☀️';
+        if (desc.includes('Mây')) return '⛅';
+        if (desc.includes('Dông') || desc.includes('bão')) return '⛈️';
+        return '🌤️';
+    }
+
+    function getRiskBadge(risk) {
+        if (risk === 'RISK_HEAVY_RAIN') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☔ Mưa lớn</div>';
+        if (risk === 'RISK_EXTREME_HEAT') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☀️ Nắng gắt</div>';
+        if (risk === 'WARNING_LIGHT_RAIN') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">🌧️ Mưa nhẹ</div>';
+        if (risk === 'RISK_HIGH_WIND') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">💨 Gió to</div>';
+        if (risk === 'WARNING_CHILLY') return '<div class="alert alert-info d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">❄️ Trời lạnh</div>';
+        return '';
+    }
+
+    // [NEW] Hàm Search được gọi khi bấm nút Tìm
+    function searchWeather() {
+        const query = document.getElementById('weather-search-input').value.trim();
+        if (query) {
+            // Gọi loadWeatherData với tham số city
+            loadWeatherData(query);
+        }
+    }
+
+    // [UPDATED] Hàm Load Data chấp nhận tham số cityQuery
+    function loadWeatherData(cityQuery = null) {
+        const contentDiv = document.getElementById('weather-content');
+        const loadingDiv = document.getElementById('weather-loading');
+        const errorDiv = document.getElementById('weather-error');
         
-        // Tạm dùng tọa độ HCM giống planner.py. Sau này bạn có thể lấy {{ room.lat }} nếu có.
-        const DEFAULT_LAT = 10.762622;
-        const DEFAULT_LON = 106.660172;
+        // Reset UI trạng thái loading
+        contentDiv.style.display = 'none';
+        errorDiv.style.display = 'none';
+        loadingDiv.style.display = 'block';
 
-        function getWeatherIcon(desc) {
-            if (!desc) return '🌤️';
-            if (desc.includes('Mưa')) return '🌧️';
-            if (desc.includes('Nắng') || desc.includes('Quang')) return '☀️';
-            if (desc.includes('Mây')) return '⛅';
-            if (desc.includes('Dông') || desc.includes('bão')) return '⛈️';
-            return '🌤️';
+        // Xây dựng URL: Nếu có cityQuery thì dùng ?city=..., nếu không thì dùng lat/lon mặc định
+        let url = `${WEATHER_API_URL}?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}`;
+        if (cityQuery) {
+            url = `${WEATHER_API_URL}?city=${encodeURIComponent(cityQuery)}`;
         }
 
-        function getRiskBadge(risk) {
-            if (risk === 'RISK_HEAVY_RAIN') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☔ Mưa lớn</div>';
-            if (risk === 'RISK_EXTREME_HEAT') return '<div class="alert alert-danger d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">☀️ Nắng gắt</div>';
-            if (risk === 'WARNING_LIGHT_RAIN') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">🌧️ Mưa nhẹ</div>';
-            if (risk === 'RISK_HIGH_WIND') return '<div class="alert alert-warning d-inline-block py-1 px-2 m-1 border-0 shadow-sm text-dark small">💨 Gió to</div>';
-            if (risk === 'WARNING_CHILLY') return '<div class="alert alert-info d-inline-block py-1 px-2 m-1 border-0 shadow-sm small">❄️ Trời lạnh</div>';
-            return '';
-        }
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                
+                // --- Cập nhật Tên Địa Điểm (Quan trọng) ---
+                if (data.location_name) {
+                    document.getElementById('w-location').innerText = data.location_name;
+                } else {
+                    document.getElementById('w-location').innerText = "Hồ Chí Minh, VN";
+                }
 
-        // 2. Hàm Load Data
-        function loadWeatherData() {
-            const contentDiv = document.getElementById('weather-content');
-            const loadingDiv = document.getElementById('weather-loading');
-            
-            if (contentDiv.style.display === 'block') return;
+                // --- Xử lý Current Weather ---
+                const cur = data.current_weather;
+                document.getElementById('w-temp').innerText = cur.temperature;
+                document.getElementById('w-desc').innerText = cur.weather_desc;
+                document.getElementById('w-precip').innerText = cur.precipitation_sum;
+                document.getElementById('w-wind').innerText = cur.wind_max_kmh;
+                document.getElementById('w-icon').innerText = getWeatherIcon(cur.weather_desc);
+                
+                // Risks
+                const riskContainer = document.getElementById('w-risks');
+                riskContainer.innerHTML = '';
+                if (cur.daily_risks && cur.daily_risks.length > 0) {
+                    cur.daily_risks.forEach(r => riskContainer.innerHTML += getRiskBadge(r));
+                } else {
+                    riskContainer.innerHTML = '<div class="alert alert-success d-inline-block py-1 px-3 m-0 border-0 shadow-sm">✅ Thời tiết đẹp</div>';
+                }
 
-            fetch(`${WEATHER_API_URL}?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        throw new Error(data.error);
-                    }
-                    
-                    // --- Xử lý Current Weather ---
-                    const cur = data.current_weather;
-                    document.getElementById('w-temp').innerText = cur.temperature;
-                    document.getElementById('w-desc').innerText = cur.weather_desc;
-                    document.getElementById('w-precip').innerText = cur.precipitation_sum;
-                    document.getElementById('w-wind').innerText = cur.wind_max_kmh;
-                    document.getElementById('w-icon').innerText = getWeatherIcon(cur.weather_desc);
-                    
-                    // Risks
-                    const riskContainer = document.getElementById('w-risks');
-                    riskContainer.innerHTML = '';
-                    if (cur.daily_risks && cur.daily_risks.length > 0) {
-                        cur.daily_risks.forEach(r => {
-                            riskContainer.innerHTML += getRiskBadge(r);
-                        });
-                    } else {
-                        riskContainer.innerHTML = '<div class="alert alert-success d-inline-block py-1 px-3 m-0 border-0 shadow-sm">✅ Thời tiết đẹp</div>';
-                    }
-
-                    // --- Xử lý HOURLY Forecast (24H) ---
-                    const forecastDiv = document.getElementById('forecast-container');
-                    forecastDiv.innerHTML = '';
-                    
-                    // Lưu ý: Backend trả về 'hourly_forecast'
-                    if (data.hourly_forecast && data.hourly_forecast.length > 0) {
-                        data.hourly_forecast.forEach(h => {
-                            const icon = getWeatherIcon(h.weather_desc);
-                            const html = `
-                                <div class="col-3 col-md-2 px-1 mb-2" style="min-width: 100px;">
-                                    <div class="card h-100 border-0 shadow-sm text-center py-3" style="background-color: #f8f9fa;">
-                                        <div class="text-muted fw-bold">${h.hour}</div>
-                                        <div class="my-2 fs-2">${icon}</div>
-                                        <div class="fw-bold fs-5">${h.temp}°</div>
-                                        <div class="small text-muted text-truncate px-1" style="font-size: 0.8rem;" title="${h.weather_desc}">${h.weather_desc}</div>
-                                    </div>
+                // --- Xử lý Hourly Forecast ---
+                const forecastDiv = document.getElementById('forecast-container');
+                forecastDiv.innerHTML = '';
+                
+                if (data.hourly_forecast && data.hourly_forecast.length > 0) {
+                    data.hourly_forecast.forEach(h => {
+                        const icon = getWeatherIcon(h.weather_desc);
+                        const html = `
+                            <div class="col-3 col-md-2 px-1 mb-2" style="min-width: 100px;">
+                                <div class="card h-100 border-0 shadow-sm text-center py-3" style="background-color: #f8f9fa;">
+                                    <div class="text-muted fw-bold">${h.hour}</div>
+                                    <div class="my-2 fs-2">${icon}</div>
+                                    <div class="fw-bold fs-5">${h.temp}°</div>
+                                    <div class="small text-muted text-truncate px-1" style="font-size: 0.8rem;" title="${h.weather_desc}">${h.weather_desc}</div>
                                 </div>
-                            `;
-                            forecastDiv.innerHTML += html;
-                        });
-                    } else {
-                         forecastDiv.innerHTML = '<div class="alert alert-warning">Không có dữ liệu dự báo theo giờ.</div>';
-                    }
+                            </div>
+                        `;
+                        forecastDiv.innerHTML += html;
+                    });
+                } else {
+                     forecastDiv.innerHTML = '<div class="alert alert-warning">Không có dữ liệu dự báo theo giờ.</div>';
+                }
 
-                    // Hiển thị UI
-                    loadingDiv.style.display = 'none';
-                    contentDiv.style.display = 'block';
-                })
-                .catch(err => {
-                    console.error(err);
-                    loadingDiv.style.display = 'none';
-                    const errDiv = document.getElementById('weather-error');
-                    errDiv.innerText = "Không thể tải dữ liệu thời tiết: " + err.message;
-                    errDiv.style.display = 'block';
-                });
+                loadingDiv.style.display = 'none';
+                contentDiv.style.display = 'block';
+            })
+            .catch(err => {
+                console.error(err);
+                loadingDiv.style.display = 'none';
+                errorDiv.innerText = "Không thể tải dữ liệu: " + err.message;
+                errorDiv.style.display = 'block';
+            });
+    }
+
+    // 3. Event Listener cho Tab switch
+    document.addEventListener('DOMContentLoaded', function() {
+        const weatherTabBtn = document.getElementById('weather-tab');
+        if (weatherTabBtn) {
+            weatherTabBtn.addEventListener('shown.bs.tab', function (e) {
+                // YÊU CẦU: Khi vào tab (bao gồm quay lại từ tab khác), RESET về mặc định (HCM)
+                // Ta gọi loadWeatherData() không tham số -> Nó sẽ dùng DEFAULT_LAT/LON
+                
+                // Cũng nên xóa trắng ô input để người dùng biết là đã reset
+                const searchInput = document.getElementById('weather-search-input');
+                if (searchInput) searchInput.value = '';
+
+                loadWeatherData(); 
+            });
         }
-
-        // 3. Event Listener cho Tab click
-        document.addEventListener('DOMContentLoaded', function() {
-            const weatherTabBtn = document.getElementById('weather-tab');
-            if (weatherTabBtn) {
-                weatherTabBtn.addEventListener('shown.bs.tab', function (e) {
-                    loadWeatherData();
-                });
-            }
-        });
-    </script>
+    });
+</script>
 {% endblock %}

@@ -2,7 +2,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Tuple
 from flask import Blueprint, jsonify, request, render_template
-from app.models import Room  # <--- IMPORT MODEL ROOM TỪ FILE CỦA BẠN
+from app.models import Room
 
 # ==============================================================================
 # 1. SETUP BLUEPRINT
@@ -76,7 +76,7 @@ class OpenMeteoClient:
             'daily': ",".join(self.DEFAULT_DAILY_VARS),
             'hourly': ",".join(self.DEFAULT_HOURLY_VARS), 
             'timezone': self.default_timezone,
-            'forecast_days': 3, # Lấy dư ngày để khi cắt 24h không bị thiếu
+            'forecast_days': 3, 
             'temperature_unit': 'celsius',
             'wind_speed_unit': 'kmh'
         }
@@ -95,7 +95,7 @@ class OpenMeteoClient:
         current = raw_data.get('current', {})
         hourly = raw_data.get('hourly', {})
 
-        # 1. Xử lý Current & Risks (Lấy ngày đầu tiên)
+        # 1. Xử lý Current & Risks
         t_max = daily['temperature_2m_max'][0] if daily.get('time') else 0
         t_min = daily['temperature_2m_min'][0] if daily.get('time') else 0
         precip = daily['precipitation_sum'][0] if daily.get('time') else 0
@@ -112,46 +112,35 @@ class OpenMeteoClient:
             'temp_min': t_min
         }
 
-        # 2. Xử lý Hourly Forecast (QUAN TRỌNG: FIX LỖI KHÔNG CÓ DỮ LIỆU)
+        # 2. Xử lý Hourly (24h tới)
         processed_hourly = []
+        now = datetime.now()
         
         if hourly.get('time'):
             times = hourly['time']
             temps = hourly['temperature_2m']
             codes = hourly['weathercode']
             
-            # Lấy thời gian hiện tại
-            now = datetime.now()
-            
             for i in range(len(times)):
                 try:
-                    # Format của API: "2023-10-27T14:00"
                     time_str = times[i]
                     item_dt = datetime.strptime(time_str, "%Y-%m-%dT%H:%M")
-                    
-                    # Logic lấy dữ liệu:
-                    # Lấy các mốc thời gian TƯƠNG LAI hoặc mốc HIỆN TẠI (trong vòng 1 tiếng trước)
-                    # Ví dụ: Bây giờ là 14:15, ta vẫn lấy mốc 14:00 để hiển thị
-                    diff = (now - item_dt).total_seconds()
-                    
-                    if item_dt >= now or (diff >= 0 and diff < 3600):
+                    # Lấy mốc thời gian >= hiện tại (hoặc quá khứ < 1h)
+                    if item_dt >= now or (now - item_dt).total_seconds() < 3600:
                         processed_hourly.append({
-                            'hour': item_dt.strftime("%H:%M"), # Chỉ lấy giờ: 14:00
+                            'hour': item_dt.strftime("%H:%M"),
                             'temp': temps[i],
                             'weather_desc': self._map_weather_code(codes[i]),
                             'full_time': time_str
                         })
-                        
-                    # Chỉ lấy đủ 24 mốc thời gian rồi dừng vòng lặp
-                    if len(processed_hourly) >= 24:
-                        break
+                    if len(processed_hourly) >= 24: break
                 except ValueError:
                     continue
 
         return {
             'current_weather': current_obj,
-            'hourly_forecast': processed_hourly, # Key này sẽ được JS đọc
-            'five_day_forecast': [] # Để trống để tương thích ngược nếu cần
+            'hourly_forecast': processed_hourly,
+            'five_day_forecast': []
         }
 
 # ==============================================================================
@@ -160,20 +149,15 @@ class OpenMeteoClient:
 
 weather_service = OpenMeteoClient(default_timezone='Asia/Ho_Chi_Minh')
 
-# Route Render HTML (Dành cho trang Weather chi tiết)
+# Route Render HTML (Dành cho trang Weather chi tiết - nếu cần)
 @weather_bp.route('/<int:room_id>', methods=['GET'])
 def view_weather(room_id):
-    # --- [UPDATED] LẤY DỮ LIỆU THẬT TỪ DB ---
     room = Room.query.get_or_404(room_id)
-    # ----------------------------------------
-
     city_query = request.args.get('city')
     
-    # Mặc định tọa độ HCM (Do Model Room của bạn chưa có trường latitude/longitude)
     lat, lon = 10.8231, 106.6297
     display_location = "Hồ Chí Minh, VN"
 
-    # Nếu User search thành phố khác
     if city_query:
         found_lat, found_lon, found_name = weather_service.get_coordinates(city_query)
         if found_lat:
@@ -192,10 +176,32 @@ def view_weather(room_id):
         location_name=display_location
     )
 
-# API JSON (Dành cho Chat Room Widget và AJAX - Đảm bảo tên hàm đúng là 'get_forecast')
+# --- [UPDATED] API JSON (Dành cho Chat Room Widget) ---
 @weather_bp.route('/api/forecast', methods=['GET'])
 def get_forecast():
+    # 1. Kiểm tra xem có search query không
+    city_query = request.args.get('city')
+    
+    # Tọa độ mặc định (HCM)
     lat = float(request.args.get('lat', 10.8231))
     lon = float(request.args.get('lon', 106.6297))
+    location_name = "Hồ Chí Minh, VN"
+
+    # 2. Nếu có city, gọi Geocoding để lấy tọa độ mới
+    if city_query:
+        found_lat, found_lon, found_name = weather_service.get_coordinates(city_query)
+        if found_lat:
+            lat, lon = found_lat, found_lon
+            location_name = found_name
+        else:
+            # Nếu không tìm thấy, giữ nguyên mặc định nhưng báo lỗi nhẹ trong JSON (tuỳ chọn)
+            location_name = f"Không tìm thấy: {city_query}"
+
+    # 3. Lấy dữ liệu thời tiết
     raw_data = weather_service.get_full_forecast(lat, lon)
-    return jsonify(weather_service.process_forecast_data(raw_data))
+    result = weather_service.process_forecast_data(raw_data)
+    
+    # 4. Thêm tên địa điểm vào kết quả trả về để Frontend hiển thị
+    result['location_name'] = location_name
+    
+    return jsonify(result)
