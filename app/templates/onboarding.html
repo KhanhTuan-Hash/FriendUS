@@ -7,7 +7,7 @@
             
             <h2 class="card-title mb-3 fw-bold text-primary">Let's get to know you!</h2>
             <p class="card-text text-muted mb-4">
-                Chọn ít nhất 1 chủ đề bạn quan tâm để chúng tôi gợi ý bạn bè và địa điểm phù hợp nhé.
+                Chọn ít nhất 1 chủ đề bạn quan tâm (tối đa 5) để chúng tôi gợi ý phù hợp nhé.
             </p>
 
             <form method="POST" action="">
@@ -15,19 +15,23 @@
                 
                 <div class="d-flex flex-wrap justify-content-center gap-2 mb-5" id="tagsContainer">
                     {% for subfield in form.interests %}
-                        {# 1. Checkbox ẩn (để gửi dữ liệu về server) #}
-                        {{ subfield(class="btn-check tag-checkbox", autocomplete="off") }}
+                        <input type="checkbox" 
+                               class="btn-check tag-checkbox" 
+                               name="{{ subfield.name }}" 
+                               id="{{ subfield.id }}" 
+                               value="{{ subfield.data }}"
+                               {% if subfield.checked %}checked{% endif %}
+                               autocomplete="off">
                         
-                        {# 2. Label đóng vai trò là nút bấm (Giao diện cũ: rounded-pill, px-4, py-2) #}
                         <label class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag-label" 
                                for="{{ subfield.id }}"
-                               style="transition: all 0.2s;">
+                               style="cursor: pointer; transition: all 0.2s;">
                             {{ subfield.label.text }}
                         </label>
                     {% endfor %}
                 </div>
 
-                {# Hiển thị lỗi nếu có #}
+                {# Hiển thị lỗi form #}
                 {% if form.interests.errors %}
                     <div class="alert alert-danger py-2 mb-3">
                         {% for error in form.interests.errors %}
@@ -54,31 +58,38 @@ document.addEventListener("DOMContentLoaded", function() {
     const MAX_SELECTION = 5;
 
     checkboxes.forEach(checkbox => {
-        // 1. Cập nhật giao diện ban đầu (nếu form load lại khi có lỗi)
+        // 1. Cập nhật trạng thái ngay khi tải trang
         updateStyle(checkbox);
 
-        // 2. Xử lý sự kiện click
+        // 2. Xử lý sự kiện khi User bấm vào nút (thực chất là thay đổi input checkbox)
         checkbox.addEventListener('change', function() {
             const checkedCount = document.querySelectorAll('.tag-checkbox:checked').length;
             
-            if (checkedCount > MAX_SELECTION) {
-                this.checked = false; // Bỏ chọn nếu vượt quá giới hạn
+            // Logic giới hạn số lượng chọn
+            if (this.checked && checkedCount > MAX_SELECTION) {
+                this.checked = false; 
                 alert("Bạn chỉ được chọn tối đa " + MAX_SELECTION + " sở thích!");
+                return;
             }
             
             updateStyle(this);
         });
     });
 
-    // Hàm thay đổi màu sắc nút (Giống hệt giao diện cũ: Xám -> Xanh)
+    // Hàm đổi màu giao diện dựa trên trạng thái Checked của input
     function updateStyle(checkbox) {
+        // Tìm thẻ label có attribute 'for' khớp với id của checkbox
+        // Cách này an toàn hơn nextElementSibling nếu HTML có thay đổi
         const label = document.querySelector(`label[for="${checkbox.id}"]`);
+        
+        if (!label) return; // Phòng lỗi nếu không tìm thấy label
+
         if (checkbox.checked) {
-            // Trạng thái đã chọn (Active): Xanh, chữ trắng
+            // Đã chọn: Màu xanh
             label.classList.remove('btn-outline-secondary');
             label.classList.add('btn-primary', 'text-white', 'shadow-sm');
         } else {
-            // Trạng thái chưa chọn: Viền xám
+            // Chưa chọn: Viền xám
             label.classList.add('btn-outline-secondary');
             label.classList.remove('btn-primary', 'text-white', 'shadow-sm');
         }

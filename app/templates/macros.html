@@ -6,18 +6,22 @@
     
     <div class="d-flex flex-wrap gap-2">
         {% for subfield in field %}
-            {# Checkbox ẩn, dùng label đè lên làm nút #}
-            {{ subfield(class="btn-check tag-checkbox", autocomplete="off") }}
+            <input type="checkbox" 
+                   class="btn-check tag-checkbox" 
+                   name="{{ subfield.name }}" 
+                   id="{{ subfield.id }}" 
+                   value="{{ subfield.data }}"
+                   {% if subfield.checked %}checked{% endif %}
+                   autocomplete="off">
             
-            <label class="btn btn-outline-primary rounded-pill btn-sm d-flex align-items-center gap-1" 
-                   for="{{ subfield.id }}">
+            <label class="btn btn-outline-primary rounded-pill btn-sm interest-tag-label" 
+                   for="{{ subfield.id }}"
+                   style="cursor: pointer; transition: all 0.2s; min-width: 80px;">
                 {{ subfield.label.text }}
-                <i class="bi bi-check-circle-fill d-none check-icon"></i>
             </label>
         {% endfor %}
     </div>
 
-    {# Hiển thị lỗi nếu có #}
     {% if field.errors %}
         <div class="text-danger small mt-2">
             {% for error in field.errors %}
@@ -27,36 +31,22 @@
     {% endif %}
 </div>
 {% endmacro %}
-{# --- MACRO HIỂN THỊ TAG (Dùng cho Profile, Post, Room Card) --- #}
-{% macro render_user_tags(tags_string) %}
-    {# 1. Định nghĩa lại danh sách Emoji ngay tại giao diện để hiển thị đẹp #}
-    {% set tag_icons = {
-        'Travel': '✈️',
-        'Food': '🍜',
-        'Coffee': '☕',
-        'Music': '🎵',
-        'Sports': '⚽',
-        'Gaming': '🎮',
-        'Technology': '💻',
-        'Movies': '🎬',
-        'Reading': '📚',
-        'Study': '📖',
-        'Camping': '⛺',
-        'Shopping': '🛍️',
-        'Photography': '📷',
-        'Billiards': '🎱',
-        'Just Chatting': '🗣️'
-    } %}
 
+{# Macro render_user_tags giữ nguyên không đổi #}
+{% macro render_user_tags(tags_string) %}
+    {# ... (Giữ nguyên phần này như cũ) ... #}
+    {% set tag_icons = {
+        'Travel': '✈️', 'Food': '🍜', 'Coffee': '☕', 'Music': '🎵',
+        'Sports': '⚽', 'Gaming': '🎮', 'Technology': '💻', 'Movies': '🎬',
+        'Reading': '📚', 'Study': '📖', 'Camping': '⛺', 'Shopping': '🛍️',
+        'Photography': '📷', 'Billiards': '🎱', 'Just Chatting': '🗣️'
+    } %}
     <div class="d-flex flex-wrap gap-2 mb-3">
         {% if tags_string %}
             {% for tag in tags_string.split(',') %}
                 {% set tag_clean = tag.strip() %}
                 {% if tag_clean %}
-                    {# Lấy icon từ danh sách, nếu không có thì để rỗng #}
                     {% set icon = tag_icons.get(tag_clean, '') %}
-                    
-                    {# Style hiển thị: Giống nút bấm nhưng không bấm được (Badge) #}
                     <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2 fw-normal" 
                           style="font-size: 0.9rem;">
                         {{ tag_clean }} {{ icon }}
