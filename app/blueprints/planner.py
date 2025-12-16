@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, url_for, flash, render_template
+from flask import Blueprint, redirect, url_for, flash, render_template, request, jsonify
 from flask_login import current_user, login_required
 from app.extensions import db
 from app.models import Room, Activity, Constraint
@@ -119,25 +119,6 @@ def view_planner(room_id):
         weather_impacts=weather_impacts # <--- Truyền thêm biến này
     )
 
-@planner_bp.route('/room/<int:room_id>/add_activity', methods=['POST'])
-@login_required
-def add_room_activity(room_id):
-    room = Room.query.get_or_404(room_id)
-    form = ActivityForm()
-    if form.validate_on_submit():
-        new_act = Activity(
-            name=form.name.data, location=form.location.data, price=form.price.data,
-            start_time=form.start_time.data, end_time=form.end_time.data,
-            rating=form.rating.data if form.rating.data else 0, room=room
-        )
-        db.session.add(new_act)
-        db.session.commit()
-        flash('Activity added!', 'success')
-    else:
-        flash('Error adding activity.', 'danger')
-    # Redirect về trang Plan thay vì Chat
-    return redirect(url_for('planner.view_planner', room_id=room.id))
-
 @planner_bp.route('/room/<int:room_id>/add_constraint', methods=['POST'])
 @login_required
 def add_room_constraint(room_id):
@@ -162,14 +143,42 @@ def add_room_constraint(room_id):
                 
     return redirect(url_for('planner.view_planner', room_id=room.id))
 
+@planner_bp.route('/room/<int:room_id>/add_activity', methods=['POST'])
+@login_required
+def add_room_activity(room_id):
+    room = Room.query.get_or_404(room_id)
+    form = ActivityForm()
+    
+    if form.validate_on_submit():
+        new_act = Activity(
+            name=form.name.data, location=form.location.data, price=form.price.data,
+            start_time=form.start_time.data, end_time=form.end_time.data,
+            rating=form.rating.data if form.rating.data else 0, room=room
+        )
+        db.session.add(new_act)
+        db.session.commit()
+        flash('Activity added!', 'success')
+    else:
+        flash('Error adding activity. Check inputs.', 'danger')
+    
+    # [QUAN TRỌNG] Chuyển hướng về lại trang Planner (Reload trang)
+    # Thay vì trả về JSON, ta trả về lệnh chuyển trang
+    return redirect(url_for('chat.chat_room', room_name=room.name))
+
 @planner_bp.route('/delete_activity/<int:id>')
 @login_required
 def delete_activity(id):
     act = Activity.query.get_or_404(id)
-    room_id = act.room.id
+    
+    # [BƯỚC SỬA QUAN TRỌNG]
+    # Bạn phải lấy tên phòng và gán vào biến room_name TRƯỚC KHI xóa
+    room_name = act.room.name 
+    
     db.session.delete(act)
     db.session.commit()
-    return redirect(url_for('planner.view_planner', room_id=room_id))
+    
+    # Lúc này biến room_name đã có giá trị để sử dụng
+    return redirect(url_for('chat.chat_room', room_name=room_name))
 
 @planner_bp.route('/delete_constraint/<int:id>')
 @login_required
