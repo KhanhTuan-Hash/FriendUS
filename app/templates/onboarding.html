@@ -10,25 +10,34 @@
                 Chọn ít nhất 1 chủ đề bạn quan tâm để chúng tôi gợi ý bạn bè và địa điểm phù hợp nhé.
             </p>
 
-            <form method="POST" action="{{ url_for('auth.onboarding') }}" id="onboardingForm">
-                <input type="hidden" name="interests" id="selectedInterestsInput">
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
                 
                 <div class="d-flex flex-wrap justify-content-center gap-2 mb-5" id="tagsContainer">
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Travel">Travel ✈️</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Food">Food 🍜</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Music">Music 🎵</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Sports">Sports ⚽</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Technology">Technology 💻</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Cafe">Cafe ☕</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Movies">Movies 🎬</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Reading">Reading 📚</button>
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag" data-value="Gaming">Gaming 🎮</button>
+                    {% for subfield in form.interests %}
+                        {# 1. Checkbox ẩn (để gửi dữ liệu về server) #}
+                        {{ subfield(class="btn-check tag-checkbox", autocomplete="off") }}
+                        
+                        {# 2. Label đóng vai trò là nút bấm (Giao diện cũ: rounded-pill, px-4, py-2) #}
+                        <label class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag-label" 
+                               for="{{ subfield.id }}"
+                               style="transition: all 0.2s;">
+                            {{ subfield.label.text }}
+                        </label>
+                    {% endfor %}
                 </div>
 
+                {# Hiển thị lỗi nếu có #}
+                {% if form.interests.errors %}
+                    <div class="alert alert-danger py-2 mb-3">
+                        {% for error in form.interests.errors %}
+                            <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
                 <div class="d-grid gap-2 col-6 mx-auto">
-                    <button type="submit" class="btn btn-primary btn-lg rounded-pill shadow-sm">
-                        Finish Setup
-                    </button>
+                    {{ form.submit(class="btn btn-primary btn-lg rounded-pill shadow-sm") }}
                 </div>
             </form>
             
@@ -40,38 +49,40 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const buttons = document.querySelectorAll('.interest-tag');
-    const hiddenInput = document.getElementById('selectedInterestsInput');
-    let selectedTags = [];
+document.addEventListener("DOMContentLoaded", function() {
+    const checkboxes = document.querySelectorAll('.tag-checkbox');
+    const MAX_SELECTION = 5;
 
-    buttons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const value = this.getAttribute('data-value');
+    checkboxes.forEach(checkbox => {
+        // 1. Cập nhật giao diện ban đầu (nếu form load lại khi có lỗi)
+        updateStyle(checkbox);
 
-            if (this.classList.contains('active')) {
-                // Bỏ chọn: Xóa class active và btn-primary, trả về màu xám
-                this.classList.remove('active', 'btn-primary', 'text-white');
-                this.classList.add('btn-outline-secondary');
-                selectedTags = selectedTags.filter(item => item !== value);
-            } else {
-                // Chọn: Thêm màu xanh
-                this.classList.remove('btn-outline-secondary');
-                this.classList.add('active', 'btn-primary', 'text-white');
-                if (!selectedTags.includes(value)) {
-                    selectedTags.push(value);
-                }
+        // 2. Xử lý sự kiện click
+        checkbox.addEventListener('change', function() {
+            const checkedCount = document.querySelectorAll('.tag-checkbox:checked').length;
+            
+            if (checkedCount > MAX_SELECTION) {
+                this.checked = false; // Bỏ chọn nếu vượt quá giới hạn
+                alert("Bạn chỉ được chọn tối đa " + MAX_SELECTION + " sở thích!");
             }
-            hiddenInput.value = selectedTags.join(',');
+            
+            updateStyle(this);
         });
     });
-    
-    document.getElementById('onboardingForm').addEventListener('submit', function(e) {
-        if (selectedTags.length === 0) {
-            e.preventDefault();
-            alert('Hãy chọn ít nhất 1 sở thích!');
+
+    // Hàm thay đổi màu sắc nút (Giống hệt giao diện cũ: Xám -> Xanh)
+    function updateStyle(checkbox) {
+        const label = document.querySelector(`label[for="${checkbox.id}"]`);
+        if (checkbox.checked) {
+            // Trạng thái đã chọn (Active): Xanh, chữ trắng
+            label.classList.remove('btn-outline-secondary');
+            label.classList.add('btn-primary', 'text-white', 'shadow-sm');
+        } else {
+            // Trạng thái chưa chọn: Viền xám
+            label.classList.add('btn-outline-secondary');
+            label.classList.remove('btn-primary', 'text-white', 'shadow-sm');
         }
-    });
+    }
 });
 </script>
 {% endblock %}

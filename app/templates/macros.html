@@ -1,0 +1,68 @@
+{% macro render_tag_selector(field, max_selection=5) %}
+<div class="mb-3 tag-selector-wrapper">
+    <label class="form-label fw-bold small text-muted">
+        <i class="bi bi-tags-fill"></i> {{ field.label.text }} (Max {{ max_selection }}):
+    </label>
+    
+    <div class="d-flex flex-wrap gap-2">
+        {% for subfield in field %}
+            {# Checkbox ẩn, dùng label đè lên làm nút #}
+            {{ subfield(class="btn-check tag-checkbox", autocomplete="off") }}
+            
+            <label class="btn btn-outline-primary rounded-pill btn-sm d-flex align-items-center gap-1" 
+                   for="{{ subfield.id }}">
+                {{ subfield.label.text }}
+                <i class="bi bi-check-circle-fill d-none check-icon"></i>
+            </label>
+        {% endfor %}
+    </div>
+
+    {# Hiển thị lỗi nếu có #}
+    {% if field.errors %}
+        <div class="text-danger small mt-2">
+            {% for error in field.errors %}
+                <span><i class="bi bi-exclamation-circle"></i> {{ error }}</span>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endmacro %}
+{# --- MACRO HIỂN THỊ TAG (Dùng cho Profile, Post, Room Card) --- #}
+{% macro render_user_tags(tags_string) %}
+    {# 1. Định nghĩa lại danh sách Emoji ngay tại giao diện để hiển thị đẹp #}
+    {% set tag_icons = {
+        'Travel': '✈️',
+        'Food': '🍜',
+        'Coffee': '☕',
+        'Music': '🎵',
+        'Sports': '⚽',
+        'Gaming': '🎮',
+        'Technology': '💻',
+        'Movies': '🎬',
+        'Reading': '📚',
+        'Study': '📖',
+        'Camping': '⛺',
+        'Shopping': '🛍️',
+        'Photography': '📷',
+        'Billiards': '🎱',
+        'Just Chatting': '🗣️'
+    } %}
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        {% if tags_string %}
+            {% for tag in tags_string.split(',') %}
+                {% set tag_clean = tag.strip() %}
+                {% if tag_clean %}
+                    {# Lấy icon từ danh sách, nếu không có thì để rỗng #}
+                    {% set icon = tag_icons.get(tag_clean, '') %}
+                    
+                    {# Style hiển thị: Giống nút bấm nhưng không bấm được (Badge) #}
+                    <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2 fw-normal" 
+                          style="font-size: 0.9rem;">
+                        {{ tag_clean }} {{ icon }}
+                    </span>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    </div>
+{% endmacro %}

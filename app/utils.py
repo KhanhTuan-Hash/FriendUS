@@ -19,35 +19,54 @@ except Exception as e:
     print(f"Warning: Google AI Key missing or invalid. {e}")
     model = None
 
-# [CẤU HÌNH] Danh sách Tag và Interest chuẩn của hệ thống (Knowledge Base)
-# Bạn nên mở rộng danh sách này đầy đủ các chủ đề mà App hỗ trợ
-INTERESTS_ALL = [
-    "du lịch bụi", "nghỉ dưỡng", "ẩm thực", "khám phá", 
-    "chụp ảnh", "lịch sử", "công nghệ", "nghệ thuật", 
-    "thể thao", "mạo hiểm", "đọc sách", "âm nhạc"
+# --- 1. DANH SÁCH TAGS CHUẨN (Dùng cho cả Giao diện và AI) ---
+TAG_CHOICES = [
+    ('Travel', 'Travel ✈️'),
+    ('Food', 'Food 🍜'),
+    ('Coffee', 'Coffee ☕'),
+    ('Music', 'Music 🎵'),
+    ('Sports', 'Sports ⚽'),
+    ('Gaming', 'Gaming 🎮'),
+    ('Technology', 'Technology 💻'),
+    ('Movies', 'Movies 🎬'),
+    ('Reading', 'Reading 📚'),
+    ('Study', 'Study 📖'),
+    ('Camping', 'Camping ⛺'),
+    ('Shopping', 'Shopping 🛍️'),
+    ('Photography', 'Photography 📷'),
+    ('Billiards', 'Billiards 🎱'),
+    ('Just Chatting', 'Just Chatting 🗣️')
 ]
 
-TAGS_ALL = [
-    "leo núi", "biển", "rừng", "resort", "street food", 
-    "bảo tàng", "check-in", "coding", "triển lãm", 
-    "bóng đá", "camping", "sách", "concert", "cafe"
-]
+# --- 2. CẤU HÌNH AI & THUẬT TOÁN ---
+# (Code genai giữ nguyên...)
 
-# Khởi tạo Vectorizer và Matrix (Chạy 1 lần khi import)
+# --- [SỬA ĐOẠN NÀY] Tự động trích xuất danh sách cho AI ---
+# Thay vì khai báo thủ công INTERESTS_ALL = ["...", "..."], ta lấy từ TAG_CHOICES
+# Điều này giúp logic AI luôn đồng bộ với những gì người dùng chọn
+ALL_TAGS_TEXT = [tag[0] for tag in TAG_CHOICES] 
+
+# Để tương thích với code cũ, ta gán cả Interest và Tag bằng danh sách đầy đủ
+INTERESTS_ALL = ALL_TAGS_TEXT 
+TAGS_ALL = ALL_TAGS_TEXT
+
+# Khởi tạo Vectorizer và Matrix
 try:
     vectorizer_matrix = TfidfVectorizer(lowercase=True, ngram_range=(1, 2))
-    docs = INTERESTS_ALL + TAGS_ALL
+    
+    # [SỬA] Docs bây giờ chính là danh sách tags chuẩn của bạn
+    docs = ALL_TAGS_TEXT 
+    
     tfidf_matrix = vectorizer_matrix.fit_transform(docs)
     
-    interest_vecs = tfidf_matrix[:len(INTERESTS_ALL)]
-    tag_vecs = tfidf_matrix[len(INTERESTS_ALL):]
-    
-    # Ma trận trọng số W (Interest x Tags)
-    W = cosine_similarity(interest_vecs, tag_vecs)
+    # [SỬA] Vì ta gộp chung, ma trận W sẽ tính độ tương đồng giữa TẤT CẢ các thẻ với nhau
+    W = cosine_similarity(tfidf_matrix, tfidf_matrix)
     
     # Index map để tra cứu nhanh
-    INTEREST_INDEX = {v: i for i, v in enumerate(INTERESTS_ALL)}
-    TAG_INDEX = {v: i for i, v in enumerate(TAGS_ALL)}
+    # Code cũ tách Interest/Tag riêng, code mới dùng chung Index map cho tiện
+    INTEREST_INDEX = {v: i for i, v in enumerate(ALL_TAGS_TEXT)}
+    TAG_INDEX = {v: i for i, v in enumerate(ALL_TAGS_TEXT)}
+    
 except Exception as e:
     print(f"Error initializing ML Matrix: {e}")
     W = None
