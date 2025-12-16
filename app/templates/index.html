@@ -39,6 +39,7 @@
         {% for post in posts %}
         <div class="card mb-3 shadow-sm post-card" data-tags="{{ post.tags }}">
             <div class="card-header bg-white d-flex align-items-center">
+                
                 <a href="{{ url_for('auth.profile', username=post.author.username) }}" class="text-decoration-none d-flex align-items-center">
                     {% if 'http' in post.author.image_file %}
                         <img src="{{ post.author.image_file }}" 
@@ -48,7 +49,6 @@
                              class="rounded-circle me-2" width="40" height="40" alt="Profile" style="object-fit: cover;">
                     {% endif %}
                 </a>
-                
                 <div>
                     <a href="{{ url_for('auth.profile', username=post.author.username) }}" class="text-dark text-decoration-none">
                         <h6 class="mb-0">{{ post.author.username }}</h6>
@@ -86,25 +86,35 @@
             </div>
 
             <div class="card-footer bg-white pt-2 border-top-0">
-                <div class="d-flex justify-content-between align-items-center">
+                
+                <div class="d-flex justify-content-between text-muted small mb-2 px-1">
+                    <span>
+                        <i class="bi bi-heart-fill text-danger me-1"></i>
+                        <span class="like-count">{{ post.likes|length }}</span> Likes
+                    </span>
+                    <span class="text-end">
+                        <span class="me-3">{{ post.comments.count() }} Comments</span> 
+                        <span class="me-1">{{ post.shares_count }} Shares</span>
+                    </span>
+                </div>
+                
+                <div class="action-bar border-top pt-2">
                     
-                    {# Lưu ý: post.likes là List -> dùng |length #}
-                    <button class="btn btn-link text-decoration-none p-0 like-btn 
-                            {{ 'text-danger' if post.is_liked_by(current_user) else 'text-secondary' }}" 
+                    <button class="btn btn-action like-btn 
+                            {{ 'like-btn-filled' if post.is_liked_by(current_user) }}" 
                             data-post-id="{{ post.id }}">
                         <i class="bi {{ 'bi-heart-fill' if post.is_liked_by(current_user) else 'bi-heart' }}"></i> 
-                        <span class="like-count">{{ post.likes|length }}</span>
+                        Like
                     </button>
 
-                    {# Lưu ý: post.comments là Query Dynamic -> dùng .count() #}
-                    <button class="btn btn-link text-decoration-none p-0 text-secondary" 
+                    <button class="btn btn-action" 
                             type="button" data-bs-toggle="collapse" data-bs-target="#comments-{{ post.id }}">
-                        <i class="bi bi-chat-dots"></i> {{ post.comments.count() }}
+                        <i class="bi bi-chat-dots"></i> Comment
                     </button>
 
-                    <button class="btn btn-link text-decoration-none p-0 text-secondary share-btn" 
+                    <button class="btn btn-action share-btn" 
                             data-post-id="{{ post.id }}">
-                        <i class="bi bi-share"></i> <span class="share-count">{{ post.shares_count }}</span>
+                        <i class="bi bi-share"></i> Share
                     </button>
                 </div>
 
@@ -121,7 +131,6 @@
                                          class="rounded-circle me-2" width="30" height="30" style="object-fit: cover;">
                                 {% endif %}
                             </a>
-
                             <div class="bg-light p-2 rounded w-100">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
@@ -173,55 +182,63 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     
-    // 1. Like
+    // --- 1. Xử lý LIKE bằng AJAX (Đã chỉnh sửa logic màu) ---
     document.querySelectorAll('.like-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const postId = this.dataset.postId;
             const icon = this.querySelector('i');
             const button = this; 
-            const countSpan = this.querySelector('.like-count');
+            // Cần tìm span like count tổng thể để cập nhật
+            // Cập nhật: Sử dụng closest để tìm thẻ post-card cha, sau đó query .like-count bên trong
+            const totalLikeSpan = button.closest('.post-card').querySelector('.card-footer .like-count');
 
             fetch(`/post/${postId}/like`, { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {
-                    countSpan.innerText = data.count;
+                    // Cập nhật số lượng tổng thể
+                    if(totalLikeSpan) {
+                         totalLikeSpan.innerText = data.count;
+                    }
+
+                    // Cập nhật icon và class màu của nút bấm
                     if (data.action === 'liked') {
                         icon.classList.remove('bi-heart');
                         icon.classList.add('bi-heart-fill');
-                        button.classList.remove('text-secondary');
-                        button.classList.add('text-danger');
+                        button.classList.add('like-btn-filled');
                     } else {
                         icon.classList.remove('bi-heart-fill');
                         icon.classList.add('bi-heart');
-                        button.classList.remove('text-danger');
-                        button.classList.add('text-secondary');
+                        button.classList.remove('like-btn-filled');
                     }
                 }
             });
         });
     });
 
-    // 2. Share
+    // --- 2. Xử lý SHARE (Copy link + Đếm số) ---
     document.querySelectorAll('.share-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const postId = this.dataset.postId;
             const countSpan = this.querySelector('.share-count');
+            
+            // Copy link vào clipboard
             const postUrl = window.location.origin + `/post/${postId}`; 
             navigator.clipboard.writeText(postUrl);
 
+            // Gọi API tăng đếm share
             fetch(`/post/${postId}/share`, { method: 'POST' })
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {
-                    countSpan.innerText = data.shares;
+                    // countSpan.innerText = data.shares; // Số share giờ hiển thị ở total summary
                     alert('Link đã được sao chép và lượt chia sẻ đã tăng lên!');
                 }
             });
         });
     });
     
-    // 3. Track Interest Click
+    // --- 3. Giữ lại logic theo dõi sở thích khi click vào Tag ---
     document.querySelectorAll('.post-tag').forEach(tag => {
         tag.addEventListener('click', function() {
             const tagText = this.innerText.replace('#', '');
@@ -229,7 +246,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tag: tagText })
-            });
+            })
+            .then(response => response.json())
+            .then(data => console.log('AI Learning (Tag Click):', data));
         });
     });
 });

@@ -108,7 +108,7 @@
                 </div>
                 
                 <div class="card-body">
-                    <p class="card-text fs-5">{{ post.body }}</p>
+                    <p class="card-text fs-5">{{ post.body | safe }}</p>
                     
                     {% if post.media_filename %}
                         <img src="{{ url_for('static', filename='uploads/' + post.media_filename) }}" class="img-fluid rounded mt-2 mb-3" style="max-height: 400px; width: auto;">
