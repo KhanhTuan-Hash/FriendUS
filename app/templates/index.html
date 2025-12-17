@@ -94,7 +94,7 @@
                     </span>
                     <span class="text-end">
                         <span class="me-3">{{ post.comments.count() }} Comments</span> 
-                        <span class="me-1">{{ post.shares_count }} Shares</span>
+                        <span class="me-1 share-count-total">{{ post.shares_count }}</span> Shares 
                     </span>
                 </div>
                 
@@ -189,7 +189,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const icon = this.querySelector('i');
             const button = this; 
             // Cần tìm span like count tổng thể để cập nhật
-            // Cập nhật: Sử dụng closest để tìm thẻ post-card cha, sau đó query .like-count bên trong
             const totalLikeSpan = button.closest('.post-card').querySelector('.card-footer .like-count');
 
             fetch(`/post/${postId}/like`, { method: 'POST' })
@@ -220,8 +219,10 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.share-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const postId = this.dataset.postId;
-            const countSpan = this.querySelector('.share-count');
             
+            // FIX: Cần tìm span share count tổng thể để cập nhật
+            const totalShareSpan = btn.closest('.post-card').querySelector('.card-footer .share-count-total'); 
+
             // Copy link vào clipboard
             const postUrl = window.location.origin + `/post/${postId}`; 
             navigator.clipboard.writeText(postUrl);
@@ -231,7 +232,10 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(res => res.json())
             .then(data => {
                 if(data.status === 'success') {
-                    // countSpan.innerText = data.shares; // Số share giờ hiển thị ở total summary
+                    // Cập nhật số lượng tổng thể
+                    if(totalShareSpan) {
+                         totalShareSpan.innerText = data.shares;
+                    }
                     alert('Link đã được sao chép và lượt chia sẻ đã tăng lên!');
                 }
             });
