@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FriendUS{% if title %} - {{ title }}{% endif %}</title>
+    
+    {{ bootstrap.load_css() }}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <link href="https://unpkg.com/@vietmap/vietmap-gl-js@6.0.0/dist/vietmap-gl.css" rel="stylesheet" />
+
+    <script src="https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js"></script>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Font hiện đại hơn */
+        }
+        
+        /* --- START: MODERN NAVBAR DESIGN --- */
+        .modern-navbar {
+            background: rgba(255, 255, 255, 0.95) !important; /* Nền trắng mờ */
+            backdrop-filter: blur(10px); /* Hiệu ứng kính */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05); /* Đổ bóng nhẹ */
+            padding: 0.8rem 0;
+            transition: all 0.3s ease;
+            z-index: 1050;
+        }
+
+        .navbar-brand {
+            font-weight: 800;
+            font-size: 1.6rem;
+            letter-spacing: -0.5px;
+            /* Gradient Text Logo */
+            background: linear-gradient(45deg, #0d6efd, #0dcaf0); 
+            -webkit-background-clip: text; 
+            background-clip: text; /* Đã thêm phiên bản chuẩn để hết cảnh báo */
+            -webkit-text-fill-color: transparent;
+            transition: transform 0.2s;
+        }
+
+        .navbar-brand:hover {
+            transform: scale(1.05);
+        }
+
+        .nav-link {
+            color: #555 !important;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin: 0 4px;
+            padding: 8px 16px !important;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Khoảng cách giữa Icon và Chữ */
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background-color: #f0f7ff;
+            color: #0d6efd !important;
+            transform: translateY(-1px);
+        }
+
+        /* Avatar nhỏ trên Navbar */
+        .nav-avatar {
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 2px solid #e0e0e0;
+            transition: border-color 0.2s;
+        }
+
+        .nav-link:hover .nav-avatar {
+            border-color: #0d6efd;
+        }
+
+        .btn-logout-nav {
+            color: #dc3545 !important;
+        }
+        .btn-logout-nav:hover {
+            background-color: #fff5f5;
+            color: #bb2d3b !important;
+        }
+        /* --- END: MODERN NAVBAR DESIGN --- */
+
+        #main-wrapper {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background: #f8f9fa;
+        }
+
+        .full-width-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+        }
+                .action-bar {
+            border-top: 1px solid #eee; /* Viền mỏng phía trên */
+            padding-top: 8px;
+            display: flex;
+            justify-content: space-around; /* Căn đều các nút */
+            gap: 10px;
+        }
+        
+        .action-bar .btn-action {
+            flex-grow: 1; /* Cho các nút chiếm không gian bằng nhau */
+            padding: 8px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #6c757d; /* Màu xám trung tính */
+            border-radius: 6px;
+            transition: background-color 0.2s, color 0.2s;
+            text-decoration: none;
+            border: none;
+        }
+        
+        .action-bar .btn-action:hover {
+            background-color: #f0f7ff;
+            color: #0d6efd;
+        }
+        
+        .action-bar .like-btn-filled {
+            color: #dc3545 !important;
+        }
+        
+        /* Ẩn p-0 và text-decoration-none cũ */
+        .card-footer .btn-link {
+            text-decoration: none !important;
+            padding: 0 !important;
+        }
+        
+        /* CKEditor Style Fixes */
+        .ck-editor__editable_inline {
+            min-height: 100px;
+        }
+    </style>
+  </head>
+  <body>
+    
+    {# --- NEW MODERN NAVBAR HTML --- #}
+    {% if not hide_nav %}
+    <nav class="navbar navbar-expand-lg modern-navbar sticky-top">
+      <div class="container">
+        <a class="navbar-brand" href="{{ url_for('main.index') }}">
+            <i class="bi bi-people-fill me-2"></i>FriendUS
+        </a>
+
+        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="bi bi-list fs-2 text-primary"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ms-auto align-items-center">
+          {% if current_user.is_authenticated %}
+            
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('main.index') }}">
+                    <i class="bi bi-house-door-fill"></i> Home
+                </a>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('map.map') }}">
+                    <i class="bi bi-geo-alt-fill"></i> Map
+                </a>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('main.friends') }}">
+                    <i class="bi bi-person-hearts"></i> Friends
+                </a>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('chat.chat') }}">
+                    <i class="bi bi-chat-dots-fill"></i> Chat
+                </a>
+            </li>
+            
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('auth.profile', username=current_user.username) }}">
+                    {% if 'http' in current_user.image_file %}
+                        <img src="{{ current_user.image_file }}" class="nav-avatar">
+                    {% else %}
+                        <img src="{{ url_for('static', filename='profile_pics/' + current_user.image_file) }}" class="nav-avatar">
+                    {% endif %}
+                    <span>{{ current_user.username }}</span>
+                </a>
+            </li>
+
+            <li class="nav-item d-none d-lg-block mx-2 text-muted">|</li>
+
+            <li class="nav-item">
+                <a class="nav-link btn-logout-nav" href="{{ url_for('auth.logout') }}">
+                    <i class="bi bi-box-arrow-right"></i> Logout
+                </a>
+            </li>
+
+          {% else %}
+            <li class="nav-item">
+                <a class="nav-link btn btn-primary px-4 rounded-pill shadow-sm" 
+                   style="background-color: #0d6efd !important; color: white !important;" 
+                   href="{{ url_for('auth.login') }}">
+                   Login
+                </a>
+            </li>
+          {% endif %}
+          </ul>
+        </div>
+      </div>
+    </nav>
+    {% endif %}
+    {# --- END NAVBAR --- #}
+
+    <div id="main-wrapper">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="container mt-3">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="{{ 'full-width-wrapper' if full_width else 'container mt-4' }}">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    {{ bootstrap.load_js() }}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    
+    <script src="https://unpkg.com/@vietmap/vietmap-gl-js@6.0.0/dist/vietmap-gl.js"></script>
+
+    <script>
+        // Initialize "Headless" CKEditor (Discord-style)
+        document.addEventListener("DOMContentLoaded", function() {
+            const postBody = document.querySelector('#body');
+            
+            if (postBody) {
+                ClassicEditor
+                    .create(postBody, {
+                        toolbar: [],
+                        placeholder: "What's on your mind?"
+                    })
+                    .then(editor => {
+                        editor.model.document.on('change:data', () => {
+                            postBody.value = editor.getData();
+                        });
+
+                        const toolbarElement = editor.ui.view.toolbar.element;
+                        toolbarElement.style.display = 'none';
+
+                        editor.editing.view.change(writer => {
+                            const root = editor.editing.view.document.getRoot();
+                            writer.setStyle('padding', '15px', root);
+                            writer.setStyle('border-radius', '8px', root);
+                            writer.setStyle('background-color', '#fff', root);
+                        });
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            }
+        });
+    </script>
+
+    {% block scripts %}{% endblock %}
+  </body>
+  <script>
+    // Hàm gửi tín hiệu về Server
+    function sendInterestSignal(tag) {
+        if (!tag) return;
+        fetch('/api/track_interest', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': "{{ csrf_token() if csrf_token else '' }}"
+            },
+            body: JSON.stringify({ tag: tag })
+        }).then(res => console.log(`Interest recorded: ${tag}`))
+          .catch(err => console.error(err));
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll('.post-tag').forEach(item => {
+            item.addEventListener('click', event => {
+                let tagContent = event.target.innerText.trim();
+                sendInterestSignal(tagContent);
+            });
+        });
+
+        // Intersection Observer (View tracking)
+        let observerOptions = { root: null, threshold: 0.5 };
+        
+        let observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    let tags = entry.target.getAttribute('data-tags'); 
+                    if (tags) {
+                        let timer = setTimeout(() => {
+                            if (entry.isIntersecting) {
+                                tags.split(',').forEach(t => sendInterestSignal(t.trim()));
+                            }
+                        }, 2000);
+                        entry.target.dataset.timerId = timer;
+                    }
+                } else {
+                    clearTimeout(entry.target.dataset.timerId);
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.post-card').forEach(post => {
+            observer.observe(post);
+        });
+    });
+</script>
+</html>

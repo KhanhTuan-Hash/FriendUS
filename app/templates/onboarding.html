@@ -1,0 +1,99 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-center" style="min-height: 80vh;">
+    <div class="card shadow-lg border-0" style="width: 100%; max-width: 700px; border-radius: 20px;">
+        <div class="card-body p-5 text-center">
+            
+            <h2 class="card-title mb-3 fw-bold text-primary">Let's get to know you!</h2>
+            <p class="card-text text-muted mb-4">
+                Chọn ít nhất 1 chủ đề bạn quan tâm (tối đa 5) để chúng tôi gợi ý phù hợp nhé.
+            </p>
+
+            <form method="POST" action="">
+                {{ form.hidden_tag() }}
+                
+                <div class="d-flex flex-wrap justify-content-center gap-2 mb-5" id="tagsContainer">
+                    {% for subfield in form.interests %}
+                        <input type="checkbox" 
+                               class="btn-check tag-checkbox" 
+                               name="{{ subfield.name }}" 
+                               id="{{ subfield.id }}" 
+                               value="{{ subfield.data }}"
+                               {% if subfield.checked %}checked{% endif %}
+                               autocomplete="off">
+                        
+                        <label class="btn btn-outline-secondary rounded-pill px-4 py-2 interest-tag-label" 
+                               for="{{ subfield.id }}"
+                               style="cursor: pointer; transition: all 0.2s;">
+                            {{ subfield.label.text }}
+                        </label>
+                    {% endfor %}
+                </div>
+
+                {# Hiển thị lỗi form #}
+                {% if form.interests.errors %}
+                    <div class="alert alert-danger py-2 mb-3">
+                        {% for error in form.interests.errors %}
+                            <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="d-grid gap-2 col-6 mx-auto">
+                    {{ form.submit(class="btn btn-primary btn-lg rounded-pill shadow-sm") }}
+                </div>
+            </form>
+            
+            <div class="mt-4 pt-3 border-top">
+                <small class="text-muted">Muốn dùng tài khoản khác? <a href="{{ url_for('auth.logout') }}">Logout</a></small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const checkboxes = document.querySelectorAll('.tag-checkbox');
+    const MAX_SELECTION = 5;
+
+    checkboxes.forEach(checkbox => {
+        // 1. Cập nhật trạng thái ngay khi tải trang
+        updateStyle(checkbox);
+
+        // 2. Xử lý sự kiện khi User bấm vào nút (thực chất là thay đổi input checkbox)
+        checkbox.addEventListener('change', function() {
+            const checkedCount = document.querySelectorAll('.tag-checkbox:checked').length;
+            
+            // Logic giới hạn số lượng chọn
+            if (this.checked && checkedCount > MAX_SELECTION) {
+                this.checked = false; 
+                alert("Bạn chỉ được chọn tối đa " + MAX_SELECTION + " sở thích!");
+                return;
+            }
+            
+            updateStyle(this);
+        });
+    });
+
+    // Hàm đổi màu giao diện dựa trên trạng thái Checked của input
+    function updateStyle(checkbox) {
+        // Tìm thẻ label có attribute 'for' khớp với id của checkbox
+        // Cách này an toàn hơn nextElementSibling nếu HTML có thay đổi
+        const label = document.querySelector(`label[for="${checkbox.id}"]`);
+        
+        if (!label) return; // Phòng lỗi nếu không tìm thấy label
+
+        if (checkbox.checked) {
+            // Đã chọn: Màu xanh
+            label.classList.remove('btn-outline-secondary');
+            label.classList.add('btn-primary', 'text-white', 'shadow-sm');
+        } else {
+            // Chưa chọn: Viền xám
+            label.classList.add('btn-outline-secondary');
+            label.classList.remove('btn-primary', 'text-white', 'shadow-sm');
+        }
+    }
+});
+</script>
+{% endblock %}

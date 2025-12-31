@@ -1,0 +1,54 @@
+name: friendus-env
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # --- Core Python ---
+  - python=3.11
+  - pip
+
+  # --- Flask Web Framework ---
+  - flask
+  - bootstrap-flask
+  - flask-login
+  - flask-socketio
+  - flask-sqlalchemy
+  - flask-wtf
+  - email-validator
+  - eventlet
+
+  # --- Geospatial Data ---
+  - osmnx
+  - geopandas
+  - pyogrio
+  - matplotlib-base
+
+  # --- Database ---
+  - sqlalchemy
+
+  # --- Auth ---
+  - authlib
+  - requests
+  - python-dotenv
+
+  # --- Utilities ---
+  - pillow
+  - markdown
+  - bleach
+
+  # --- AI / ML Core ---
+  - fastapi
+  - uvicorn
+  - pydantic
+  - scikit-learn
+  - numpy
+
+  # --- Google Generative AI LOW-LEVEL DEPS ---
+  - grpcio
+  - protobuf
+  - google-api-core
+
+  # --- Pip-only packages ---
+  - pip:
+      - google-generativeai

@@ -1,0 +1,607 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<link href="https://unpkg.com/vis-timeline/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+    /* --- CHAT STYLING (REDESIGNED) --- */
+    #chat-container { 
+        display: flex; flex-direction: row; height: 75vh; 
+        border: none; border-radius: 1rem; overflow: hidden; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* Đổ bóng mềm */
+        background: #fff;
+    }
+    
+    /* Sidebar */
+    #user-sidebar { 
+        flex: 0 0 240px; background-color: #ffffff; 
+        border-right: 1px solid #f0f0f0; padding: 1.5rem; 
+        overflow-y: auto; 
+    }
+    #user-sidebar h6 { letter-spacing: 0.5px; text-transform: uppercase; font-size: 0.75rem; color: #adb5bd; font-weight: 700; }
+
+    /* Main Chat Area */
+    #chat-main { 
+        flex-grow: 1; display: flex; flex-direction: column; height: 100%; position: relative; 
+        background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
+    }
+
+    /* Messages Area */
+    #messages { 
+        flex-grow: 1; overflow-y: scroll; padding: 1.5rem; 
+        display: flex; flex-direction: column; gap: 0.5rem; 
+        scroll-behavior: smooth;
+    }
+    
+    /* Bubbles */
+    .message-bubble { 
+        max-width: 70%; padding: 0.75rem 1.25rem; margin-bottom: 0.25rem; 
+        position: relative; word-wrap: break-word; font-size: 0.95rem;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+    
+    .message-self { 
+        align-self: flex-end; 
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); 
+        color: white; 
+        border-radius: 18px 18px 4px 18px; 
+    }
+    
+    .message-other { 
+        align-self: flex-start; 
+        background-color: #ffffff; 
+        color: #333;
+        border: 1px solid #f1f1f1;
+        border-radius: 18px 18px 18px 4px; 
+    }
+    
+    .message-info { font-size: 0.7rem; margin-bottom: 4px; opacity: 0.8; }
+    .message-self .message-info { color: rgba(255,255,255,0.9); text-align: right; }
+    .message-other .message-info { color: #6c757d; text-align: left; }
+
+    /* Scrollbar */
+    #messages::-webkit-scrollbar { width: 6px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    #messages::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    /* Typing & Emoji */
+    #typing-status { font-size: 0.75rem; color: #6c757d; padding: 0 1.5rem 0.5rem; font-style: italic; min-height: 20px;}
+    
+    /* --- TAB STYLING --- */
+    .nav-tabs .nav-link.active { background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold; }
+
+    /* --- TIMELINE STYLING --- */
+    #visual-timeline { height: 400px; border: 1px solid #dee2e6; background-color: #f8f9fa; }
+    .vis-item { border-color: #17a2b8; background-color: #17a2b8; color: white; font-size: 14px; border-radius: 4px; }
+    .vis-item.vis-selected { border-color: #117a8b; background-color: #138496; color: white; }
+    .vis-current-time { background-color: #dc3545; width: 2px; }
+
+    /* --- STAR RATING --- */
+    .star-rating { font-size: 1.5rem; color: #ffc107; cursor: pointer; }
+    .star-rating .bi-star { color: #ddd; }
+    .star-rating .bi-star-fill { color: #ffc107; }
+
+    /* --- MAP PICKER STYLING --- */
+    #picker-map { width: 100%; height: 400px; border-radius: 0.25rem; }
+
+    /* --- WEATHER SCROLL STYLING --- */
+    .hourly-scroll::-webkit-scrollbar { height: 6px; }
+    .hourly-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+    .hourly-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+    .hourly-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+</style>
+
+<div class="container-fluid mt-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h3>
+            <i class="bi bi-geo-alt-fill text-primary"></i> {{ room.name }} 
+            <small class="text-muted fs-6">{{ room.description }}</small>
+        </h3>
+        
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#inviteModal">
+                <i class="bi bi-person-plus-fill"></i> Invite
+            </button>
+        
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-gear-fill"></i> Settings
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    {% if current_user.id == room.creator_id %}
+                        <li>
+                            <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to PERMANENTLY delete this room?');">
+                                <button class="dropdown-item text-danger"><i class="bi bi-trash"></i> Delete Room</button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li>
+                            <form action="{{ url_for('chat.leave_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to leave this group?');">
+                                <button class="dropdown-item text-warning"><i class="bi bi-box-arrow-right"></i> Leave Group</button>
+                            </form>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+        
+    {% if room.creator == current_user and pending_requests %}
+    <div class="alert alert-warning shadow-sm">
+        <h5 class="alert-heading"><i class="bi bi-exclamation-circle-fill"></i> Pending Requests</h5>
+        <div class="list-group">
+            {% for req in pending_requests %}
+            <div class="list-group-item d-flex justify-content-between align-items-center bg-white border-0 mb-1 rounded">
+                <div>
+                    <strong>{{ req.user.username }}</strong> wants to join.
+                </div>
+                <div>
+                    <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='accept') }}" method="POST"><button class="btn btn-sm btn-success me-1">Approve</button></form>
+                    <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='reject') }}" method="POST"><button class="btn btn-sm btn-danger">Reject</button></form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div>
+        {% if room.is_private %}
+            <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Private</span>
+        {% else %}
+            <span class="badge bg-success"><i class="bi bi-globe"></i> Public</span>
+        {% endif %}
+    </div>
+
+    <ul class="nav nav-tabs mt-3" id="roomTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat-panel" type="button" role="tab">
+                <i class="bi bi-chat-dots"></i> Chat
+            </button>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('planner.view_planner', room_id=room.id) }}">
+                <i class="bi bi-calendar-check"></i> Planner
+            </a>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="finance-tab" data-bs-toggle="tab" data-bs-target="#finance-panel" type="button" role="tab">
+                <i class="bi bi-cash-coin"></i> Finance
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="weather-tab" data-bs-toggle="tab" data-bs-target="#weather-panel" type="button" role="tab">
+                <i class="bi bi-cloud-sun-fill"></i> Weather
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3 bg-white shadow-sm" id="roomTabsContent" style="min-height: 75vh;">
+        
+        <div class="tab-pane fade show active" id="chat-panel" role="tabpanel">
+            <div id="chat-container">
+                <div id="user-sidebar">
+                    <div class="d-flex align-items-center mb-4 text-primary">
+                        <i class="bi bi-people-fill fs-5 me-2"></i>
+                        <h6 class="mb-0 text-dark fw-bold">Members (<span id="user-count">0</span>)</h6>
+                    </div>
+                    <div id="user-list-container">
+                        </div>
+                </div>
+
+                <div id="chat-main">
+                    <div id="messages"></div>
+                    
+                    <div id="typing-status"></div>
+                    
+                    <div id="emoji-picker" style="display:none; position: absolute; bottom: 80px; right: 20px; z-index: 100; box-shadow: 0 5px 20px rgba(0,0,0,0.15); border-radius: 8px;">
+                        <emoji-picker></emoji-picker>
+                    </div>
+
+                    <div class="p-3 bg-transparent"> 
+                        <div class="bg-white p-2 rounded-4 shadow-sm border border-light">
+                            <form id="chat-form" class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm text-white rounded-pill px-3 fw-bold" type="button" id="btn-summarize" 
+                                        style="background: linear-gradient(45deg, #FFB75E, #ED8F03); border: none; white-space: nowrap;"
+                                        title="Summarize recent chat with AI">
+                                    <i class="bi bi-stars"></i> AI Recap
+                                </button>
+                                
+                                <input type="text" class="form-control border-0 bg-light rounded-pill px-3 py-2" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off" style="box-shadow: none;">
+
+                                <button class="btn btn-light text-secondary rounded-circle" type="button" id="emoji-btn" style="width: 40px; height: 40px;">
+                                    <i class="bi bi-emoji-smile-fill fs-5"></i>
+                                </button>
+                                
+                                <button class="btn btn-primary rounded-circle shadow-sm" type="submit" style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;">
+                                    <i class="bi bi-send-fill ms-1"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="finance-panel" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card mb-3">
+                        <div class="card-header bg-success text-white">New Transaction</div>
+                        <div class="card-body">
+                            <form action="{{ url_for('finance.add_room_transaction', room_id=room.id) }}" method="POST">
+                                {{ trans_form.hidden_tag() }}
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">Type</label>
+                                    {% for subfield in trans_form.type %}
+                                        <div class="form-check">
+                                            {{ subfield(class="form-check-input") }} 
+                                            {{ subfield.label(class="form-check-label small") }}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                                <div class="mb-2">
+                                    <div class="input-group input-group-sm">
+                                        {{ trans_form.amount(class="form-control", placeholder="Amount") }}
+                                        <span class="input-group-text">VND</span>
+                                    </div>
+                                </div>
+                                <div class="mb-2">{{ trans_form.description(class="form-control form-control-sm", placeholder="Description") }}</div>
+                                <div class="form-check form-switch mb-2">
+                                    {{ trans_form.is_outside(class="form-check-input", id="switchOutside") }}
+                                    <label class="form-check-label small" for="switchOutside">Is Stranger?</label>
+                                </div>
+                                <div id="memberInput" class="mb-2">{{ trans_form.receiver(class="form-select form-select-sm") }}</div>
+                                <div id="outsiderInput" class="mb-2" style="display:none;">{{ trans_form.outsider_name(class="form-control form-control-sm", placeholder="Stranger Name") }}</div>
+                                {{ trans_form.submit(class="btn btn-success btn-sm w-100") }}
+                            </form>
+                        </div>
+                    </div>
+                    {% if pending_trans %}
+                    <div class="alert alert-warning p-2">
+                        <h6 class="alert-heading h6">Need Confirmation</h6>
+                        <ul class="list-unstyled mb-0 small">
+                        {% for p in pending_trans %}
+                            <li class="border-bottom py-1">
+                                <strong>{{ p.sender.username }}</strong>: {{ "{:,.0f}".format(p.amount) }} VND
+                                <form action="{{ url_for('finance.confirm_transaction', trans_id=p.id) }}" method="POST" class="d-inline float-end">
+                                    <button class="btn btn-xs btn-outline-dark py-0 px-1">Confirm</button>
+                                </form>
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-8">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-header d-flex justify-content-between">
+                            <span>Debt Network</span>
+                            <button onclick="loadGraph()" class="btn btn-sm btn-outline-primary">Refresh</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="finance-network" style="height: 500px; width: 100%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="weather-panel" role="tabpanel">
+            <div class="container-fluid p-3">
+                <div class="position-relative mb-3" style="max-width: 500px; margin: 0 auto;">
+                    <div class="input-group">
+                        <input type="text" id="weather-search-input" class="form-control" placeholder="Nhập tên thành phố..." autocomplete="off" onkeydown="if(event.key === 'Enter') handleSearch()">
+                        <button class="btn btn-primary" type="button" onclick="handleSearch()"><i class="bi bi-search"></i></button>
+                    </div>
+                    <div id="search-results-list" class="list-group position-absolute w-100 shadow mt-1" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
+                </div>
+                <div id="weather-loading" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
+                </div>
+                <div id="weather-error" class="alert alert-danger" style="display: none;"></div>
+                <div id="weather-content" style="display: none;">
+                    <div class="card text-white mb-4 shadow" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 20px;">
+                        <div class="card-body p-4">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <h4 class="fw-light opacity-75"><i class="bi bi-geo-alt-fill"></i> <span id="w-location">Hồ Chí Minh, VN</span></h4>
+                                    <h1 style="font-size: 4rem; font-weight: bold;"><span id="w-temp">--</span>°C</h1>
+                                    <p class="fs-5 mb-0" id="w-desc">--</p>
+                                    <div class="mt-4 d-flex flex-wrap gap-2">
+                                        <span class="badge bg-white text-dark shadow-sm d-flex align-items-center" style="font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
+                                            <span class="me-2 fs-5">💧</span> <span id="w-precip">0</span> mm
+                                        </span>
+                                        <span class="badge bg-white text-dark shadow-sm d-flex align-items-center" style="font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
+                                            <span class="me-2 fs-5">💨</span> <span id="w-wind">0</span> km/h
+                                        </span>
+                                        
+                                        <span id="w-aqi" class="badge shadow-sm d-flex align-items-center" 
+                                              style="display: none; font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 text-center text-md-end">
+                                    <div style="font-size: 6rem; line-height: 1;" id="w-icon">🌤️</div>
+                                    <div class="mt-3 text-end" id="w-risks"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
+                    <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="mapModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Pick Location</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="picker-map"></div></div></div></div></div>
+
+<div class="modal fade" id="inviteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Invite Friends</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <form action="{{ url_for('chat.invite_to_room', room_id=room.id) }}" method="POST">
+                <div class="modal-body">
+                    <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                        {% if invitable_friends %}
+                            {% for friend in invitable_friends %}
+                                <label class="list-group-item d-flex gap-3">
+                                    <input class="form-check-input" type="checkbox" name="friend_ids" value="{{ friend.id }}">
+                                    <span><strong>{{ friend.username }}</strong><br><small class="text-muted">{{ friend.email }}</small></span>
+                                </label>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-muted">No friends available to invite.</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="submit" class="btn btn-primary">Send Invites</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="summaryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-magic"></i> AI Chat Summary</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="summary-loading" class="text-center py-3"><div class="spinner-border text-primary"></div><p>AI is thinking...</p></div>
+                <div id="summary-content" style="display: none;">
+                    <h6 class="fw-bold">Tóm tắt ngắn</h6><p id="summary-short-text" class="lead fst-italic p-3 bg-light border rounded"></p>
+                    <hr><h6 class="fw-bold">Chi tiết</h6><p id="summary-full-text" class="p-3 bg-light border rounded" style="white-space: pre-line;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
+    
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script>const VisNetwork = vis.Network; const VisDataSet = vis.DataSet;</script>
+    <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+    <script type="text/javascript">
+        // --- RESTORE VIS NETWORK (Conflict fix) ---
+        if (!vis.Network) vis.Network = VisNetwork;
+        if (!vis.DataSet && VisDataSet) vis.DataSet = VisDataSet;
+
+        // --- 1. GENERAL UI LOGIC ---
+        flatpickr(".flatpickr-input", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true });
+
+        // --- 2. CHAT LOGIC (IMPORTANT: CONNECTS TO ROOM) ---
+        document.addEventListener('DOMContentLoaded', (event) => {
+            
+            // AI Summary Handler
+            const summarizeBtn = document.getElementById('btn-summarize');
+            const summaryModalEl = document.getElementById('summaryModal');
+            if (summarizeBtn && summaryModalEl) {
+                const summaryModal = new bootstrap.Modal(summaryModalEl);
+                summarizeBtn.addEventListener('click', function() {
+                    document.getElementById('summary-loading').style.display = 'block';
+                    document.getElementById('summary-content').style.display = 'none';
+                    summaryModal.show();
+                    fetch(`/chat/summary/{{ room.id }}`).then(r => r.json()).then(data => {
+                        document.getElementById('summary-loading').style.display = 'none';
+                        document.getElementById('summary-content').style.display = 'block';
+                        document.getElementById('summary-short-text').innerText = data.short || "Error";
+                        document.getElementById('summary-full-text').innerText = data.full || "Error";
+                    }).catch(e => { console.error(e); });
+                });
+            }
+
+            // Socket.IO Connection
+            var socket = io();
+            const roomName = '{{ room.name }}';
+            const currentUsername = '{{ current_user.username }}';
+            const messageContainer = document.getElementById('messages');
+            const messageInput = document.getElementById('message-input');
+            const typingStatus = document.getElementById('typing-status');
+            const emojiPicker = document.querySelector('emoji-picker');
+            let typingTimer;
+
+            function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
+            function isImageUrl(url) { return(url.match(/\.(jpeg|jpg|gif|png)$/) != null); }
+
+            // Thêm tin nhắn vào giao diện
+            function addMessage(data) {
+                let isSelf = data.username === currentUsername;
+                let bubbleClass = isSelf ? 'message-self' : 'message-other';
+                let content = isImageUrl(data.msg) ? `<img src="${data.msg}" style="max-width:100%; border-radius:5px;">` : data.msg;
+                
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `message-bubble ${bubbleClass}`;
+                msgDiv.innerHTML = `
+                    <div class="message-info">
+                        <strong>${isSelf ? 'You' : data.username}</strong> 
+                        <small class="ms-1">${data.timestamp || ''}</small>
+                    </div>
+                    <div>${content}</div>
+                `;
+                messageContainer.appendChild(msgDiv);
+                scrollToBottom();
+            }
+
+            // JOIN ROOM (Quan trọng: Không có dòng này chat sẽ không chạy trong Room)
+            socket.on('connect', () => {
+                console.log("Connected to server, joining room:", roomName);
+                socket.emit('join', { 'room': roomName });
+            });
+
+            socket.on('load_history', msgs => { messageContainer.innerHTML=''; msgs.forEach(addMessage); });
+            socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
+            socket.on('status', data => { 
+                const div = document.createElement('div'); 
+                div.className = 'text-center small text-muted my-1'; 
+                div.innerHTML = `<em>${data.msg}</em>`; 
+                messageContainer.appendChild(div); 
+            });
+
+            // Handle Send
+            document.getElementById('chat-form').addEventListener('submit', e => {
+                e.preventDefault(); 
+                let msg = messageInput.value.trim();
+                if (msg) { 
+                    // Gửi tin kèm roomName
+                    socket.emit('send_message', { 'msg': msg, 'room': roomName }); 
+                    socket.emit('stopped_typing', { room: roomName }); 
+                    messageInput.value = ''; 
+                    document.getElementById('emoji-picker').style.display = 'none';
+                }
+            });
+
+            // Handle Typing & Emoji
+            document.getElementById('emoji-btn').addEventListener('click', () => { 
+                const picker = document.getElementById('emoji-picker');
+                picker.style.display = (picker.style.display === 'none') ? 'block' : 'none'; 
+            });
+            emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; });
+            
+            messageInput.addEventListener('input', () => {
+                clearTimeout(typingTimer); socket.emit('typing', { room: roomName });
+                typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: roomName }); }, 2000);
+            });
+            socket.on('typing_status', (data) => { typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : ''; });
+
+            // User List Update
+            socket.on('user_list', data => {
+                const container = document.getElementById('user-list-container');
+                document.getElementById('user-count').textContent = data.total_count || (data.online.length + data.offline.length);
+                container.innerHTML = '';
+                
+                const createList = (title, users, isOnline) => {
+                    if (!users || users.length === 0) return;
+                    const label = document.createElement('small');
+                    label.className = 'text-muted fw-bold text-uppercase mt-2 d-block';
+                    label.style.fontSize = '0.7rem'; label.innerText = title;
+                    container.appendChild(label);
+                    const ul = document.createElement('ul'); ul.className = 'list-group list-group-flush small mb-2';
+                    users.forEach(u => {
+                        const li = document.createElement('li'); li.className = 'list-group-item px-0 py-1 bg-transparent border-0';
+                        li.innerHTML = `<span style="height:8px;width:8px;background:${isOnline?'#28a745':'#6c757d'};border-radius:50%;display:inline-block;margin-right:6px;"></span>${u}`;
+                        ul.appendChild(li);
+                    });
+                    container.appendChild(ul);
+                };
+                createList('Online', data.online, true);
+                createList('Offline', data.offline, false);
+            });
+        });
+
+        // --- 3. FINANCE GRAPH ---
+        let networkInstance = null;
+        function loadGraph() {
+            fetch("{{ url_for('finance.api_finance_graph') }}?room_id={{ room.id }}").then(r=>r.json()).then(data => {
+                var nodes = new vis.DataSet(data.nodes);
+                var edges = new vis.DataSet(data.edges.map(e => ({from: e.from, to: e.to, label: e.label, arrows: 'to', color: {color: '#dc3545'}, width: 2})));
+                var container = document.getElementById('finance-network');
+                if(networkInstance) networkInstance.setData({nodes, edges});
+                else networkInstance = new vis.Network(container, {nodes, edges}, {nodes: {font:{size:16}, borderWidth:2, color:{background:'#fff', border:'#dc3545'}}, physics:{stabilization:false}});
+            });
+        }
+        document.getElementById('finance-tab').addEventListener('shown.bs.tab', loadGraph);
+        document.getElementById('switchOutside').addEventListener('change', function() {
+            document.getElementById('memberInput').style.display = this.checked ? 'none' : 'block';
+            document.getElementById('outsiderInput').style.display = this.checked ? 'block' : 'none';
+        });
+
+        // --- 4. WEATHER LOGIC ---
+        function handleSearch() {
+            const q = document.getElementById('weather-search-input').value.trim();
+            if(!q) return;
+            fetch("{{ url_for('weather.search_city') }}?q="+encodeURIComponent(q)).then(r=>r.json()).then(data=>{
+                const list = document.getElementById('search-results-list'); list.innerHTML=''; list.style.display='block';
+                if(data.length){ data.forEach(i=>{ const a=document.createElement('a'); a.className='list-group-item list-group-item-action'; a.innerHTML=`<strong>${i.name}</strong>`; a.onclick=()=>{ selectLoc(i.lat,i.lon,i.name); }; list.appendChild(a); }); }
+                else { list.innerHTML='<div class="list-group-item text-muted">Not found</div>'; }
+            });
+        }
+        function selectLoc(lat,lon,name) {
+            document.getElementById('weather-search-input').value=name; document.getElementById('search-results-list').style.display='none';
+            document.getElementById('weather-content').style.display='none'; document.getElementById('weather-loading').style.display='block';
+            fetch(`{{ url_for('weather.get_forecast') }}?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`).then(r=>r.json()).then(d=>{
+                if(d.error) throw new Error(d.error);
+                document.getElementById('w-location').innerText=d.location_name; 
+                document.getElementById('w-temp').innerText=d.current_weather.temperature;
+                document.getElementById('w-desc').innerText=d.current_weather.weather_desc; 
+                document.getElementById('w-precip').innerText=d.current_weather.precipitation_sum;
+                document.getElementById('w-wind').innerText=d.current_weather.wind_max_kmh;
+
+                // --- LOGIC AQI MỚI ---
+                const aqiEl = document.getElementById('w-aqi');
+                if (d.current_weather.aqi_val !== undefined) {
+                    aqiEl.style.display = 'inline-block';
+                    aqiEl.style.backgroundColor = d.current_weather.aqi_bg;
+                    aqiEl.style.color = d.current_weather.aqi_text;
+                    // UPDATED: Dùng innerHTML để chèn icon đẹp hơn
+                    aqiEl.innerHTML = `<span class="me-2 fs-5">🍃</span> AQI ${d.current_weather.aqi_val}`;
+                } else {
+                    aqiEl.style.display = 'none';
+                }
+                // ---------------------
+
+                // UPDATED: Render thẻ dự báo to đẹp hơn
+                const fc = document.getElementById('forecast-container'); fc.innerHTML='';
+                if(d.hourly_forecast) d.hourly_forecast.forEach(h=>{ 
+                    // Logic chọn icon đơn giản dựa trên mô tả
+                    let icon = '⛅';
+                    let desc = h.weather_desc || '';
+                    if(desc.includes('Mưa')) icon = '🌧️';
+                    else if(desc.includes('Nắng') || desc.includes('Quang')) icon = '☀️';
+                    else if(desc.includes('Mây')) icon = '☁️';
+
+                    fc.innerHTML += `
+                    <div class="col-3 col-md-2 px-2 mb-2" style="min-width: 130px;">
+                        <div class="card h-100 border-0 shadow text-center py-4" style="background-color: #ffffff; border-radius: 16px;">
+                            <div class="text-secondary fw-bold mb-1">${h.hour}</div>
+                            <div class="my-2" style="font-size: 3rem;">${icon}</div>
+                            <div class="fw-bolder text-dark" style="font-size: 1.5rem;">${h.temp}°C</div>
+                            <div class="text-muted text-truncate px-2 mt-1" style="font-size: 0.85rem; font-weight: 500;">
+                                ${h.weather_desc}
+                            </div>
+                        </div>
+                    </div>`; 
+                });
+                document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-content').style.display='block';
+            }).catch(e=>{ document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-error').innerText=e.message; document.getElementById('weather-error').style.display='block'; });
+        }
+        document.getElementById('weather-tab').addEventListener('shown.bs.tab', ()=>{ loadWeatherData(); }); // Load default
+        function loadWeatherData() { selectLoc(10.762, 106.660, "Hồ Chí Minh, VN"); } // Default func
+    </script>
+{% endblock %}
