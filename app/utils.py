@@ -7,7 +7,10 @@ import google.generativeai as genai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from config import Config
-from app.models import UserTagScore, db
+from app.extensions import db  # Lấy db từ nguồn gốc
+from app.models import UserTagScore # Lấy Model từ package models
+# -------------------------
+
 from sqlalchemy.sql import func
 
 # --- CẤU HÌNH AI & THUẬT TOÁN ---
