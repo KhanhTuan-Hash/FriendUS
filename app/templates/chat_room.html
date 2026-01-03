@@ -46,9 +46,63 @@
     .message-bubble { max-width: 65%; padding: 10px 16px; font-size: 0.95rem; line-height: 1.5; position: relative; }
     .message-self { align-self: flex-end; background: #0084ff; color: white; border-radius: 18px 18px 4px 18px; }
     .message-other { align-self: flex-start; background: #f0f2f5; color: #050505; border-radius: 18px 18px 18px 4px; }
-    .chat-input-container { padding: 20px; background: #fff; }
+    .chat-input-container { padding: 20px; background: #fff; position: relative; }
     .chat-input-wrapper { background: #f0f2f5; border-radius: 30px; padding: 6px 15px; display: flex; align-items: center; gap: 8px; border: 1px solid transparent; transition: border 0.2s; }
     .chat-input-wrapper:focus-within { border-color: #0084ff; background: #fff; box-shadow: 0 0 0 2px rgba(0,132,255,0.1); }
+    
+    /* --- AI SUGGESTION POPUP STYLE --- */
+    #suggestion-popup {
+        position: absolute;
+        bottom: 80px; /* Nằm phía trên input */
+        left: 20px;
+        background: white;
+        padding: 10px 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        border: 1px solid #e4e6eb;
+        display: none; /* Mặc định ẩn */
+        z-index: 1000;
+        animation: fadeIn 0.2s ease-out;
+        max-width: 80%;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .suggestion-label { font-size: 11px; text-transform: uppercase; color: #65676b; font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 5px; }
+    .suggestion-content { color: #0084ff; font-weight: 600; font-size: 14px; cursor: pointer; }
+    
+    .kbd-hint {
+        background: #f0f2f5;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 10px;
+        color: #65676b;
+        font-family: monospace;
+        margin-left: 8px;
+        vertical-align: middle;
+    }
+
+    /* Nút Magic Wand */
+    .btn-ai-toggle {
+        border: none;
+        background: transparent;
+        color: #65676b; /* Màu xám khi tắt */
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-right: 4px;
+        font-size: 1.1rem;
+    }
+    .btn-ai-toggle:hover { background-color: #f2f2f2; }
+    .btn-ai-toggle.active {
+        color: #0084ff; /* Màu xanh khi bật */
+        background-color: #e7f3ff;
+    }
     #message-input { background: transparent; border: none; box-shadow: none; padding: 8px 0; font-size: 0.95rem; }
 
     /* --- RIGHT SIDEBAR --- */
@@ -181,8 +235,19 @@
                             <div id="messages"></div>
                             <div id="typing-status" class="px-4 pb-1 text-muted small fst-italic" style="min-height: 20px;"></div>
                             <div class="chat-input-container">
+                                <div id="suggestion-popup">
+                                    <div class="suggestion-label">
+                                        <i class="bi bi-stars text-warning"></i> GỢI Ý <span class="kbd-hint">TAB</span>
+                                    </div>
+                                    <div class="suggestion-content" id="suggestion-text"></div>
+                                </div>
                                 <form id="chat-form" class="chat-input-wrapper">
                                     <input type="text" class="form-control" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off">
+                                    
+                                    <button type="button" id="btn-ai-toggle" class="btn-ai-toggle" title="Bật/Tắt Gợi ý AI">
+                                        <i class="bi bi-magic"></i>
+                                    </button>
+
                                     <button class="btn btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center border-0" type="submit" style="width: 32px; height: 32px;">
                                         <i class="bi bi-send-fill" style="font-size: 0.8rem;"></i>
                                     </button>
@@ -476,10 +541,105 @@
             if (msg) { socket.emit('send_message', { 'msg': msg, 'room': roomName }); messageInput.value = ''; }
         });
         
+        // --- LOGIC GỢI Ý TIN NHẮN (AI SUGGESTION) ---
+        let suggestionDebounceTimer;
+        const suggestionPopup = document.getElementById('suggestion-popup');
+        const suggestionText = document.getElementById('suggestion-text');
+        const btnAiToggle = document.getElementById('btn-ai-toggle');
+        
+        // Trạng thái AI (Mặc định là true nếu chưa lưu)
+        let isAiEnabled = localStorage.getItem('friendus_ai_enabled') !== 'false';
+
+        // Hàm cập nhật giao diện nút
+        function updateAiButtonUI() {
+            if (isAiEnabled) {
+                btnAiToggle.classList.add('active'); // Thêm màu xanh
+            } else {
+                btnAiToggle.classList.remove('active'); // Về màu xám
+                suggestionPopup.style.display = 'none';
+            }
+        }
+        
+        // Khởi chạy lần đầu
+        updateAiButtonUI();
+
+        // Xử lý khi bấm nút Magic Wand
+        btnAiToggle.addEventListener('click', () => {
+            isAiEnabled = !isAiEnabled; // Đảo ngược trạng thái
+            localStorage.setItem('friendus_ai_enabled', isAiEnabled);
+            updateAiButtonUI();
+            messageInput.focus();
+        });
+
+        messageInput.addEventListener('keydown', (e) => {
+            // Nếu bấm TAB và popup đang hiện -> Chọn gợi ý
+            if (e.key === 'Tab' && suggestionPopup.style.display === 'block') {
+                e.preventDefault(); // Chặn việc focus ra khỏi input
+                messageInput.value = suggestionText.innerText; // Điền text
+                suggestionPopup.style.display = 'none'; // Ẩn popup
+                messageInput.focus();
+            }
+        });
+
         messageInput.addEventListener('input', () => {
+            // 1. Logic Typing Socket cũ
             socket.emit('typing', { room: roomName });
             clearTimeout(typingTimer);
             typingTimer = setTimeout(() => socket.emit('stopped_typing', { room: roomName }), 1000);
+
+            // 2. Logic AI Suggestion mới
+            
+            // [NEW] Kiểm tra: Nếu tắt AI thì thoát luôn
+            if (!isAiEnabled) {
+                suggestionPopup.style.display = 'none';
+                return;
+            }
+
+            const query = messageInput.value;
+            
+            // Ẩn popup nếu đang xóa hoặc trống
+            if (!query || query.trim().length < 2) {
+                suggestionPopup.style.display = 'none';
+                return;
+            }
+
+            clearTimeout(suggestionDebounceTimer);
+            suggestionDebounceTimer = setTimeout(() => {
+                fetch('/api/suggest-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: query })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    // Chỉ hiện nếu có gợi ý và gợi ý KHÁC với cái đang gõ
+                    if (data.suggestion && data.suggestion.trim() !== query.trim()) {
+                        suggestionText.innerText = data.suggestion;
+                        suggestionPopup.style.display = 'block';
+                    } else {
+                        suggestionPopup.style.display = 'none';
+                    }
+                })
+                .catch(err => console.error("Suggestion Error:", err));
+            }, 500); // Delay 0.5s để tránh spam API
+        });
+        
+        // Ẩn popup khi click ra ngoài hoặc gửi tin nhắn
+        document.addEventListener('click', (e) => {
+            if (!suggestionPopup.contains(e.target) && e.target !== messageInput) {
+                suggestionPopup.style.display = 'none';
+            }
+        });
+        
+        // Sửa logic submit form cũ để ẩn popup khi gửi
+        document.getElementById('chat-form').addEventListener('submit', e => {
+            e.preventDefault(); 
+            let msg = messageInput.value.trim();
+            if (msg) { 
+                socket.emit('send_message', { 'msg': msg, 'room': roomName }); 
+                messageInput.value = ''; 
+                suggestionPopup.style.display = 'none'; // Thêm dòng này
+            }
         });
         socket.on('typing_status', d => typingStatus.textContent = d.isTyping ? `${d.username} is typing...` : '');
     });
