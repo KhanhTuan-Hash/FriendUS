@@ -426,17 +426,42 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-magic"></i> AI Chat Summary</h5>
+                <h5 class="modal-title"><i class="bi bi-magic"></i> AI Assistant</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div id="summary-loading" class="text-center py-3"><div class="spinner-border text-primary"></div><p>AI is thinking...</p></div>
-                <div id="summary-content" style="display: none;">
-                    <h6 class="fw-bold">Tóm tắt ngắn</h6><p id="summary-short-text" class="lead fst-italic p-3 bg-light border rounded"></p>
-                    <hr>
-<h6 class="fw-bold">Chi tiết</h6>
-<div id="summary-full-text" class="p-3 bg-light border rounded" style="overflow-y: auto; max-height: 400px;"></div>
+                <div class="d-flex justify-content-center mb-4">
+                    <div class="btn-group w-50" role="group" aria-label="AI Mode">
+                        <input type="radio" class="btn-check" name="ai_mode" id="mode_normal" value="normal" checked>
+                        <label class="btn btn-outline-primary" for="mode_normal">
+                            <i class="bi bi-lightning-fill"></i> Fast Recap
+                        </label>
+                      
+                        <input type="radio" class="btn-check" name="ai_mode" id="mode_paper" value="paper">
+                        <label class="btn btn-outline-primary" for="mode_paper">
+                            <i class="bi bi-journal-text"></i> Deep Analysis
+                        </label>
+                    </div>
                 </div>
+
+                <div id="summary-loading" class="text-center py-3" style="display: none;">
+                    <div class="spinner-border text-primary"></div>
+                    <p class="mt-2 text-muted animate-pulse">Đang xử lý dữ liệu...</p>
+                </div>
+                
+                <div id="summary-content" style="display: none;">
+                    <h6 class="fw-bold text-primary"><i class="bi bi-chat-quote-fill"></i> Kết quả:</h6>
+                    <div id="summary-full-text" class="p-3 bg-light border rounded shadow-sm" style="overflow-y: auto; max-height: 400px; font-size: 0.95rem; line-height: 1.6;"></div>
+                    <div class="mt-2 text-end">
+                        <small class="text-muted" id="summary-short-text"></small>
+                    </div>
+                </div>
+
+                <div class="text-center mt-3" id="start-btn-container">
+                    <button class="btn btn-primary px-4 rounded-pill shadow" id="btn-run-ai">
+                        <i class="bi bi-play-fill"></i> Bắt đầu phân tích
+                    </button>
+                 </div>
             </div>
         </div>
     </div>
@@ -466,29 +491,49 @@
         // --- 2. CHAT LOGIC (IMPORTANT: CONNECTS TO ROOM) ---
         document.addEventListener('DOMContentLoaded', (event) => {
             
-            // AI Summary Handler
-            // [UPDATED] Lấy ID mới từ Header Button
+            // AI Summary Handler (Redesigned Workflow)
             const summarizeBtn = document.getElementById('btn-header-summarize'); 
             const summaryModalEl = document.getElementById('summaryModal');
+            const runAiBtn = document.getElementById('btn-run-ai');
+
             if (summarizeBtn && summaryModalEl) {
                 const summaryModal = new bootstrap.Modal(summaryModalEl);
+                
+                // 1. Mở modal nhưng chưa chạy ngay
                 summarizeBtn.addEventListener('click', function() {
-                    document.getElementById('summary-loading').style.display = 'block';
                     document.getElementById('summary-content').style.display = 'none';
+                    document.getElementById('summary-loading').style.display = 'none';
+                    document.getElementById('start-btn-container').style.display = 'block'; // Hiện nút chạy
                     summaryModal.show();
-                    fetch(`/chat/summary/{{ room.id }}`).then(r => r.json()).then(data => {
+                });
+
+                // 2. Xử lý khi bấm nút "Bắt đầu phân tích" trong Modal
+                runAiBtn.addEventListener('click', function() {
+                    // Lấy mode đang chọn
+                    const mode = document.querySelector('input[name="ai_mode"]:checked').value;
+                    
+                    document.getElementById('start-btn-container').style.display = 'none'; // Ẩn nút chạy
+                    document.getElementById('summary-loading').style.display = 'block'; // Hiện loading
+                    document.getElementById('summary-content').style.display = 'none';
+
+                    // Fetch với tham số mode
+                    fetch(`/chat/summary/{{ room.id }}?mode=${mode}`).then(r => r.json()).then(data => {
                         document.getElementById('summary-loading').style.display = 'none';
                         document.getElementById('summary-content').style.display = 'block';
+                        document.getElementById('start-btn-container').style.display = 'block'; // Hiện lại để chạy lại nếu muốn
                                 
-                        document.getElementById('summary-short-text').innerText = data.short || "Error";
+                        document.getElementById('summary-short-text').innerText = data.short || "";
                                 
                         if (typeof marked !== 'undefined' && data.full) {
                             document.getElementById('summary-full-text').innerHTML = marked.parse(data.full);
                         } else {
                             document.getElementById('summary-full-text').innerText = data.full || "Error";
                         }
-                        
-                    }).catch(e => { console.error(e); });
+                    }).catch(e => { 
+                        console.error(e);
+                        document.getElementById('summary-loading').style.display = 'none';
+                        document.getElementById('start-btn-container').style.display = 'block';
+                    });
                 });
             }
 

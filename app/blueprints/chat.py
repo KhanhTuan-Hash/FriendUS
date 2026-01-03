@@ -113,6 +113,7 @@ def suggest_text():
 @chat_bp.route('/chat/summary/<int:room_id>', methods=['GET'])
 @login_required
 def get_chat_summary(room_id):
+    mode = request.args.get('mode', 'normal') # Mặc định là normal
     room = Room.query.get_or_404(room_id)
     
     # Check quyền truy cập (nếu private)
@@ -124,29 +125,31 @@ def get_chat_summary(room_id):
                             .order_by(Message.timestamp.desc())\
                             .limit(40).all()
     
-    # Đảo ngược lại để đúng thứ tự thời gian (Cũ -> Mới) cho AI đọc
     messages.reverse()
     
     if not messages:
         return {"short": "Chưa có tin nhắn", "full": "Chưa có nội dung để tóm tắt"}
 
-    # [CẬP NHẬT CHO SEALION] Chuyển đổi format sang List[Dict]
-    # SeaLion cần định dạng: [{"speaker": "Ten", "text": "Noi dung"}]
     chat_history = [{"speaker": msg.author.username, "text": msg.body} for msg in messages]
 
-    # Gọi SeaLion System
     try:
         sealion = SeaLionDialogueSystem()
-        final_report = sealion.process(chat_history)
         
-        # Vì SeaLion trả về một báo cáo dài (Report), ta dùng nó cho phần full.
-        # Phần short ta có thể để một câu dẫn nhập thân thiện.
+        if mode == 'paper':
+            # Paper Version: Deep Processing (Normalize -> Coref -> Topic)
+            final_report = sealion.process(chat_history)
+            short_msg = "🦁 SeaLion (Paper Mode) đã phân tích sâu hội thoại!"
+        else:
+            # Normal Version: Fast Summarization
+            final_report = sealion.simple_process(chat_history)
+            short_msg = "⚡ AI Recap (Fast Mode) đã tóm tắt nhanh!"
+
         return {
-            "short": "🦁 SeaLion đã tổng hợp xong tin nhắn của nhóm!",
+            "short": short_msg,
             "full": final_report
         }
     except Exception as e:
-        print(f"SeaLion Error: {e}")
+        print(f"AI Error: {e}")
         return {"short": "Lỗi AI", "full": "Hệ thống đang bận, vui lòng thử lại sau."}
 
 @chat_bp.route('/chat', methods=['GET', 'POST'])
