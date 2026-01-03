@@ -8,415 +8,554 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
 <style>
-    /* --- CHAT STYLING (REDESIGNED) --- */
-    #chat-container { 
-        display: flex; flex-direction: row; height: 75vh; 
-        border: none; border-radius: 1rem; overflow: hidden; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+    /* =========================================
+       1. FIXED LAYOUT (APP STYLE)
+       ========================================= */
+    :root {
+        --sidebar-left-width: 260px;
+        --sidebar-right-width: 260px;
+        --navbar-height: 76px; /* Tăng lên để tránh bị Navbar che mất */
+        --bg-chat: #ffffff;
+        --bg-sidebar: #f7f7f7;
+    }
+
+    /* Ghim toàn bộ giao diện Chat vào khung màn hình, đè lên padding của body cũ */
+    .app-fixed-wrapper {
+        position: fixed;
+        top: var(--navbar-height);
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #fff;
+        z-index: 100;
+        display: flex;
+        overflow: hidden; /* Ngăn cuộn trang web chính */
+    }
+
+    /* =========================================
+       2. LEFT SIDEBAR (NAV)
+       ========================================= */
+    .app-sidebar {
+        width: var(--sidebar-left-width);
+        background: var(--bg-sidebar);
+        border-right: 1px solid #e5e5e5;
+        display: flex;
+        flex-direction: column;
+        padding: 20px 12px;
+        flex-shrink: 0;
+    }
+
+    .nav-pills .nav-link {
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 6px;
+        color: #5e6065;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: all 0.2s;
+    }
+
+    .nav-pills .nav-link:hover { background-color: #e4e6ea; color: #000; }
+    .nav-pills .nav-link.active { background: #e7f3ff; color: #0084ff; }
+    .nav-pills .nav-link i { font-size: 1.2rem; }
+
+    /* =========================================
+       3. MAIN CENTER (CHAT)
+       ========================================= */
+    .app-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background-color: var(--bg-chat);
+        position: relative;
+        min-width: 0;
+    }
+
+    /* Header của Room */
+    .app-header {
+        height: 60px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        flex-shrink: 0;
+        background: #fff;
+    }
+
+    /* Khu vực nội dung chính (Chat window) */
+    .app-content-body {
+        flex: 1;
+        display: flex;
+        overflow: hidden; /* Scroll xử lý bên trong */
+    }
+
+    .chat-area-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    #messages {
+        flex: 1;
+        padding: 20px 40px; /* Padding rộng hơn cho thoáng */
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    /* Bong bóng Chat */
+    .message-bubble {
+        max-width: 65%;
+        padding: 10px 16px;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        position: relative;
+    }
+
+    .message-self {
+        align-self: flex-end;
+        background: #0084ff;
+        color: white;
+        border-radius: 18px 18px 4px 18px;
+    }
+
+    .message-other {
+        align-self: flex-start;
+        background: #f0f2f5;
+        color: #050505;
+        border-radius: 18px 18px 18px 4px;
+    }
+
+    /* Input Area */
+    .chat-input-container {
+        padding: 20px;
         background: #fff;
     }
     
-    /* Sidebar */
-    #user-sidebar { 
-        flex: 0 0 240px; background-color: #ffffff; 
-        border-right: 1px solid #f0f0f0; padding: 1.5rem; 
-        overflow-y: auto; 
-    }
-    #user-sidebar h6 { letter-spacing: 0.5px; text-transform: uppercase; font-size: 0.75rem; color: #adb5bd; font-weight: 700; }
-
-    /* Main Chat Area */
-    #chat-main { 
-        flex-grow: 1; display: flex; flex-direction: column; height: 100%; position: relative; 
-        background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); 
-    }
-
-    /* Messages Area */
-    #messages { 
-        flex-grow: 1; overflow-y: scroll; padding: 1.5rem; 
-        display: flex; flex-direction: column; gap: 0.5rem; 
-        scroll-behavior: smooth;
-    }
-    
-    /* Bubbles */
-    .message-bubble { 
-        max-width: 70%; padding: 0.75rem 1.25rem; margin-bottom: 0.25rem; 
-        position: relative; word-wrap: break-word; font-size: 0.95rem;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.03);
-    }
-    
-    .message-self { 
-        align-self: flex-end; 
-        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); 
-        color: white; 
-        border-radius: 18px 18px 4px 18px; 
-    }
-    
-    .message-other { 
-        align-self: flex-start; 
-        background-color: #ffffff; 
-        color: #333;
-        border: 1px solid #f1f1f1;
-        border-radius: 18px 18px 18px 4px; 
-    }
-    
-    .message-info { font-size: 0.7rem; margin-bottom: 4px; opacity: 0.8; }
-    .message-self .message-info { color: rgba(255,255,255,0.9); text-align: right; }
-    .message-other .message-info { color: #6c757d; text-align: left; }
-
-    /* Scrollbar */
-    #messages::-webkit-scrollbar { width: 6px; }
-    #messages::-webkit-scrollbar-track { background: transparent; }
-    #messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
-    #messages::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-
-    /* Typing & Emoji */
-    #typing-status { font-size: 0.75rem; color: #6c757d; padding: 0 1.5rem 0.5rem; font-style: italic; min-height: 20px;}
-
-    /* --- AI SUGGESTION BUBBLE STYLING --- */
-    .suggestion-bubble {
-        position: absolute;
-        bottom: 110%; /* Nằm ngay trên input */
-        left: 20px;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(13, 110, 253, 0.2);
-        border-left: 4px solid #0d6efd;
-        padding: 10px 15px;
-        border-radius: 8px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-        font-size: 0.9rem;
-        color: #333;
-        z-index: 50;
-        opacity: 0;
-        transform: translateY(10px);
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        pointer-events: none; 
+    .chat-input-wrapper {
+        background: #f0f2f5;
+        border-radius: 30px;
+        padding: 6px 15px;
         display: flex;
         align-items: center;
-        gap: 10px;
-        max-width: 80%;
+        gap: 8px;
+        border: 1px solid transparent;
+        transition: border 0.2s;
+    }
+    .chat-input-wrapper:focus-within {
+        border-color: #0084ff;
+        background: #fff;
+        box-shadow: 0 0 0 2px rgba(0,132,255,0.1);
     }
 
-    .suggestion-bubble.active {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
+    #message-input {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 8px 0;
+        font-size: 0.95rem;
     }
 
-    .suggestion-text { font-weight: 500; color: #0d6efd; }
-    .suggestion-key {
-        font-size: 0.7rem; background: #f1f3f5; color: #6c757d;
-        padding: 2px 6px; border-radius: 4px; border: 1px solid #dee2e6;
-        font-weight: bold; text-transform: uppercase;
+    /* =========================================
+       4. RIGHT SIDEBAR (MEMBERS)
+       ========================================= */
+    .right-sidebar {
+        width: var(--sidebar-right-width);
+        background: #fff;
+        border-left: 1px solid #f0f0f0;
+        display: flex;
+        flex-direction: column;
+        padding-top: 20px;
+        flex-shrink: 0;
     }
 
-    /* Animation cho nút AI Toggle */
-    #ai-toggle-btn { transition: all 0.3s ease; }
+    .member-header {
+        padding: 0 20px 15px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #65676b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Scroll area cho list member */
+    #user-list-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 10px;
+    }
+
+    .member-item {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        margin-bottom: 2px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .member-item:hover { background-color: #f5f5f5; }
+
+    .member-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #e4e6eb;
+        color: #050505;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 12px;
+        position: relative;
+        font-size: 0.9rem;
+    }
+
+    .status-dot {
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        position: absolute;
+        bottom: -2px; right: -2px;
+    }
+    .status-online { background-color: #31a24c; }
+    .status-offline { background-color: #adb5bd; }
+
+    /* =========================================
+       5. AI POPUP & UTILS
+       ========================================= */
+    .suggestion-bubble {
+        position: absolute;
+        bottom: 80px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid #e5e5e5;
+        border-left: 4px solid #0084ff;
+        padding: 12px 16px;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.12);
+        z-index: 50;
+        display: none; /* Mặc định ẩn */
+        align-items: center;
+        gap: 12px;
+        animation: fadeInUp 0.2s ease;
+    }
     
-    /* --- TAB STYLING --- */
-    .nav-tabs .nav-link.active { background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold; }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
 
-    /* --- TIMELINE & MAP STYLES --- */
-    #visual-timeline { height: 400px; border: 1px solid #dee2e6; background-color: #f8f9fa; }
-    .vis-item { border-color: #17a2b8; background-color: #17a2b8; color: white; font-size: 14px; border-radius: 4px; }
-    .vis-item.vis-selected { border-color: #117a8b; background-color: #138496; color: white; }
-    .vis-current-time { background-color: #dc3545; width: 2px; }
-    #picker-map { width: 100%; height: 400px; border-radius: 0.25rem; }
+    .suggestion-bubble.active { display: flex !important; }
 
-    /* --- WEATHER SCROLL STYLING --- */
-    .hourly-scroll::-webkit-scrollbar { height: 6px; }
-    .hourly-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-    .hourly-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-    .hourly-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #bcc0c4; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
+
 </style>
 
-<div class="container-fluid mt-2">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h3>
-            <i class="bi bi-geo-alt-fill text-primary"></i> {{ room.name }} 
-            <small class="text-muted fs-6">{{ room.description }}</small>
-        </h3>
-        
-        <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-warning fw-bold shadow-sm d-flex align-items-center gap-1" 
-                    id="btn-header-summarize"
-                    style="background: linear-gradient(135deg, #fff 0%, #fffbf0 100%); border-color: #ffc107; color: #d69e00;">
-                <i class="bi bi-stars"></i> 
-                <span class="d-none d-md-inline">AI Recap</span>
-            </button>
+<div class="app-fixed-wrapper">
+    
+    <nav class="app-sidebar">
+        <div class="mb-4 px-3">
+            <h5 class="fw-bold text-primary m-0" style="font-family: sans-serif; letter-spacing: -0.5px;">
+                <i class="bi bi-exclude me-2"></i>FriendUS
+            </h5>
+            <small class="text-muted opacity-75">Workspace</small>
+        </div>
 
-            <button class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#inviteModal">
-                <i class="bi bi-person-plus-fill"></i> Invite
+        <div class="nav flex-column nav-pills" id="roomTabs" role="tablist">
+            <button class="nav-link active" id="chat-tab" data-bs-toggle="pill" data-bs-target="#chat-panel" type="button" role="tab">
+                <i class="bi bi-chat-text-fill"></i> 
+                <span>Thảo luận</span>
             </button>
-        
+            <a class="nav-link" href="{{ url_for('planner.view_planner', room_id=room.id) }}">
+                <i class="bi bi-calendar-range-fill"></i>
+                <span>Lịch trình</span>
+            </a>
+            <button class="nav-link" id="finance-tab" data-bs-toggle="pill" data-bs-target="#finance-panel" type="button" role="tab">
+                <i class="bi bi-piggy-bank-fill"></i>
+                <span>Quỹ nhóm</span>
+            </button>
+            <button class="nav-link" id="weather-tab" data-bs-toggle="pill" data-bs-target="#weather-panel" type="button" role="tab">
+                <i class="bi bi-cloud-sun-fill"></i>
+                <span>Thời tiết</span>
+            </button>
+        </div>
+
+        <div class="mt-auto pt-3 border-top">
             <div class="dropdown">
-                <button class="btn btn-sm btn-outline-secondary rounded-pill dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    <i class="bi bi-gear-fill"></i> Settings
+                <button class="btn btn-light w-100 d-flex justify-content-between align-items-center bg-white border shadow-sm rounded-3 py-2" data-bs-toggle="dropdown">
+                    <span class="small fw-bold"><i class="bi bi-gear-fill me-2 text-secondary"></i>Cài đặt</span>
+                    <i class="bi bi-chevron-up small text-muted"></i>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end">
+                <ul class="dropdown-menu w-100 shadow border-0 mb-2">
                     {% if current_user.id == room.creator_id %}
-                        <li>
-                            <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to PERMANENTLY delete this room?');">
-                                <button class="dropdown-item text-danger"><i class="bi bi-trash"></i> Delete Room</button>
-                            </form>
-                        </li>
+                    <li>
+                        <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Xóa vĩnh viễn nhóm này?');">
+                            <button class="dropdown-item text-danger small"><i class="bi bi-trash me-2"></i>Xóa nhóm</button>
+                        </form>
+                    </li>
                     {% else %}
-                        <li>
-                            <form action="{{ url_for('chat.leave_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to leave this group?');">
-                                <button class="dropdown-item text-warning"><i class="bi bi-box-arrow-right"></i> Leave Group</button>
-                            </form>
-                        </li>
+                    <li>
+                        <form action="{{ url_for('chat.leave_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Bạn chắc chắn muốn rời nhóm?');">
+                            <button class="dropdown-item text-warning small"><i class="bi bi-box-arrow-right me-2"></i>Rời nhóm</button>
+                        </form>
+                    </li>
                     {% endif %}
                 </ul>
             </div>
         </div>
-    </div>
-        
-    {% if room.creator == current_user and pending_requests %}
-    <div class="alert alert-warning shadow-sm">
-        <h5 class="alert-heading"><i class="bi bi-exclamation-circle-fill"></i> Pending Requests</h5>
-        <div class="list-group">
-            {% for req in pending_requests %}
-            <div class="list-group-item d-flex justify-content-between align-items-center bg-white border-0 mb-1 rounded">
-                <div>
-                    <strong>{{ req.user.username }}</strong> wants to join.
+    </nav>
+
+    <main class="app-main">
+        <header class="app-header">
+            <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center justify-content-center bg-gradient bg-primary text-white rounded-circle shadow-sm" 
+                     style="width: 38px; height: 38px; font-weight: bold; font-size: 1.1rem;">
+                    {{ room.name[0]|upper }}
                 </div>
                 <div>
-                    <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='accept') }}" method="POST"><button class="btn btn-sm btn-success me-1">Approve</button></form>
-                    <form class="d-inline" action="{{ url_for('chat.manage_request', req_id=req.id, action='reject') }}" method="POST"><button class="btn btn-sm btn-danger">Reject</button></form>
+                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 1rem;">{{ room.name }}</h6>
+                    <div class="d-flex align-items-center small text-muted" style="font-size: 0.75rem;">
+                        {% if room.is_private %}<i class="bi bi-lock-fill me-1"></i>Riêng tư{% else %}<i class="bi bi-globe me-1"></i>Công khai{% endif %}
+                        <span class="mx-2">•</span>
+                        <span>{{ room.members.count() }} thành viên</span>
+                    </div>
                 </div>
             </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
 
-    <div>
-        {% if room.is_private %}
-            <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> Private</span>
-        {% else %}
-            <span class="badge bg-success"><i class="bi bi-globe"></i> Public</span>
-        {% endif %}
-    </div>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-primary btn-sm rounded-pill fw-semibold px-3" id="btn-header-summarize">
+                    <i class="bi bi-stars me-1"></i> AI Recap
+                </button>
+                <button class="btn btn-primary btn-sm rounded-pill fw-semibold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#inviteModal">
+                    <i class="bi bi-person-plus-fill me-1"></i> Thêm bạn
+                </button>
+            </div>
+        </header>
 
-    <ul class="nav nav-tabs mt-3" id="roomTabs" role="tablist">
-        <li class="nav-item">
-            <button class="nav-link active" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat-panel" type="button" role="tab">
-                <i class="bi bi-chat-dots"></i> Chat
-            </button>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('planner.view_planner', room_id=room.id) }}">
-                <i class="bi bi-calendar-check"></i> Planner
-            </a>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="finance-tab" data-bs-toggle="tab" data-bs-target="#finance-panel" type="button" role="tab">
-                <i class="bi bi-cash-coin"></i> Finance
-            </button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" id="weather-tab" data-bs-toggle="tab" data-bs-target="#weather-panel" type="button" role="tab">
-                <i class="bi bi-cloud-sun-fill"></i> Weather
-            </button>
-        </li>
-    </ul>
-
-    <div class="tab-content border border-top-0 p-3 bg-white shadow-sm" id="roomTabsContent" style="min-height: 75vh;">
-        
-        <div class="tab-pane fade show active" id="chat-panel" role="tabpanel">
-            <div id="chat-container">
-                <div id="user-sidebar">
-                    <div class="d-flex align-items-center mb-4 text-primary">
-                        <i class="bi bi-people-fill fs-5 me-2"></i>
-                        <h6 class="mb-0 text-dark fw-bold">Members (<span id="user-count">0</span>)</h6>
-                    </div>
-                    <div id="user-list-container"></div>
-                </div>
-
-                <div id="chat-main">
-                    <div id="messages"></div>
-                    
-                    <div id="typing-status"></div>
-                    
-                    <div id="emoji-picker" style="display:none; position: absolute; bottom: 80px; right: 20px; z-index: 100; box-shadow: 0 5px 20px rgba(0,0,0,0.15); border-radius: 8px;">
-                        <emoji-picker></emoji-picker>
-                    </div>
-
-                    <div class="p-3 bg-transparent"> 
-                        <div class="bg-white p-2 rounded-4 shadow-sm border border-light position-relative">
+        <div class="app-content-body">
+            <div class="tab-content w-100 h-100" id="roomTabsContent">
+                
+                <div class="tab-pane fade show active h-100" id="chat-panel" role="tabpanel">
+                    <div class="d-flex h-100 w-100">
+                        <div class="chat-area-wrapper">
+                            <div id="messages"></div>
                             
-                            <div id="ai-suggestion-bubble" class="suggestion-bubble">
-                                <i class="bi bi-stars text-warning fs-5"></i>
-                                <span>Gợi ý: <span id="suggestion-content" class="suggestion-text">...</span></span>
-                                <span class="suggestion-key">TAB</span>
-                            </div>
-
-                            <form id="chat-form" class="d-flex align-items-center gap-2 position-relative">
+                            <div id="typing-status" class="px-4 pb-1 text-muted small fst-italic" style="min-height: 20px;"></div>
+                            
+                            <div class="chat-input-container position-relative">
+                                <div id="ai-suggestion-bubble" class="suggestion-bubble">
+                                    <i class="bi bi-stars text-warning fs-5"></i>
+                                    <div class="d-flex flex-column" style="line-height: 1.2;">
+                                        <span class="fw-bold text-primary" style="font-size: 0.7rem;">GỢI Ý AI</span>
+                                        <span class="text-dark small fw-semibold" id="suggestion-content">...</span>
+                                    </div>
+                                    <kbd class="ms-2 bg-light text-secondary border shadow-sm">TAB</kbd>
+                                </div>
                                 
-                                <div style="flex-grow: 1; position: relative;">
-                                    <input type="text" class="form-control border-0 rounded-pill px-3 py-2 ps-4" 
-                                           id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off" 
-                                           style="box-shadow: none; background-color: #f8f9fa; padding-right: 90px;">
+                                <div id="emoji-picker" style="display:none; position: absolute; bottom: 85px; right: 20px; z-index: 100;">
+                                    <emoji-picker></emoji-picker>
+                                </div>
+
+                                <form id="chat-form" class="chat-input-wrapper">
+                                    <button class="btn btn-sm btn-link text-secondary p-0 border-0" type="button" id="ai-toggle-btn" 
+                                            title="Bật/Tắt AI" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-magic"></i>
+                                    </button>
                                     
-                                    <div class="position-absolute top-50 end-0 translate-middle-y d-flex align-items-center pe-2">
-                                        <button class="btn btn-sm text-muted rounded-circle border-0" type="button" id="ai-toggle-btn" 
-                                                title="Bật/Tắt gợi ý AI" style="width: 32px; height: 32px;">
-                                            <i class="bi bi-magic"></i>
-                                        </button>
-
-                                        <button class="btn btn-sm text-secondary rounded-circle border-0" type="button" id="emoji-btn" style="width: 32px; height: 32px;">
-                                            <i class="bi bi-emoji-smile-fill"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                
-                                <button class="btn btn-primary rounded-circle shadow" type="submit" style="width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;">
-                                    <i class="bi bi-send-fill ms-1 fs-5"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="finance-panel" role="tabpanel">
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="card mb-3">
-                        <div class="card-header bg-success text-white">New Transaction</div>
-                        <div class="card-body">
-                            <form action="{{ url_for('finance.add_room_transaction', room_id=room.id) }}" method="POST">
-                                {{ trans_form.hidden_tag() }}
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold">Type</label>
-                                    {% for subfield in trans_form.type %}
-                                        <div class="form-check">
-                                            {{ subfield(class="form-check-input") }} 
-                                            {{ subfield.label(class="form-check-label small") }}
-                                        </div>
-                                    {% endfor %}
-                                </div>
-                                <div class="mb-2">
-                                    <div class="input-group input-group-sm">
-                                        {{ trans_form.amount(class="form-control", placeholder="Amount") }}
-                                        <span class="input-group-text">VND</span>
-                                    </div>
-                                </div>
-                                <div class="mb-2">{{ trans_form.description(class="form-control form-control-sm", placeholder="Description") }}</div>
-                                <div class="form-check form-switch mb-2">
-                                    {{ trans_form.is_outside(class="form-check-input", id="switchOutside") }}
-                                    <label class="form-check-label small" for="switchOutside">Is Stranger?</label>
-                                </div>
-                                <div id="memberInput" class="mb-2">{{ trans_form.receiver(class="form-select form-select-sm") }}</div>
-                                <div id="outsiderInput" class="mb-2" style="display:none;">{{ trans_form.outsider_name(class="form-control form-control-sm", placeholder="Stranger Name") }}</div>
-                                {{ trans_form.submit(class="btn btn-success btn-sm w-100") }}
-                            </form>
-                        </div>
-                    </div>
-                    {% if pending_trans %}
-                    <div class="alert alert-warning p-2">
-                        <h6 class="alert-heading h6">Need Confirmation</h6>
-                        <ul class="list-unstyled mb-0 small">
-                        {% for p in pending_trans %}
-                            <li class="border-bottom py-1">
-                                <strong>{{ p.sender.username }}</strong>: {{ "{:,.0f}".format(p.amount) }} VND
-                                <form action="{{ url_for('finance.confirm_transaction', trans_id=p.id) }}" method="POST" class="d-inline float-end">
-                                    <button class="btn btn-xs btn-outline-dark py-0 px-1">Confirm</button>
+                                    <input type="text" class="form-control" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off">
+                                    
+                                    <button class="btn btn-sm btn-link text-secondary text-decoration-none p-0" type="button" id="emoji-btn">
+                                        <i class="bi bi-emoji-smile fs-5"></i>
+                                    </button>
+                                    <button class="btn btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center border-0" type="submit" style="width: 32px; height: 32px;">
+                                        <i class="bi bi-send-fill" style="font-size: 0.8rem;"></i>
+                                    </button>
                                 </form>
-                            </li>
-                        {% endfor %}
-                        </ul>
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="col-md-8">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-header d-flex justify-content-between">
-                            <span>Debt Network</span>
-                            <button onclick="loadGraph()" class="btn btn-sm btn-outline-primary">Refresh</button>
+                            </div>
                         </div>
-                        <div class="card-body p-0">
-                            <div id="finance-network" style="height: 500px; width: 100%;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <div class="tab-pane fade" id="weather-panel" role="tabpanel">
-            <div class="container-fluid p-3">
-                <div class="position-relative mb-3" style="max-width: 500px; margin: 0 auto;">
-                    <div class="input-group">
-                        <input type="text" id="weather-search-input" class="form-control" placeholder="Nhập tên thành phố..." autocomplete="off" onkeydown="if(event.key === 'Enter') handleSearch()">
-                        <button class="btn btn-primary" type="button" onclick="handleSearch()"><i class="bi bi-search"></i></button>
+                        <aside class="right-sidebar">
+                            <div class="member-header">Thành viên — <span id="user-count">0</span></div>
+                            
+                            <div id="user-list-container">
+                                </div>
+                        </aside>
                     </div>
-                    <div id="search-results-list" class="list-group position-absolute w-100 shadow mt-1" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
                 </div>
-                <div id="weather-loading" class="text-center py-5">
-                    <div class="spinner-border text-primary" role="status"></div>
-                    <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
-                </div>
-                <div id="weather-error" class="alert alert-danger" style="display: none;"></div>
-                <div id="weather-content" style="display: none;">
-                    <div class="card text-white mb-4 shadow" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 20px;">
-                        <div class="card-body p-4">
-                            <div class="row align-items-center">
-                                <div class="col-md-6">
-                                    <h4 class="fw-light opacity-75"><i class="bi bi-geo-alt-fill"></i> <span id="w-location">Hồ Chí Minh, VN</span></h4>
-                                    <h1 style="font-size: 4rem; font-weight: bold;"><span id="w-temp">--</span>°C</h1>
-                                    <p class="fs-5 mb-0" id="w-desc">--</p>
-                                    <div class="mt-4 d-flex flex-wrap gap-2">
-                                        <span class="badge bg-white text-dark shadow-sm d-flex align-items-center" style="font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
-                                            <span class="me-2 fs-5">💧</span> <span id="w-precip">0</span> mm
-                                        </span>
-                                        <span class="badge bg-white text-dark shadow-sm d-flex align-items-center" style="font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
-                                            <span class="me-2 fs-5">💨</span> <span id="w-wind">0</span> km/h
-                                        </span>
-                                        
-                                        <span id="w-aqi" class="badge shadow-sm d-flex align-items-center" 
-                                              style="display: none; font-size: 1rem; padding: 10px 15px; border-radius: 12px;">
-                                        </span>
+
+                <div class="tab-pane fade h-100" id="finance-panel" role="tabpanel">
+                    <div class="p-4 h-100 overflow-auto">
+                         <div class="row g-4 justify-content-center">
+                            <div class="col-md-5">
+                                <div class="card border-0 shadow-sm rounded-4 h-100">
+                                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
+                                        <h5 class="fw-bold text-success"><i class="bi bi-cash-stack me-2"></i>Thêm Giao Dịch</h5>
+                                    </div>
+                                    <div class="card-body px-4">
+                                        <form action="{{ url_for('finance.add_room_transaction', room_id=room.id) }}" method="POST">
+                                            {{ trans_form.hidden_tag() }}
+                                            <div class="mb-3">
+                                                <label class="small fw-bold text-muted mb-2">LOẠI GIAO DỊCH</label>
+                                                <div class="d-flex gap-3">
+                                                {% for subfield in trans_form.type %}
+                                                    <div class="form-check">
+                                                        {{ subfield(class="form-check-input") }} 
+                                                        <label class="form-check-label small" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
+                                                    </div>
+                                                {% endfor %}
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="small fw-bold text-muted mb-1">SỐ TIỀN</label>
+                                                <div class="input-group">
+                                                    {{ trans_form.amount(class="form-control", placeholder="0") }}
+                                                    <span class="input-group-text bg-light">VND</span>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="small fw-bold text-muted mb-1">NỘI DUNG</label>
+                                                {{ trans_form.description(class="form-control", placeholder="VD: Tiền ăn trưa...") }}
+                                            </div>
+                                            <div class="form-check form-switch mb-3 bg-light p-2 rounded ps-5">
+                                                {{ trans_form.is_outside(class="form-check-input", id="switchOutside") }}
+                                                <label class="form-check-label small fw-bold" for="switchOutside">Người ngoài nhóm?</label>
+                                            </div>
+                                            <div id="memberInput" class="mb-3">{{ trans_form.receiver(class="form-select") }}</div>
+                                            <div id="outsiderInput" class="mb-3" style="display:none;">{{ trans_form.outsider_name(class="form-control", placeholder="Tên người đó...") }}</div>
+                                            {{ trans_form.submit(class="btn btn-success w-100 fw-bold rounded-pill py-2") }}
+                                        </form>
                                     </div>
                                 </div>
-                                <div class="col-md-6 text-center text-md-end">
-                                    <div style="font-size: 6rem; line-height: 1;" id="w-icon">🌤️</div>
-                                    <div class="mt-3 text-end" id="w-risks"></div>
+                            </div>
+                            <div class="col-md-7">
+                                {% if pending_trans %}
+                                <div class="alert alert-warning border-warning border-opacity-25 shadow-sm rounded-3 mb-4 d-flex align-items-center">
+                                    <i class="bi bi-exclamation-circle-fill fs-4 me-3 text-warning"></i>
+                                    <div class="flex-grow-1">
+                                        <h6 class="fw-bold mb-1">Cần xác nhận</h6>
+                                        <ul class="list-unstyled mb-0 small">
+                                        {% for p in pending_trans %}
+                                            <li class="d-flex justify-content-between align-items-center py-1 border-bottom border-warning border-opacity-25">
+                                                <span><strong>{{ p.sender.username }}</strong> chuyển {{ "{:,.0f}".format(p.amount) }} đ</span>
+                                                <form action="{{ url_for('finance.confirm_transaction', trans_id=p.id) }}" method="POST">
+                                                    <button class="btn btn-sm btn-dark py-0 px-2 rounded-pill">Confirm</button>
+                                                </form>
+                                            </li>
+                                        {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                <div class="card border-0 shadow-sm rounded-4 h-100">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center pt-4 px-4 border-bottom-0">
+                                        <h5 class="fw-bold mb-0">Mạng lưới nợ</h5>
+                                        <button onclick="loadGraph()" class="btn btn-sm btn-outline-primary rounded-pill"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div id="finance-network" style="height: 500px; width: 100%;"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <h5 class="mb-3 text-muted">Dự báo 24 giờ tới</h5>
-                    <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll" id="forecast-container" style="scroll-behavior: smooth;"></div>
+                </div>
+
+                <div class="tab-pane fade h-100" id="weather-panel" role="tabpanel">
+                    <div class="p-4 h-100 overflow-auto">
+                        <div class="container-fluid p-3">
+                            <div class="position-relative mb-4 mx-auto" style="max-width: 600px;">
+                                <div class="input-group shadow-sm rounded-pill overflow-hidden">
+                                    <span class="input-group-text bg-white border-0 ps-4"><i class="bi bi-search text-muted"></i></span>
+                                    <input type="text" id="weather-search-input" class="form-control border-0 py-3" placeholder="Tìm thành phố (VD: Dalat)..." autocomplete="off" onkeydown="if(event.key === 'Enter') handleSearch()">
+                                    <button class="btn btn-primary px-4 fw-bold" type="button" onclick="handleSearch()">Tìm kiếm</button>
+                                </div>
+                                <div id="search-results-list" class="list-group position-absolute w-100 shadow mt-2 rounded-3 overflow-hidden" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
+                            </div>
+                            <div id="weather-loading" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
+                            </div>
+                            <div id="weather-error" class="alert alert-danger shadow-sm" style="display: none;"></div>
+                            <div id="weather-content" style="display: none;">
+                                <div class="card text-white mb-4 shadow border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 24px;">
+                                    <div class="card-body p-5">
+                                        <div class="row align-items-center">
+                                            <div class="col-md-6">
+                                                <h4 class="fw-light opacity-75 mb-3"><i class="bi bi-geo-alt-fill me-2"></i><span id="w-location">Hồ Chí Minh, VN</span></h4>
+                                                <h1 style="font-size: 5rem; font-weight: 700; letter-spacing: -2px;"><span id="w-temp">--</span>°C</h1>
+                                                <p class="fs-4 fw-light mb-0" id="w-desc">--</p>
+                                                <div class="mt-4 d-flex flex-wrap gap-2">
+                                                    <span class="badge bg-white bg-opacity-20 backdrop-blur shadow-sm py-2 px-3 rounded-pill fw-normal">
+                                                        💧 <span id="w-precip">0</span> mm
+                                                    </span>
+                                                    <span class="badge bg-white bg-opacity-20 backdrop-blur shadow-sm py-2 px-3 rounded-pill fw-normal">
+                                                        💨 <span id="w-wind">0</span> km/h
+                                                    </span>
+                                                    <span id="w-aqi" class="badge shadow-sm py-2 px-3 rounded-pill fw-normal" style="display: none;"></span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6 text-center text-md-end">
+                                                <div style="font-size: 8rem; line-height: 1; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2));" id="w-icon">🌤️</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <h5 class="fw-bold text-dark mb-3 ps-2">Dự báo 24 giờ tới</h5>
+                                <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll gap-3 pb-4" id="forecast-container" style="scroll-behavior: smooth;"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </main>
 </div>
 
 <div class="modal fade" id="mapModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Pick Location</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="picker-map"></div></div></div></div></div>
 
 <div class="modal fade" id="inviteModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">Invite Friends</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title fw-bold">Mời bạn bè</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
             <form action="{{ url_for('chat.invite_to_room', room_id=room.id) }}" method="POST">
-                <div class="modal-body">
-                    <div class="list-group" style="max-height: 300px; overflow-y: auto;">
+                <div class="modal-body pt-0">
+                    <p class="text-muted small mb-3">Chọn bạn bè để thêm vào nhóm chat này.</p>
+                    <div class="list-group rounded-3 border bg-light" style="max-height: 300px; overflow-y: auto;">
                         {% if invitable_friends %}
                             {% for friend in invitable_friends %}
-                                <label class="list-group-item d-flex gap-3">
-                                    <input class="form-check-input" type="checkbox" name="friend_ids" value="{{ friend.id }}">
-                                    <span><strong>{{ friend.username }}</strong><br><small class="text-muted">{{ friend.email }}</small></span>
+                                <label class="list-group-item d-flex gap-3 align-items-center py-3 border-0 bg-transparent">
+                                    <input class="form-check-input flex-shrink-0" type="checkbox" name="friend_ids" value="{{ friend.id }}" style="width: 1.2em; height: 1.2em;">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2 small" style="width: 32px; height: 32px;">
+                                            {{ friend.username[0]|upper }}
+                                        </div>
+                                        <span class="fw-bold">{{ friend.username }}</span>
+                                    </div>
                                 </label>
                             {% endfor %}
                         {% else %}
-                            <div class="text-center text-muted">No friends available to invite.</div>
+                            <div class="text-center text-muted py-4">Không còn ai để mời.</div>
                         {% endif %}
                     </div>
                 </div>
-                <div class="modal-footer"><button type="submit" class="btn btn-primary">Send Invites</button></div>
+                <div class="modal-footer border-top-0">
+                    <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Gửi lời mời</button>
+                </div>
             </form>
         </div>
     </div>
@@ -424,42 +563,35 @@
 
 <div class="modal fade" id="summaryModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-magic"></i> AI Assistant</h5>
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header bg-primary text-white border-0">
+                <h5 class="modal-title"><i class="bi bi-magic me-2"></i>AI Assistant Recap</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <div class="d-flex justify-content-center mb-4">
-                    <div class="btn-group w-50" role="group" aria-label="AI Mode">
+                    <div class="btn-group w-75 shadow-sm" role="group">
                         <input type="radio" class="btn-check" name="ai_mode" id="mode_normal" value="normal" checked>
-                        <label class="btn btn-outline-primary" for="mode_normal">
-                            <i class="bi bi-lightning-fill"></i> Fast Recap
-                        </label>
+                        <label class="btn btn-outline-primary py-2" for="mode_normal"><i class="bi bi-lightning-fill"></i> Tóm tắt nhanh</label>
                       
                         <input type="radio" class="btn-check" name="ai_mode" id="mode_paper" value="paper">
-                        <label class="btn btn-outline-primary" for="mode_paper">
-                            <i class="bi bi-journal-text"></i> Deep Analysis
-                        </label>
+                        <label class="btn btn-outline-primary py-2" for="mode_paper"><i class="bi bi-journal-text"></i> Phân tích sâu</label>
                     </div>
                 </div>
 
-                <div id="summary-loading" class="text-center py-3" style="display: none;">
-                    <div class="spinner-border text-primary"></div>
-                    <p class="mt-2 text-muted animate-pulse">Đang xử lý dữ liệu...</p>
+                <div id="summary-loading" class="text-center py-5" style="display: none;">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+                    <p class="mt-3 text-muted fw-bold">Đang đọc tin nhắn...</p>
                 </div>
                 
                 <div id="summary-content" style="display: none;">
-                    <h6 class="fw-bold text-primary"><i class="bi bi-chat-quote-fill"></i> Kết quả:</h6>
-                    <div id="summary-full-text" class="p-3 bg-light border rounded shadow-sm" style="overflow-y: auto; max-height: 400px; font-size: 0.95rem; line-height: 1.6;"></div>
-                    <div class="mt-2 text-end">
-                        <small class="text-muted" id="summary-short-text"></small>
-                    </div>
+                    <div id="summary-full-text" class="p-4 bg-light rounded-3 border" style="max-height: 400px; overflow-y: auto; line-height: 1.6;"></div>
+                    <div class="mt-3 text-end text-muted fst-italic small" id="summary-short-text"></div>
                 </div>
 
                 <div class="text-center mt-3" id="start-btn-container">
-                    <button class="btn btn-primary px-4 rounded-pill shadow" id="btn-run-ai">
-                        <i class="bi bi-play-fill"></i> Bắt đầu phân tích
+                    <button class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm fw-bold" id="btn-run-ai">
+                        <i class="bi bi-play-fill"></i> Bắt đầu
                     </button>
                  </div>
             </div>
@@ -704,27 +836,34 @@
             // ------------------------------------
             socket.on('typing_status', (data) => { typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : ''; });
 
-            // User List Update
+            // Thay thế đoạn render user_list cũ
             socket.on('user_list', data => {
                 const container = document.getElementById('user-list-container');
                 document.getElementById('user-count').textContent = data.total_count || (data.online.length + data.offline.length);
                 container.innerHTML = '';
-                const createList = (title, users, isOnline) => {
-                    if (!users || users.length === 0) return;
-                    const label = document.createElement('small');
-                    label.className = 'text-muted fw-bold text-uppercase mt-2 d-block';
-                    label.style.fontSize = '0.7rem'; label.innerText = title;
-                    container.appendChild(label);
-                    const ul = document.createElement('ul'); ul.className = 'list-group list-group-flush small mb-2';
-                    users.forEach(u => {
-                        const li = document.createElement('li'); li.className = 'list-group-item px-0 py-1 bg-transparent border-0';
-                        li.innerHTML = `<span style="height:8px;width:8px;background:${isOnline?'#28a745':'#6c757d'};border-radius:50%;display:inline-block;margin-right:6px;"></span>${u}`;
-                        ul.appendChild(li);
-                    });
-                    container.appendChild(ul);
+            
+                // Hàm tạo item thành viên chuẩn
+                const createMemberItem = (u, isOnline) => {
+                    const div = document.createElement('div');
+                    div.className = 'member-item';
+                    div.innerHTML = `
+                        <div class="member-avatar">
+                            ${u.charAt(0).toUpperCase()}
+                            <span class="status-dot ${isOnline ? 'status-online' : 'status-offline'}"></span>
+                        </div>
+                        <div class="small fw-semibold text-dark text-truncate">${u}</div>
+                    `;
+                    return div;
                 };
-                createList('Online', data.online, true);
-                createList('Offline', data.offline, false);
+            
+                // Render danh sách (Gộp chung hoặc tách header tùy ý, ở đây gộp chung cho gọn theo thiết kế mới)
+                if (data.online.length > 0) {
+                    data.online.forEach(u => container.appendChild(createMemberItem(u, true)));
+                }
+                
+                if (data.offline.length > 0) {
+                    data.offline.forEach(u => container.appendChild(createMemberItem(u, false)));
+                }
             });
         });
 
