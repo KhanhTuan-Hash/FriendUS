@@ -12,7 +12,7 @@
     #chat-container { 
         display: flex; flex-direction: row; height: 75vh; 
         border: none; border-radius: 1rem; overflow: hidden; 
-        box-shadow: 0 10px 30px rgba(0,0,0,0.08); /* Đổ bóng mềm */
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
         background: #fff;
     }
     
@@ -72,7 +72,7 @@
     /* Typing & Emoji */
     #typing-status { font-size: 0.75rem; color: #6c757d; padding: 0 1.5rem 0.5rem; font-style: italic; min-height: 20px;}
 
-    /* --- AI SUGGESTION BUBBLE STYLING (NEW) --- */
+    /* --- AI SUGGESTION BUBBLE STYLING --- */
     .suggestion-bubble {
         position: absolute;
         bottom: 110%; /* Nằm ngay trên input */
@@ -90,7 +90,7 @@
         opacity: 0;
         transform: translateY(10px);
         transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        pointer-events: none; /* Không chặn click chuột */
+        pointer-events: none; 
         display: flex;
         align-items: center;
         gap: 10px;
@@ -103,47 +103,24 @@
         pointer-events: auto;
     }
 
-    .suggestion-text {
-        font-weight: 500;
-        color: #0d6efd;
-    }
-    
+    .suggestion-text { font-weight: 500; color: #0d6efd; }
     .suggestion-key {
-        font-size: 0.7rem;
-        background: #f1f3f5;
-        color: #6c757d;
-        padding: 2px 6px;
-        border-radius: 4px;
-        border: 1px solid #dee2e6;
-        font-weight: bold;
-        text-transform: uppercase;
+        font-size: 0.7rem; background: #f1f3f5; color: #6c757d;
+        padding: 2px 6px; border-radius: 4px; border: 1px solid #dee2e6;
+        font-weight: bold; text-transform: uppercase;
     }
 
     /* Animation cho nút AI Toggle */
-    #ai-toggle-btn {
-        transition: all 0.3s ease;
-    }
-    #ai-toggle-btn.active {
-        background-color: #e7f1ff;
-        color: #0d6efd;
-        box-shadow: inset 0 0 5px rgba(0,0,0,0.05);
-    }
+    #ai-toggle-btn { transition: all 0.3s ease; }
     
     /* --- TAB STYLING --- */
     .nav-tabs .nav-link.active { background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold; }
 
-    /* --- TIMELINE STYLING --- */
+    /* --- TIMELINE & MAP STYLES --- */
     #visual-timeline { height: 400px; border: 1px solid #dee2e6; background-color: #f8f9fa; }
     .vis-item { border-color: #17a2b8; background-color: #17a2b8; color: white; font-size: 14px; border-radius: 4px; }
     .vis-item.vis-selected { border-color: #117a8b; background-color: #138496; color: white; }
     .vis-current-time { background-color: #dc3545; width: 2px; }
-
-    /* --- STAR RATING --- */
-    .star-rating { font-size: 1.5rem; color: #ffc107; cursor: pointer; }
-    .star-rating .bi-star { color: #ddd; }
-    .star-rating .bi-star-fill { color: #ffc107; }
-
-    /* --- MAP PICKER STYLING --- */
     #picker-map { width: 100%; height: 400px; border-radius: 0.25rem; }
 
     /* --- WEATHER SCROLL STYLING --- */
@@ -161,6 +138,13 @@
         </h3>
         
         <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-warning fw-bold shadow-sm d-flex align-items-center gap-1" 
+                    id="btn-header-summarize"
+                    style="background: linear-gradient(135deg, #fff 0%, #fffbf0 100%); border-color: #ffc107; color: #d69e00;">
+                <i class="bi bi-stars"></i> 
+                <span class="d-none d-md-inline">AI Recap</span>
+            </button>
+
             <button class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#inviteModal">
                 <i class="bi bi-person-plus-fill"></i> Invite
             </button>
@@ -247,8 +231,7 @@
                         <i class="bi bi-people-fill fs-5 me-2"></i>
                         <h6 class="mb-0 text-dark fw-bold">Members (<span id="user-count">0</span>)</h6>
                     </div>
-                    <div id="user-list-container">
-                        </div>
+                    <div id="user-list-container"></div>
                 </div>
 
                 <div id="chat-main">
@@ -269,30 +252,27 @@
                                 <span class="suggestion-key">TAB</span>
                             </div>
 
-                            <form id="chat-form" class="d-flex align-items-center gap-2">
-                                <button class="btn btn-sm text-white rounded-pill px-3 fw-bold" type="button" id="btn-summarize" 
-                                        style="background: linear-gradient(45deg, #FFB75E, #ED8F03); border: none; white-space: nowrap;"
-                                        title="Summarize recent chat with AI">
-                                    <i class="bi bi-stars"></i> AI Recap
-                                </button>
+                            <form id="chat-form" class="d-flex align-items-center gap-2 position-relative">
                                 
                                 <div style="flex-grow: 1; position: relative;">
-                                    <input type="text" class="form-control border-0 rounded-pill px-3 py-2" 
+                                    <input type="text" class="form-control border-0 rounded-pill px-3 py-2 ps-4" 
                                            id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off" 
-                                           style="box-shadow: none; background-color: #f8f9fa;">
+                                           style="box-shadow: none; background-color: #f8f9fa; padding-right: 90px;">
+                                    
+                                    <div class="position-absolute top-50 end-0 translate-middle-y d-flex align-items-center pe-2">
+                                        <button class="btn btn-sm text-muted rounded-circle border-0" type="button" id="ai-toggle-btn" 
+                                                title="Bật/Tắt gợi ý AI" style="width: 32px; height: 32px;">
+                                            <i class="bi bi-magic"></i>
+                                        </button>
+
+                                        <button class="btn btn-sm text-secondary rounded-circle border-0" type="button" id="emoji-btn" style="width: 32px; height: 32px;">
+                                            <i class="bi bi-emoji-smile-fill"></i>
+                                        </button>
+                                    </div>
                                 </div>
-
-                                <button class="btn btn-light rounded-circle text-muted" type="button" id="ai-toggle-btn" 
-                                        title="Bật/Tắt gợi ý AI" style="width: 40px; height: 40px;">
-                                    <i class="bi bi-magic"></i>
-                                </button>
-
-                                <button class="btn btn-light text-secondary rounded-circle" type="button" id="emoji-btn" style="width: 40px; height: 40px;">
-                                    <i class="bi bi-emoji-smile-fill fs-5"></i>
-                                </button>
                                 
-                                <button class="btn btn-primary rounded-circle shadow-sm" type="submit" style="width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;">
-                                    <i class="bi bi-send-fill ms-1"></i>
+                                <button class="btn btn-primary rounded-circle shadow" type="submit" style="width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;">
+                                    <i class="bi bi-send-fill ms-1 fs-5"></i>
                                 </button>
                             </form>
                         </div>
@@ -487,7 +467,8 @@
         document.addEventListener('DOMContentLoaded', (event) => {
             
             // AI Summary Handler
-            const summarizeBtn = document.getElementById('btn-summarize');
+            // [UPDATED] Lấy ID mới từ Header Button
+            const summarizeBtn = document.getElementById('btn-header-summarize'); 
             const summaryModalEl = document.getElementById('summaryModal');
             if (summarizeBtn && summaryModalEl) {
                 const summaryModal = new bootstrap.Modal(summaryModalEl);
@@ -580,7 +561,7 @@
             });
             emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; messageInput.focus(); });
             
-            // --- LOGIC AI SUGGESTION & TOGGLE (UPDATED) ---
+            // --- LOGIC AI SUGGESTION & TOGGLE ---
             const suggestionBubble = document.getElementById('ai-suggestion-bubble');
             const suggestionContent = document.getElementById('suggestion-content');
             const aiToggleBtn = document.getElementById('ai-toggle-btn');
@@ -588,14 +569,16 @@
             let isAiEnabled = true; // Default ON
             let suggestTimer;
 
-            // Logic bật/tắt AI
+            // [UPDATED] Logic bật/tắt AI (Visual + Logic)
             function updateToggleState() {
                 if (isAiEnabled) {
-                    aiToggleBtn.classList.add('active');
-                    aiToggleBtn.innerHTML = '<i class="bi bi-magic"></i>';
+                    aiToggleBtn.classList.add('text-primary'); 
+                    aiToggleBtn.classList.remove('text-muted');
+                    aiToggleBtn.style.backgroundColor = '#e7f1ff'; 
                 } else {
-                    aiToggleBtn.classList.remove('active');
-                    aiToggleBtn.innerHTML = '<i class="bi bi-magic text-muted"></i>';
+                    aiToggleBtn.classList.remove('text-primary');
+                    aiToggleBtn.classList.add('text-muted');
+                    aiToggleBtn.style.backgroundColor = 'transparent';
                     hideSuggestion(); // Ẩn ngay nếu đang hiện
                 }
             }
