@@ -12,6 +12,7 @@ class Room(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.String(200), nullable=True)
     is_private = db.Column(db.Boolean, default=False)
+    allow_auto_join = db.Column(db.Boolean, default=False) # True: Vào luôn, False: Cần duyệt
     tags = db.Column(db.String(200), default='') 
     summary = db.Column(db.Text, nullable=True)
 

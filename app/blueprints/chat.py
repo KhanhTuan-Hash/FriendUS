@@ -159,7 +159,16 @@ def chat():
     if form.validate_on_submit():
         is_private_bool = True if form.privacy.data == 'private' else False
         tags_str = ",".join(form.tags.data) if form.tags.data else ""
-        new_room = Room(name=form.name.data, description=form.description.data, is_private=is_private_bool, tags=tags_str, creator=current_user)
+        
+        # [NEW] Thêm tham số allow_auto_join lấy từ form
+        new_room = Room(
+            name=form.name.data, 
+            description=form.description.data, 
+            is_private=is_private_bool, 
+            allow_auto_join=form.allow_auto_join.data, # <--- Dòng mới
+            tags=tags_str, 
+            creator=current_user
+        )
         new_room.members.append(current_user)
         db.session.add(new_room)
         db.session.commit()
@@ -366,6 +375,27 @@ def request_join_room(room_id):
         flash('You are already in this room.', 'info')
         return redirect(url_for('chat.chat'))
     
+    # [LOGIC MỚI] Nếu phòng cho phép Auto Join -> Vào thẳng luôn
+    if room.allow_auto_join:
+        room.members.append(current_user)
+        
+        # Cập nhật sở thích AI (User thích phòng này)
+        if room.tags:
+            tags_list = room.tags.split(',')
+            auto_update_user_interest(current_user.id, tags_list, weight_increment=2.0)
+
+        # Thông báo vào phòng
+        sys_msg = Message(body=f"has joined the room directly.", room=room.name, author=current_user)
+        db.session.add(sys_msg)
+        db.session.commit()
+        
+        # Bắn socket cập nhật danh sách
+        socketio.emit('status', {'msg': f'{current_user.username} joined.'}, to=room.name)
+        
+        flash(f'Welcome aboard! You have joined {room.name}.', 'success')
+        return redirect(url_for('chat.chat_room', room_name=room.name))
+
+    # --- LOGIC CŨ (Cần duyệt) ---
     # Kiểm tra xem đã gửi yêu cầu chưa
     existing_req = RoomRequest.query.filter_by(user_id=current_user.id, room_id=room.id).first()
     if existing_req:
@@ -376,9 +406,8 @@ def request_join_room(room_id):
     req = RoomRequest(room_id=room.id, user_id=current_user.id, status='pending_owner')
     db.session.add(req)
     
-    # [Optional] Tạo thông báo hệ thống vào phòng chat để chủ phòng thấy ngay
     sys_msg = Message(body=f"System: {current_user.username} wants to join this room.", 
-                      room=room.name, user_id=current_user.id) # user_id tạm để current, hoặc tạo 1 user system ảo
+                      room=room.name, user_id=current_user.id) 
     db.session.add(sys_msg)
     
     db.session.commit()
