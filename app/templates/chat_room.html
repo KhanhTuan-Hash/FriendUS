@@ -71,6 +71,63 @@
 
     /* Typing & Emoji */
     #typing-status { font-size: 0.75rem; color: #6c757d; padding: 0 1.5rem 0.5rem; font-style: italic; min-height: 20px;}
+
+    /* --- AI SUGGESTION BUBBLE STYLING (NEW) --- */
+    .suggestion-bubble {
+        position: absolute;
+        bottom: 110%; /* Nằm ngay trên input */
+        left: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(13, 110, 253, 0.2);
+        border-left: 4px solid #0d6efd;
+        padding: 10px 15px;
+        border-radius: 8px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        font-size: 0.9rem;
+        color: #333;
+        z-index: 50;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        pointer-events: none; /* Không chặn click chuột */
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        max-width: 80%;
+    }
+
+    .suggestion-bubble.active {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    .suggestion-text {
+        font-weight: 500;
+        color: #0d6efd;
+    }
+    
+    .suggestion-key {
+        font-size: 0.7rem;
+        background: #f1f3f5;
+        color: #6c757d;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+
+    /* Animation cho nút AI Toggle */
+    #ai-toggle-btn {
+        transition: all 0.3s ease;
+    }
+    #ai-toggle-btn.active {
+        background-color: #e7f1ff;
+        color: #0d6efd;
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.05);
+    }
     
     /* --- TAB STYLING --- */
     .nav-tabs .nav-link.active { background-color: #f8f9fa; border-bottom-color: transparent; font-weight: bold; }
@@ -204,7 +261,14 @@
                     </div>
 
                     <div class="p-3 bg-transparent"> 
-                        <div class="bg-white p-2 rounded-4 shadow-sm border border-light">
+                        <div class="bg-white p-2 rounded-4 shadow-sm border border-light position-relative">
+                            
+                            <div id="ai-suggestion-bubble" class="suggestion-bubble">
+                                <i class="bi bi-stars text-warning fs-5"></i>
+                                <span>Gợi ý: <span id="suggestion-content" class="suggestion-text">...</span></span>
+                                <span class="suggestion-key">TAB</span>
+                            </div>
+
                             <form id="chat-form" class="d-flex align-items-center gap-2">
                                 <button class="btn btn-sm text-white rounded-pill px-3 fw-bold" type="button" id="btn-summarize" 
                                         style="background: linear-gradient(45deg, #FFB75E, #ED8F03); border: none; white-space: nowrap;"
@@ -212,7 +276,16 @@
                                     <i class="bi bi-stars"></i> AI Recap
                                 </button>
                                 
-                                <input type="text" class="form-control border-0 bg-light rounded-pill px-3 py-2" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off" style="box-shadow: none;">
+                                <div style="flex-grow: 1; position: relative;">
+                                    <input type="text" class="form-control border-0 rounded-pill px-3 py-2" 
+                                           id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off" 
+                                           style="box-shadow: none; background-color: #f8f9fa;">
+                                </div>
+
+                                <button class="btn btn-light rounded-circle text-muted" type="button" id="ai-toggle-btn" 
+                                        title="Bật/Tắt gợi ý AI" style="width: 40px; height: 40px;">
+                                    <i class="bi bi-magic"></i>
+                                </button>
 
                                 <button class="btn btn-light text-secondary rounded-circle" type="button" id="emoji-btn" style="width: 40px; height: 40px;">
                                     <i class="bi bi-emoji-smile-fill fs-5"></i>
@@ -426,11 +499,8 @@
                         document.getElementById('summary-loading').style.display = 'none';
                         document.getElementById('summary-content').style.display = 'block';
                                 
-                        // Phần ngắn (Text thường)
                         document.getElementById('summary-short-text').innerText = data.short || "Error";
                                 
-                        // Phần chi tiết (Markdown -> HTML)
-                        // Kiểm tra xem thư viện marked đã tải chưa, nếu chưa thì hiện text thô
                         if (typeof marked !== 'undefined' && data.full) {
                             document.getElementById('summary-full-text').innerHTML = marked.parse(data.full);
                         } else {
@@ -473,7 +543,7 @@
                 scrollToBottom();
             }
 
-            // JOIN ROOM (Quan trọng: Không có dòng này chat sẽ không chạy trong Room)
+            // JOIN ROOM
             socket.on('connect', () => {
                 console.log("Connected to server, joining room:", roomName);
                 socket.emit('join', { 'room': roomName });
@@ -493,25 +563,117 @@
                 e.preventDefault(); 
                 let msg = messageInput.value.trim();
                 if (msg) { 
-                    // Gửi tin kèm roomName
                     socket.emit('send_message', { 'msg': msg, 'room': roomName }); 
                     socket.emit('stopped_typing', { room: roomName }); 
                     messageInput.value = ''; 
                     document.getElementById('emoji-picker').style.display = 'none';
+                    
+                    // Clear suggestion bubble
+                    hideSuggestion();
                 }
             });
 
-            // Handle Typing & Emoji
+            // Handle Emoji
             document.getElementById('emoji-btn').addEventListener('click', () => { 
                 const picker = document.getElementById('emoji-picker');
                 picker.style.display = (picker.style.display === 'none') ? 'block' : 'none'; 
             });
-            emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; });
+            emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; messageInput.focus(); });
             
-            messageInput.addEventListener('input', () => {
-                clearTimeout(typingTimer); socket.emit('typing', { room: roomName });
-                typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: roomName }); }, 2000);
+            // --- LOGIC AI SUGGESTION & TOGGLE (UPDATED) ---
+            const suggestionBubble = document.getElementById('ai-suggestion-bubble');
+            const suggestionContent = document.getElementById('suggestion-content');
+            const aiToggleBtn = document.getElementById('ai-toggle-btn');
+            
+            let isAiEnabled = true; // Default ON
+            let suggestTimer;
+
+            // Logic bật/tắt AI
+            function updateToggleState() {
+                if (isAiEnabled) {
+                    aiToggleBtn.classList.add('active');
+                    aiToggleBtn.innerHTML = '<i class="bi bi-magic"></i>';
+                } else {
+                    aiToggleBtn.classList.remove('active');
+                    aiToggleBtn.innerHTML = '<i class="bi bi-magic text-muted"></i>';
+                    hideSuggestion(); // Ẩn ngay nếu đang hiện
+                }
+            }
+            // Khởi tạo trạng thái nút
+            updateToggleState();
+
+            aiToggleBtn.addEventListener('click', () => {
+                isAiEnabled = !isAiEnabled;
+                updateToggleState();
             });
+
+            function showSuggestion(text) {
+                suggestionContent.innerText = text;
+                suggestionBubble.classList.add('active');
+            }
+
+            function hideSuggestion() {
+                suggestionBubble.classList.remove('active');
+                messageInput.dataset.suggestion = '';
+            }
+
+            // Xử lý Input
+            messageInput.addEventListener('input', function() {
+                const text = this.value;
+                
+                // Typing status
+                clearTimeout(typingTimer); 
+                socket.emit('typing', { room: roomName });
+                typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: roomName }); }, 2000);
+
+                // AI Suggestion Logic
+                clearTimeout(suggestTimer);
+                hideSuggestion(); // Ẩn khi đang gõ
+                
+                if (!isAiEnabled || text.length < 1) return;
+
+                // Debounce 300ms
+                suggestTimer = setTimeout(async () => {
+                    try {
+                        const res = await fetch('/api/suggest-text', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({text: text})
+                        });
+                        
+                        if (!res.ok) throw new Error("API Error");
+                        const data = await res.json();
+                        const suggestion = data.suggestion;
+                        
+                        if (suggestion && suggestion !== text) {
+                            messageInput.dataset.suggestion = suggestion;
+                            // Kiểm tra chế độ (Append hay Replace)
+                            if (suggestion.toLowerCase().startsWith(text.toLowerCase())) {
+                                messageInput.dataset.mode = 'append'; // Tự động điền nốt
+                            } else {
+                                messageInput.dataset.mode = 'replace'; // Teencode -> Tiếng Việt
+                            }
+                            showSuggestion(suggestion);
+                        }
+                    } catch (e) { console.error(e); }
+                }, 300);
+            });
+
+            // Xử lý phím tắt (Tab/ArrowRight)
+            messageInput.addEventListener('keydown', function(e) {
+                // Nếu bong bóng đang hiện và nhấn Tab hoặc Mũi tên phải
+                if (suggestionBubble.classList.contains('active') && (e.key === 'Tab' || e.key === 'ArrowRight')) {
+                    e.preventDefault();
+                    
+                    const suggestion = this.dataset.suggestion;
+                    if (suggestion) {
+                        this.value = suggestion; // Điền text
+                        hideSuggestion(); // Ẩn bong bóng
+                    }
+                }
+            });
+
+            // ------------------------------------
             socket.on('typing_status', (data) => { typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : ''; });
 
             // User List Update
@@ -519,7 +681,6 @@
                 const container = document.getElementById('user-list-container');
                 document.getElementById('user-count').textContent = data.total_count || (data.online.length + data.offline.length);
                 container.innerHTML = '';
-                
                 const createList = (title, users, isOnline) => {
                     if (!users || users.length === 0) return;
                     const label = document.createElement('small');
@@ -577,23 +738,18 @@
                 document.getElementById('w-precip').innerText=d.current_weather.precipitation_sum;
                 document.getElementById('w-wind').innerText=d.current_weather.wind_max_kmh;
 
-                // --- LOGIC AQI MỚI ---
                 const aqiEl = document.getElementById('w-aqi');
                 if (d.current_weather.aqi_val !== undefined) {
                     aqiEl.style.display = 'inline-block';
                     aqiEl.style.backgroundColor = d.current_weather.aqi_bg;
                     aqiEl.style.color = d.current_weather.aqi_text;
-                    // UPDATED: Dùng innerHTML để chèn icon đẹp hơn
                     aqiEl.innerHTML = `<span class="me-2 fs-5">🍃</span> AQI ${d.current_weather.aqi_val}`;
                 } else {
                     aqiEl.style.display = 'none';
                 }
-                // ---------------------
 
-                // UPDATED: Render thẻ dự báo to đẹp hơn
                 const fc = document.getElementById('forecast-container'); fc.innerHTML='';
                 if(d.hourly_forecast) d.hourly_forecast.forEach(h=>{ 
-                    // Logic chọn icon đơn giản dựa trên mô tả
                     let icon = '⛅';
                     let desc = h.weather_desc || '';
                     if(desc.includes('Mưa')) icon = '🌧️';
@@ -615,7 +771,7 @@
                 document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-content').style.display='block';
             }).catch(e=>{ document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-error').innerText=e.message; document.getElementById('weather-error').style.display='block'; });
         }
-        document.getElementById('weather-tab').addEventListener('shown.bs.tab', ()=>{ loadWeatherData(); }); // Load default
-        function loadWeatherData() { selectLoc(10.762, 106.660, "Hồ Chí Minh, VN"); } // Default func
+        document.getElementById('weather-tab').addEventListener('shown.bs.tab', ()=>{ loadWeatherData(); });
+        function loadWeatherData() { selectLoc(10.762, 106.660, "Hồ Chí Minh, VN"); }
     </script>
 {% endblock %}
