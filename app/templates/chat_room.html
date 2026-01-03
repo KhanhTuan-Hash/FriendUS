@@ -2,7 +2,6 @@
 
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
 <link href="https://unpkg.com/vis-timeline/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -14,256 +13,89 @@
     :root {
         --sidebar-left-width: 260px;
         --sidebar-right-width: 260px;
-        --navbar-height: 76px; /* Tăng lên để tránh bị Navbar che mất */
+        --navbar-height: 76px;
         --bg-chat: #ffffff;
         --bg-sidebar: #f7f7f7;
     }
 
-    /* Ghim toàn bộ giao diện Chat vào khung màn hình, đè lên padding của body cũ */
     .app-fixed-wrapper {
-        position: fixed;
-        top: var(--navbar-height);
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #fff;
-        z-index: 100;
-        display: flex;
-        overflow: hidden; /* Ngăn cuộn trang web chính */
+        position: fixed; top: var(--navbar-height); left: 0; right: 0; bottom: 0;
+        background-color: #fff; z-index: 100; display: flex; overflow: hidden;
     }
 
-    /* =========================================
-       2. LEFT SIDEBAR (NAV)
-       ========================================= */
+    /* --- SIDEBAR --- */
     .app-sidebar {
-        width: var(--sidebar-left-width);
-        background: var(--bg-sidebar);
-        border-right: 1px solid #e5e5e5;
-        display: flex;
-        flex-direction: column;
-        padding: 20px 12px;
-        flex-shrink: 0;
+        width: var(--sidebar-left-width); background: var(--bg-sidebar); border-right: 1px solid #e5e5e5;
+        display: flex; flex-direction: column; padding: 20px 12px; flex-shrink: 0;
     }
-
     .nav-pills .nav-link {
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 6px;
-        color: #5e6065;
-        font-weight: 600;
-        font-size: 0.95rem;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        transition: all 0.2s;
+        border-radius: 8px; padding: 12px 16px; margin-bottom: 6px; color: #5e6065;
+        font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 12px; transition: all 0.2s;
     }
-
     .nav-pills .nav-link:hover { background-color: #e4e6ea; color: #000; }
     .nav-pills .nav-link.active { background: #e7f3ff; color: #0084ff; }
-    .nav-pills .nav-link i { font-size: 1.2rem; }
 
-    /* =========================================
-       3. MAIN CENTER (CHAT)
-       ========================================= */
-    .app-main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        background-color: var(--bg-chat);
-        position: relative;
-        min-width: 0;
-    }
+    /* --- MAIN AREA --- */
+    .app-main { flex: 1; display: flex; flex-direction: column; background-color: var(--bg-chat); position: relative; min-width: 0; }
+    .app-header { height: 60px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0; background: #fff; }
+    .app-content-body { flex: 1; display: flex; overflow: hidden; position: relative; } /* Added position relative */
 
-    /* Header của Room */
-    .app-header {
-        height: 60px;
-        border-bottom: 1px solid #f0f0f0;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 20px;
-        flex-shrink: 0;
-        background: #fff;
-    }
+    /* --- CHAT CSS --- */
+    .chat-area-wrapper { flex: 1; display: flex; flex-direction: column; position: relative; }
+    #messages { flex: 1; padding: 20px 40px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    .message-bubble { max-width: 65%; padding: 10px 16px; font-size: 0.95rem; line-height: 1.5; position: relative; }
+    .message-self { align-self: flex-end; background: #0084ff; color: white; border-radius: 18px 18px 4px 18px; }
+    .message-other { align-self: flex-start; background: #f0f2f5; color: #050505; border-radius: 18px 18px 18px 4px; }
+    .chat-input-container { padding: 20px; background: #fff; }
+    .chat-input-wrapper { background: #f0f2f5; border-radius: 30px; padding: 6px 15px; display: flex; align-items: center; gap: 8px; border: 1px solid transparent; transition: border 0.2s; }
+    .chat-input-wrapper:focus-within { border-color: #0084ff; background: #fff; box-shadow: 0 0 0 2px rgba(0,132,255,0.1); }
+    #message-input { background: transparent; border: none; box-shadow: none; padding: 8px 0; font-size: 0.95rem; }
 
-    /* Khu vực nội dung chính (Chat window) */
-    .app-content-body {
-        flex: 1;
-        display: flex;
-        overflow: hidden; /* Scroll xử lý bên trong */
-    }
-
-    .chat-area-wrapper {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-    }
-
-    #messages {
-        flex: 1;
-        padding: 20px 40px; /* Padding rộng hơn cho thoáng */
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    /* Bong bóng Chat */
-    .message-bubble {
-        max-width: 65%;
-        padding: 10px 16px;
-        font-size: 0.95rem;
-        line-height: 1.5;
-        position: relative;
-    }
-
-    .message-self {
-        align-self: flex-end;
-        background: #0084ff;
-        color: white;
-        border-radius: 18px 18px 4px 18px;
-    }
-
-    .message-other {
-        align-self: flex-start;
-        background: #f0f2f5;
-        color: #050505;
-        border-radius: 18px 18px 18px 4px;
-    }
-
-    /* Input Area */
-    .chat-input-container {
-        padding: 20px;
-        background: #fff;
-    }
-    
-    .chat-input-wrapper {
-        background: #f0f2f5;
-        border-radius: 30px;
-        padding: 6px 15px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        border: 1px solid transparent;
-        transition: border 0.2s;
-    }
-    .chat-input-wrapper:focus-within {
-        border-color: #0084ff;
-        background: #fff;
-        box-shadow: 0 0 0 2px rgba(0,132,255,0.1);
-    }
-
-    #message-input {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 8px 0;
-        font-size: 0.95rem;
-    }
-
-    /* =========================================
-       4. RIGHT SIDEBAR (MEMBERS)
-       ========================================= */
-    .right-sidebar {
-        width: var(--sidebar-right-width);
-        background: #fff;
-        border-left: 1px solid #f0f0f0;
-        display: flex;
-        flex-direction: column;
-        padding-top: 20px;
-        flex-shrink: 0;
-    }
-
-    .member-header {
-        padding: 0 20px 15px;
-        font-size: 0.8rem;
-        font-weight: 700;
-        color: #65676b;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Scroll area cho list member */
-    #user-list-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 0 10px;
-    }
-
-    .member-item {
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        margin-bottom: 2px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
+    /* --- RIGHT SIDEBAR --- */
+    .right-sidebar { width: var(--sidebar-right-width); background: #fff; border-left: 1px solid #f0f0f0; display: flex; flex-direction: column; padding-top: 20px; flex-shrink: 0; }
+    .member-item { display: flex; align-items: center; padding: 10px; margin-bottom: 2px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
     .member-item:hover { background-color: #f5f5f5; }
-
-    .member-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: #e4e6eb;
-        color: #050505;
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 12px;
-        position: relative;
-        font-size: 0.9rem;
-    }
-
-    .status-dot {
-        width: 12px; height: 12px;
-        border-radius: 50%;
-        border: 2px solid #fff;
-        position: absolute;
-        bottom: -2px; right: -2px;
-    }
+    .member-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e4e6eb; color: #050505; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-right: 12px; position: relative; font-size: 0.9rem; }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; position: absolute; bottom: -2px; right: -2px; }
     .status-online { background-color: #31a24c; }
     .status-offline { background-color: #adb5bd; }
 
-    /* =========================================
-       5. AI POPUP & UTILS
-       ========================================= */
-    .suggestion-bubble {
-        position: absolute;
-        bottom: 80px;
-        left: 20px;
-        background: rgba(255, 255, 255, 0.98);
-        border: 1px solid #e5e5e5;
-        border-left: 4px solid #0084ff;
-        padding: 12px 16px;
-        border-radius: 12px;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.12);
-        z-index: 50;
-        display: none; /* Mặc định ẩn */
-        align-items: center;
-        gap: 12px;
-        animation: fadeInUp 0.2s ease;
-    }
+    /* --- MAP STYLES (Embed) --- */
+    #map-container { position: relative; width: 100%; height: 100%; font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; }
+    #map { width: 100%; height: 100%; z-index: 1; }
     
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
+    /* Search Bar Map */
+    #floating-search-bar { position: absolute; top: 16px; left: 16px; z-index: 1000; display: flex; gap: 8px; align-items: center; transition: opacity 0.2s ease; }
+    .search-container-pill { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); display: flex; align-items: center; width: 350px; height: 48px; padding: 0 12px; transition: box-shadow 0.2s; }
+    .search-input { flex: 1; border: none; outline: none; font-size: 16px; background: transparent; height: 100%; padding-left: 10px; color: #202124; }
+    .search-btn-grey { border: none; background: none; color: #5f6368; font-size: 20px; cursor: pointer; padding: 8px; border-radius: 50%; }
+    .direction-icon-btn { border: none; background: none; color: #1a73e8; font-size: 22px; cursor: pointer; padding: 8px; border-radius: 50%; }
 
-    .suggestion-bubble.active { display: flex !important; }
+    /* Sidebar Map (Directions) */
+    #map-sidebar-panel { position: absolute; top: 0; left: 0; bottom: 0; width: 360px; background: white; z-index: 1001; box-shadow: 4px 0 12px rgba(0,0,0,0.15); transform: translateX(-110%); transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column; }
+    #map-sidebar-panel.active { transform: translateX(0); }
+    .sidebar-header { padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; flex-shrink: 0; }
+    .input-row { background: #f1f3f4; border-radius: 8px; height: 40px; display: flex; align-items: center; padding: 0 12px; margin-bottom: 8px; }
+    .input-row input { border: none; background: transparent; outline: none; width: 100%; font-size: 14px; }
+    .mode-selector { display: flex; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid #e8eaed; }
+    .mode-btn { flex: 1; border: none; background: none; padding: 6px; border-radius: 20px; color: #5f6368; cursor: pointer; }
+    .mode-btn.active { background: #e8f0fe; color: #1967d2; font-weight: 500; }
+    
+    /* Search Results Map */
+    #search-results { position: absolute; top: 70px; left: 16px; width: 350px; background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); max-height: 60vh; overflow-y: auto; display: none; z-index: 1002; }
+    .result-item { padding: 12px 16px; border-bottom: 1px solid #f1f3f4; cursor: pointer; display: flex; gap: 12px; align-items: center; }
+    .result-item:hover { background: #f8f9fa; }
 
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #bcc0c4; border-radius: 10px; }
-    ::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
+    /* Bottom Info Card */
+    #bottom-card { position: absolute; bottom: 24px; left: 50%; transform: translate(-50%, 150%); width: 95%; max-width: 400px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.18); padding: 16px 20px; z-index: 999; display: flex; align-items: center; justify-content: space-between; transition: transform 0.3s; }
+    #bottom-card.visible { transform: translate(-50%, 0); }
+    .circle-btn { width: 40px; height: 40px; border-radius: 50%; background: #1a73e8; color: white; border: none; font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
+    /* Leaflet Fixes */
+    .leaflet-default-icon-path { background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png); }
 </style>
 
 <div class="app-fixed-wrapper">
-    
     <nav class="app-sidebar">
         <div class="mb-4 px-3">
             <h5 class="fw-bold text-primary m-0" style="font-family: sans-serif; letter-spacing: -0.5px;">
@@ -274,30 +106,30 @@
 
         <div class="nav flex-column nav-pills" id="roomTabs" role="tablist">
             <button class="nav-link active" id="chat-tab" data-bs-toggle="pill" data-bs-target="#chat-panel" type="button" role="tab">
-                <i class="bi bi-chat-text-fill"></i> 
-                <span>Thảo luận</span>
+                <i class="bi bi-chat-text-fill"></i> <span>Thảo luận</span>
             </button>
             <a class="nav-link" href="{{ url_for('planner.view_planner', room_id=room.id) }}">
-                <i class="bi bi-calendar-range-fill"></i>
-                <span>Lịch trình</span>
+                <i class="bi bi-calendar-range-fill"></i> <span>Lịch trình</span>
             </a>
             <button class="nav-link" id="finance-tab" data-bs-toggle="pill" data-bs-target="#finance-panel" type="button" role="tab">
-                <i class="bi bi-piggy-bank-fill"></i>
-                <span>Quỹ nhóm</span>
+                <i class="bi bi-piggy-bank-fill"></i> <span>Quỹ nhóm</span>
             </button>
+            <button class="nav-link" id="map-tab" data-bs-toggle="pill" data-bs-target="#map-panel" type="button" role="tab">
+                <i class="bi bi-map-fill"></i> <span>Bản đồ</span>
+             </button>
             <button class="nav-link" id="weather-tab" data-bs-toggle="pill" data-bs-target="#weather-panel" type="button" role="tab">
-                <i class="bi bi-cloud-sun-fill"></i>
-                <span>Thời tiết</span>
+                <i class="bi bi-cloud-sun-fill"></i> <span>Thời tiết</span>
             </button>
         </div>
-
+        
         <div class="mt-auto pt-3 border-top">
             <div class="dropdown">
                 <button class="btn btn-light w-100 d-flex justify-content-between align-items-center bg-white border shadow-sm rounded-3 py-2" data-bs-toggle="dropdown">
                     <span class="small fw-bold"><i class="bi bi-gear-fill me-2 text-secondary"></i>Cài đặt</span>
-                    <i class="bi bi-chevron-up small text-muted"></i>
                 </button>
                 <ul class="dropdown-menu w-100 shadow border-0 mb-2">
+                    <li><a class="dropdown-item" href="{{ url_for('main.index') }}">Về trang chủ</a></li>
+                    <li><hr class="dropdown-divider"></li>
                     {% if current_user.id == room.creator_id %}
                     <li>
                         <form action="{{ url_for('chat.delete_chat_room', room_id=room.id) }}" method="POST" onsubmit="return confirm('Xóa vĩnh viễn nhóm này?');">
@@ -319,24 +151,17 @@
     <main class="app-main">
         <header class="app-header">
             <div class="d-flex align-items-center gap-3">
-                <div class="d-flex align-items-center justify-content-center bg-gradient bg-primary text-white rounded-circle shadow-sm" 
-                     style="width: 38px; height: 38px; font-weight: bold; font-size: 1.1rem;">
+                <div class="d-flex align-items-center justify-content-center bg-gradient bg-primary text-white rounded-circle shadow-sm" style="width: 38px; height: 38px; font-weight: bold;">
                     {{ room.name[0]|upper }}
                 </div>
                 <div>
-                    <h6 class="fw-bold mb-0 text-dark" style="font-size: 1rem;">{{ room.name }}</h6>
-                    <div class="d-flex align-items-center small text-muted" style="font-size: 0.75rem;">
-                        {% if room.is_private %}<i class="bi bi-lock-fill me-1"></i>Riêng tư{% else %}<i class="bi bi-globe me-1"></i>Công khai{% endif %}
-                        <span class="mx-2">•</span>
+                    <h6 class="fw-bold mb-0 text-dark">{{ room.name }}</h6>
+                    <div class="d-flex align-items-center small text-muted">
                         <span>{{ room.members.count() }} thành viên</span>
                     </div>
                 </div>
             </div>
-
-            <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-outline-primary btn-sm rounded-pill fw-semibold px-3" id="btn-header-summarize">
-                    <i class="bi bi-stars me-1"></i> AI Recap
-                </button>
+             <div class="d-flex align-items-center gap-2">
                 <button class="btn btn-primary btn-sm rounded-pill fw-semibold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#inviteModal">
                     <i class="bi bi-person-plus-fill me-1"></i> Thêm bạn
                 </button>
@@ -350,595 +175,427 @@
                     <div class="d-flex h-100 w-100">
                         <div class="chat-area-wrapper">
                             <div id="messages"></div>
-                            
                             <div id="typing-status" class="px-4 pb-1 text-muted small fst-italic" style="min-height: 20px;"></div>
-                            
-                            <div class="chat-input-container position-relative">
-                                <div id="ai-suggestion-bubble" class="suggestion-bubble">
-                                    <i class="bi bi-stars text-warning fs-5"></i>
-                                    <div class="d-flex flex-column" style="line-height: 1.2;">
-                                        <span class="fw-bold text-primary" style="font-size: 0.7rem;">GỢI Ý AI</span>
-                                        <span class="text-dark small fw-semibold" id="suggestion-content">...</span>
-                                    </div>
-                                    <kbd class="ms-2 bg-light text-secondary border shadow-sm">TAB</kbd>
-                                </div>
-                                
-                                <div id="emoji-picker" style="display:none; position: absolute; bottom: 85px; right: 20px; z-index: 100;">
-                                    <emoji-picker></emoji-picker>
-                                </div>
-
+                            <div class="chat-input-container">
                                 <form id="chat-form" class="chat-input-wrapper">
-                                    <button class="btn btn-sm btn-link text-secondary p-0 border-0" type="button" id="ai-toggle-btn" 
-                                            title="Bật/Tắt AI" style="width: 32px; height: 32px;">
-                                        <i class="bi bi-magic"></i>
-                                    </button>
-                                    
                                     <input type="text" class="form-control" id="message-input" placeholder="Nhập tin nhắn..." autocomplete="off">
-                                    
-                                    <button class="btn btn-sm btn-link text-secondary text-decoration-none p-0" type="button" id="emoji-btn">
-                                        <i class="bi bi-emoji-smile fs-5"></i>
-                                    </button>
                                     <button class="btn btn-primary rounded-circle shadow-sm d-flex align-items-center justify-content-center border-0" type="submit" style="width: 32px; height: 32px;">
                                         <i class="bi bi-send-fill" style="font-size: 0.8rem;"></i>
                                     </button>
                                 </form>
                             </div>
                         </div>
-
                         <aside class="right-sidebar">
                             <div class="member-header">Thành viên — <span id="user-count">0</span></div>
-                            
-                            <div id="user-list-container">
-                                </div>
+                            <div id="user-list-container"></div>
                         </aside>
                     </div>
                 </div>
 
                 <div class="tab-pane fade h-100" id="finance-panel" role="tabpanel">
-                    <div class="p-4 h-100 overflow-auto">
-                         <div class="row g-4 justify-content-center">
-                            <div class="col-md-5">
-                                <div class="card border-0 shadow-sm rounded-4 h-100">
-                                    <div class="card-header bg-white border-bottom-0 pt-4 px-4">
-                                        <h5 class="fw-bold text-success"><i class="bi bi-cash-stack me-2"></i>Thêm Giao Dịch</h5>
+                     <div class="p-4 h-100 overflow-auto d-flex justify-content-center align-items-center text-muted">
+                        <em>Finance content here...</em>
+                     </div>
+                </div>
+
+                <div class="tab-pane fade h-100 w-100" id="map-panel" role="tabpanel">
+                    <div id="map-container">
+                        <div id="floating-search-bar">
+                            <div class="search-container-pill">
+                                <input type="text" id="main-search-input" class="search-input" placeholder="Search OpenStreetMap..." autocomplete="off">
+                                <button class="search-btn-grey" id="btn-trigger-search" title="Search"><i class="bi bi-search"></i></button>
+                                <div class="v-divider" style="width:1px; height:28px; background:#dfe1e5; margin:0 8px;"></div>
+                                <button class="direction-icon-btn" id="btn-open-routes" title="Directions"><i class="bi bi-cursor-fill"></i></button>
+                            </div>
+                        </div>
+
+                        <div id="map-sidebar-panel">
+                            <div class="sidebar-header">
+                                <button class="close-sidebar-btn" id="btn-close-sidebar" style="border:none; bg:none; cursor:pointer;"><i class="bi bi-arrow-left"></i></button>
+                                <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                                    <div class="input-row">
+                                        <i class="bi bi-circle" style="font-size: 12px; margin-right: 10px; color: #5f6368;"></i>
+                                        <input type="text" id="input-start" placeholder="Starting point" autocomplete="off">
                                     </div>
-                                    <div class="card-body px-4">
-                                        <form action="{{ url_for('finance.add_room_transaction', room_id=room.id) }}" method="POST">
-                                            {{ trans_form.hidden_tag() }}
-                                            <div class="mb-3">
-                                                <label class="small fw-bold text-muted mb-2">LOẠI GIAO DỊCH</label>
-                                                <div class="d-flex gap-3">
-                                                {% for subfield in trans_form.type %}
-                                                    <div class="form-check">
-                                                        {{ subfield(class="form-check-input") }} 
-                                                        <label class="form-check-label small" for="{{ subfield.id }}">{{ subfield.label.text }}</label>
-                                                    </div>
-                                                {% endfor %}
-                                                </div>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="small fw-bold text-muted mb-1">SỐ TIỀN</label>
-                                                <div class="input-group">
-                                                    {{ trans_form.amount(class="form-control", placeholder="0") }}
-                                                    <span class="input-group-text bg-light">VND</span>
-                                                </div>
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="small fw-bold text-muted mb-1">NỘI DUNG</label>
-                                                {{ trans_form.description(class="form-control", placeholder="VD: Tiền ăn trưa...") }}
-                                            </div>
-                                            <div class="form-check form-switch mb-3 bg-light p-2 rounded ps-5">
-                                                {{ trans_form.is_outside(class="form-check-input", id="switchOutside") }}
-                                                <label class="form-check-label small fw-bold" for="switchOutside">Người ngoài nhóm?</label>
-                                            </div>
-                                            <div id="memberInput" class="mb-3">{{ trans_form.receiver(class="form-select") }}</div>
-                                            <div id="outsiderInput" class="mb-3" style="display:none;">{{ trans_form.outsider_name(class="form-control", placeholder="Tên người đó...") }}</div>
-                                            {{ trans_form.submit(class="btn btn-success w-100 fw-bold rounded-pill py-2") }}
-                                        </form>
+                                    <div class="input-row">
+                                        <i class="bi bi-geo-alt-fill" style="font-size: 16px; margin-right: 10px; color: #ea4335;"></i>
+                                        <input type="text" id="input-end" placeholder="Destination" autocomplete="off">
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-7">
-                                {% if pending_trans %}
-                                <div class="alert alert-warning border-warning border-opacity-25 shadow-sm rounded-3 mb-4 d-flex align-items-center">
-                                    <i class="bi bi-exclamation-circle-fill fs-4 me-3 text-warning"></i>
-                                    <div class="flex-grow-1">
-                                        <h6 class="fw-bold mb-1">Cần xác nhận</h6>
-                                        <ul class="list-unstyled mb-0 small">
-                                        {% for p in pending_trans %}
-                                            <li class="d-flex justify-content-between align-items-center py-1 border-bottom border-warning border-opacity-25">
-                                                <span><strong>{{ p.sender.username }}</strong> chuyển {{ "{:,.0f}".format(p.amount) }} đ</span>
-                                                <form action="{{ url_for('finance.confirm_transaction', trans_id=p.id) }}" method="POST">
-                                                    <button class="btn btn-sm btn-dark py-0 px-2 rounded-pill">Confirm</button>
-                                                </form>
-                                            </li>
-                                        {% endfor %}
-                                        </ul>
-                                    </div>
-                                </div>
-                                {% endif %}
-                                <div class="card border-0 shadow-sm rounded-4 h-100">
-                                    <div class="card-header bg-white d-flex justify-content-between align-items-center pt-4 px-4 border-bottom-0">
-                                        <h5 class="fw-bold mb-0">Mạng lưới nợ</h5>
-                                        <button onclick="loadGraph()" class="btn btn-sm btn-outline-primary rounded-pill"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-                                    </div>
-                                    <div class="card-body p-0">
-                                        <div id="finance-network" style="height: 500px; width: 100%;"></div>
-                                    </div>
+
+                            <div class="mode-selector">
+                                <button class="mode-btn active" data-mode="car" title="Driving"><i class="bi bi-car-front-fill"></i></button>
+                                <button class="mode-btn" data-mode="motorcycle" title="Motorcycle"><i class="bi bi-bicycle" style="font-weight:bold;"></i></button>
+                                <button class="mode-btn" data-mode="foot" title="Walking"><i class="bi bi-person-walking"></i></button>
+                            </div>
+
+                            <div id="route-panel-content" style="flex:1; overflow-y:auto; padding:0;">
+                                <div style="padding: 30px; text-align: center; color: #70757a;">
+                                    <i class="bi bi-map" style="font-size: 40px; color: #dfe1e5;"></i>
+                                    <p style="margin-top: 10px;">Select a destination.</p>
                                 </div>
                             </div>
                         </div>
+
+                        <div id="bottom-card">
+                            <div style="flex: 1; margin-right: 12px;">
+                                <span class="card-title" id="info-name" style="font-weight:600; display:block;">Selected Location</span>
+                                <span class="card-sub" id="info-addr" style="font-size:13px; color:#5f6368;">Fetching...</span>
+                            </div>
+                            <button class="circle-btn" id="btn-card-directions" title="Directions to here">
+                                <i class="bi bi-cursor-fill"></i>
+                            </button>
+                        </div>
+
+                        <div id="search-results"></div>
+                        
+                        <div id="map"></div>
                     </div>
                 </div>
 
                 <div class="tab-pane fade h-100" id="weather-panel" role="tabpanel">
-                    <div class="p-4 h-100 overflow-auto">
-                        <div class="container-fluid p-3">
-                            <div class="position-relative mb-4 mx-auto" style="max-width: 600px;">
-                                <div class="input-group shadow-sm rounded-pill overflow-hidden">
-                                    <span class="input-group-text bg-white border-0 ps-4"><i class="bi bi-search text-muted"></i></span>
-                                    <input type="text" id="weather-search-input" class="form-control border-0 py-3" placeholder="Tìm thành phố (VD: Dalat)..." autocomplete="off" onkeydown="if(event.key === 'Enter') handleSearch()">
-                                    <button class="btn btn-primary px-4 fw-bold" type="button" onclick="handleSearch()">Tìm kiếm</button>
-                                </div>
-                                <div id="search-results-list" class="list-group position-absolute w-100 shadow mt-2 rounded-3 overflow-hidden" style="z-index: 1000; display: none; max-height: 200px; overflow-y: auto;"></div>
-                            </div>
-                            <div id="weather-loading" class="text-center py-5">
-                                <div class="spinner-border text-primary" role="status"></div>
-                                <p class="mt-2 text-muted">Đang tải dữ liệu thời tiết...</p>
-                            </div>
-                            <div id="weather-error" class="alert alert-danger shadow-sm" style="display: none;"></div>
-                            <div id="weather-content" style="display: none;">
-                                <div class="card text-white mb-4 shadow border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 24px;">
-                                    <div class="card-body p-5">
-                                        <div class="row align-items-center">
-                                            <div class="col-md-6">
-                                                <h4 class="fw-light opacity-75 mb-3"><i class="bi bi-geo-alt-fill me-2"></i><span id="w-location">Hồ Chí Minh, VN</span></h4>
-                                                <h1 style="font-size: 5rem; font-weight: 700; letter-spacing: -2px;"><span id="w-temp">--</span>°C</h1>
-                                                <p class="fs-4 fw-light mb-0" id="w-desc">--</p>
-                                                <div class="mt-4 d-flex flex-wrap gap-2">
-                                                    <span class="badge bg-white bg-opacity-20 backdrop-blur shadow-sm py-2 px-3 rounded-pill fw-normal">
-                                                        💧 <span id="w-precip">0</span> mm
-                                                    </span>
-                                                    <span class="badge bg-white bg-opacity-20 backdrop-blur shadow-sm py-2 px-3 rounded-pill fw-normal">
-                                                        💨 <span id="w-wind">0</span> km/h
-                                                    </span>
-                                                    <span id="w-aqi" class="badge shadow-sm py-2 px-3 rounded-pill fw-normal" style="display: none;"></span>
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6 text-center text-md-end">
-                                                <div style="font-size: 8rem; line-height: 1; filter: drop-shadow(0 10px 10px rgba(0,0,0,0.2));" id="w-icon">🌤️</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <h5 class="fw-bold text-dark mb-3 ps-2">Dự báo 24 giờ tới</h5>
-                                <div class="d-flex flex-nowrap overflow-auto py-2 hourly-scroll gap-3 pb-4" id="forecast-container" style="scroll-behavior: smooth;"></div>
-                            </div>
-                        </div>
-                    </div>
+                     <div class="p-4 h-100 overflow-auto d-flex justify-content-center align-items-center text-muted">
+                        <em>Weather content here...</em>
+                     </div>
                 </div>
             </div>
         </div>
     </main>
 </div>
 
-<div class="modal fade" id="mapModal" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Pick Location</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div id="picker-map"></div></div></div></div></div>
-
 <div class="modal fade" id="inviteModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 border-0 shadow">
-            <div class="modal-header border-bottom-0">
-                <h5 class="modal-title fw-bold">Mời bạn bè</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header border-bottom-0"><h5 class="modal-title fw-bold">Mời bạn bè</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <form action="{{ url_for('chat.invite_to_room', room_id=room.id) }}" method="POST">
                 <div class="modal-body pt-0">
-                    <p class="text-muted small mb-3">Chọn bạn bè để thêm vào nhóm chat này.</p>
-                    <div class="list-group rounded-3 border bg-light" style="max-height: 300px; overflow-y: auto;">
-                        {% if invitable_friends %}
-                            {% for friend in invitable_friends %}
-                                <label class="list-group-item d-flex gap-3 align-items-center py-3 border-0 bg-transparent">
-                                    <input class="form-check-input flex-shrink-0" type="checkbox" name="friend_ids" value="{{ friend.id }}" style="width: 1.2em; height: 1.2em;">
-                                    <div class="d-flex align-items-center">
-                                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2 small" style="width: 32px; height: 32px;">
-                                            {{ friend.username[0]|upper }}
-                                        </div>
-                                        <span class="fw-bold">{{ friend.username }}</span>
-                                    </div>
-                                </label>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-center text-muted py-4">Không còn ai để mời.</div>
-                        {% endif %}
-                    </div>
+                    <p>Invite content...</p>
                 </div>
-                <div class="modal-footer border-top-0">
-                    <button type="button" class="btn btn-light rounded-pill" data-bs-dismiss="modal">Hủy</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Gửi lời mời</button>
-                </div>
+                <div class="modal-footer border-top-0"><button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">Gửi lời mời</button></div>
             </form>
         </div>
     </div>
 </div>
 
-<div class="modal fade" id="summaryModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content rounded-4 border-0 shadow">
-            <div class="modal-header bg-primary text-white border-0">
-                <h5 class="modal-title"><i class="bi bi-magic me-2"></i>AI Assistant Recap</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <div class="d-flex justify-content-center mb-4">
-                    <div class="btn-group w-75 shadow-sm" role="group">
-                        <input type="radio" class="btn-check" name="ai_mode" id="mode_normal" value="normal" checked>
-                        <label class="btn btn-outline-primary py-2" for="mode_normal"><i class="bi bi-lightning-fill"></i> Tóm tắt nhanh</label>
-                      
-                        <input type="radio" class="btn-check" name="ai_mode" id="mode_paper" value="paper">
-                        <label class="btn btn-outline-primary py-2" for="mode_paper"><i class="bi bi-journal-text"></i> Phân tích sâu</label>
-                    </div>
-                </div>
+<script id="map-config" type="application/json">
+{
+    "urls": { 
+        "search": "{{ url_for('map.api_search') }}", 
+        "reverse": "{{ url_for('map.api_reverse') }}",
+        "route": "{{ url_for('map.api_route') }}"
+    }
+}
+</script>
 
-                <div id="summary-loading" class="text-center py-5" style="display: none;">
-                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
-                    <p class="mt-3 text-muted fw-bold">Đang đọc tin nhắn...</p>
-                </div>
-                
-                <div id="summary-content" style="display: none;">
-                    <div id="summary-full-text" class="p-4 bg-light rounded-3 border" style="max-height: 400px; overflow-y: auto; line-height: 1.6;"></div>
-                    <div class="mt-3 text-end text-muted fst-italic small" id="summary-short-text"></div>
-                </div>
-
-                <div class="text-center mt-3" id="start-btn-container">
-                    <button class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm fw-bold" id="btn-run-ai">
-                        <i class="bi bi-play-fill"></i> Bắt đầu
-                    </button>
-                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> 
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
-    
-    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <script>const VisNetwork = vis.Network; const VisDataSet = vis.DataSet;</script>
-    <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-    <script type="text/javascript">
-        // --- RESTORE VIS NETWORK (Conflict fix) ---
-        if (!vis.Network) vis.Network = VisNetwork;
-        if (!vis.DataSet && VisDataSet) vis.DataSet = VisDataSet;
+    <script>
+    // --- 1. CHAT SOCKET LOGIC ---
+    document.addEventListener('DOMContentLoaded', (event) => {
+        var socket = io();
+        const roomName = '{{ room.name }}';
+        const currentUsername = '{{ current_user.username }}';
+        const messageContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const typingStatus = document.getElementById('typing-status');
+        let typingTimer;
 
-        // --- 1. GENERAL UI LOGIC ---
-        flatpickr(".flatpickr-input", { enableTime: true, dateFormat: "Y-m-d H:i", time_24hr: true });
+        function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
 
-        // --- 2. CHAT LOGIC (IMPORTANT: CONNECTS TO ROOM) ---
-        document.addEventListener('DOMContentLoaded', (event) => {
+        function addMessage(data) {
+            let isSelf = data.username === currentUsername;
+            let bubbleClass = isSelf ? 'message-self' : 'message-other';
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message-bubble ${bubbleClass}`;
+            msgDiv.innerHTML = `<strong>${isSelf ? 'You' : data.username}</strong>: ${data.msg}`;
+            messageContainer.appendChild(msgDiv);
+            scrollToBottom();
+        }
+
+        socket.on('connect', () => { socket.emit('join', { 'room': roomName }); });
+        socket.on('load_history', msgs => { messageContainer.innerHTML=''; msgs.forEach(addMessage); });
+        socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
+        socket.on('status', data => { messageContainer.innerHTML += `<div class="text-center small text-muted"><em>${data.msg}</em></div>`; });
+        socket.on('user_list', data => {
+             const c = document.getElementById('user-list-container'); c.innerHTML = '';
+             document.getElementById('user-count').textContent = data.online.length + data.offline.length;
+             data.online.forEach(u => c.innerHTML += `<div class="member-item"><div class="member-avatar">${u[0].toUpperCase()}<span class="status-dot status-online"></span></div><div class="small">${u}</div></div>`);
+             data.offline.forEach(u => c.innerHTML += `<div class="member-item"><div class="member-avatar">${u[0].toUpperCase()}<span class="status-dot status-offline"></span></div><div class="small">${u}</div></div>`);
+        });
+
+        document.getElementById('chat-form').addEventListener('submit', e => {
+            e.preventDefault(); 
+            let msg = messageInput.value.trim();
+            if (msg) { socket.emit('send_message', { 'msg': msg, 'room': roomName }); messageInput.value = ''; }
+        });
+        
+        messageInput.addEventListener('input', () => {
+            socket.emit('typing', { room: roomName });
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => socket.emit('stopped_typing', { room: roomName }), 1000);
+        });
+        socket.on('typing_status', d => typingStatus.textContent = d.isTyping ? `${d.username} is typing...` : '');
+    });
+
+    // --- 2. MAP LOGIC (Tích hợp MapManager) ---
+    class MapManager {
+        constructor() {
+            this.config = JSON.parse(document.getElementById('map-config').textContent);
+            this.map = null;
+            this.layers = { route: null, markers: [] };
+            this.searchTimeout = null;
+            this.transportMode = 'car';
+            this.activeInput = 'main'; 
+            this.locations = { start: null, end: null };
+            this.currentSelection = null;
+            this.userLocation = null;
+
+            this.dom = {
+                searchBar: document.getElementById('floating-search-bar'),
+                sidebar: document.getElementById('map-sidebar-panel'),
+                bottomCard: document.getElementById('bottom-card'),
+                results: document.getElementById('search-results'),
+                routePanel: document.getElementById('route-panel-content'),
+                inputs: {
+                    main: document.getElementById('main-search-input'),
+                    start: document.getElementById('input-start'),
+                    end: document.getElementById('input-end')
+                },
+                infoName: document.getElementById('info-name'),
+                infoAddr: document.getElementById('info-addr'),
+                btnCardRoute: document.getElementById('btn-card-directions')
+            };
             
-            // AI Summary Handler (Redesigned Workflow)
-            const summarizeBtn = document.getElementById('btn-header-summarize'); 
-            const summaryModalEl = document.getElementById('summaryModal');
-            const runAiBtn = document.getElementById('btn-run-ai');
+            // Không init ngay mà chờ Tab Show
+        }
 
-            if (summarizeBtn && summaryModalEl) {
-                const summaryModal = new bootstrap.Modal(summaryModalEl);
-                
-                // 1. Mở modal nhưng chưa chạy ngay
-                summarizeBtn.addEventListener('click', function() {
-                    document.getElementById('summary-content').style.display = 'none';
-                    document.getElementById('summary-loading').style.display = 'none';
-                    document.getElementById('start-btn-container').style.display = 'block'; // Hiện nút chạy
-                    summaryModal.show();
+        initMap() {
+            if(this.map) return; // Đã init rồi thì thôi
+            
+            // [OSM] Init Map
+            this.map = L.map('map', { zoomControl: false }).setView([10.762622, 106.660172], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19, attribution: '© OpenStreetMap'
+            }).addTo(this.map);
+            L.control.zoom({ position: 'bottomright' }).addTo(this.map);
+
+            this.preloadUserLocation();
+            this.setupListeners();
+            this.map.on('click', (e) => this.handleMapClick(e));
+        }
+
+        preloadUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    this.userLocation = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: "Your Location", isUser: true };
+                    L.circleMarker([this.userLocation.lat, this.userLocation.lon], {
+                        radius: 8, fillColor: "#4285F4", color: "#fff", weight: 2, opacity: 1, fillOpacity: 1
+                    }).addTo(this.map);
                 });
+            }
+        }
 
-                // 2. Xử lý khi bấm nút "Bắt đầu phân tích" trong Modal
-                runAiBtn.addEventListener('click', function() {
-                    // Lấy mode đang chọn
-                    const mode = document.querySelector('input[name="ai_mode"]:checked').value;
-                    
-                    document.getElementById('start-btn-container').style.display = 'none'; // Ẩn nút chạy
-                    document.getElementById('summary-loading').style.display = 'block'; // Hiện loading
-                    document.getElementById('summary-content').style.display = 'none';
+        setupListeners() {
+            document.getElementById('btn-open-routes').onclick = () => this.setMode('route');
+            document.getElementById('btn-close-sidebar').onclick = () => this.setMode('search');
+            
+            this.dom.btnCardRoute.onclick = () => {
+                if (this.currentSelection) {
+                    this.setMode('route');
+                    this.selectLocation(this.currentSelection, 'end');
+                    this.dom.inputs.start.focus();
+                }
+            };
 
-                    // Fetch với tham số mode
-                    fetch(`/chat/summary/{{ room.id }}?mode=${mode}`).then(r => r.json()).then(data => {
-                        document.getElementById('summary-loading').style.display = 'none';
-                        document.getElementById('summary-content').style.display = 'block';
-                        document.getElementById('start-btn-container').style.display = 'block'; // Hiện lại để chạy lại nếu muốn
-                                
-                        document.getElementById('summary-short-text').innerText = data.short || "";
-                                
-                        if (typeof marked !== 'undefined' && data.full) {
-                            document.getElementById('summary-full-text').innerHTML = marked.parse(data.full);
-                        } else {
-                            document.getElementById('summary-full-text').innerText = data.full || "Error";
-                        }
-                    }).catch(e => { 
-                        console.error(e);
-                        document.getElementById('summary-loading').style.display = 'none';
-                        document.getElementById('start-btn-container').style.display = 'block';
-                    });
+            ['main', 'start', 'end'].forEach(key => {
+                const input = this.dom.inputs[key];
+                input.addEventListener('focus', () => {
+                    this.activeInput = key;
+                    if (input.value.trim() === '') this.renderDefaultSuggestions(); 
                 });
-            }
-
-            // Socket.IO Connection
-            var socket = io();
-            const roomName = '{{ room.name }}';
-            const currentUsername = '{{ current_user.username }}';
-            const messageContainer = document.getElementById('messages');
-            const messageInput = document.getElementById('message-input');
-            const typingStatus = document.getElementById('typing-status');
-            const emojiPicker = document.querySelector('emoji-picker');
-            let typingTimer;
-
-            function scrollToBottom() { messageContainer.scrollTop = messageContainer.scrollHeight; }
-            function isImageUrl(url) { return(url.match(/\.(jpeg|jpg|gif|png)$/) != null); }
-
-            // Thêm tin nhắn vào giao diện
-            function addMessage(data) {
-                let isSelf = data.username === currentUsername;
-                let bubbleClass = isSelf ? 'message-self' : 'message-other';
-                let content = isImageUrl(data.msg) ? `<img src="${data.msg}" style="max-width:100%; border-radius:5px;">` : data.msg;
-                
-                const msgDiv = document.createElement('div');
-                msgDiv.className = `message-bubble ${bubbleClass}`;
-                msgDiv.innerHTML = `
-                    <div class="message-info">
-                        <strong>${isSelf ? 'You' : data.username}</strong> 
-                        <small class="ms-1">${data.timestamp || ''}</small>
-                    </div>
-                    <div>${content}</div>
-                `;
-                messageContainer.appendChild(msgDiv);
-                scrollToBottom();
-            }
-
-            // JOIN ROOM
-            socket.on('connect', () => {
-                console.log("Connected to server, joining room:", roomName);
-                socket.emit('join', { 'room': roomName });
-            });
-
-            socket.on('load_history', msgs => { messageContainer.innerHTML=''; msgs.forEach(addMessage); });
-            socket.on('receive_message', data => { addMessage(data); typingStatus.textContent = ''; });
-            socket.on('status', data => { 
-                const div = document.createElement('div'); 
-                div.className = 'text-center small text-muted my-1'; 
-                div.innerHTML = `<em>${data.msg}</em>`; 
-                messageContainer.appendChild(div); 
-            });
-
-            // Handle Send
-            document.getElementById('chat-form').addEventListener('submit', e => {
-                e.preventDefault(); 
-                let msg = messageInput.value.trim();
-                if (msg) { 
-                    socket.emit('send_message', { 'msg': msg, 'room': roomName }); 
-                    socket.emit('stopped_typing', { room: roomName }); 
-                    messageInput.value = ''; 
-                    document.getElementById('emoji-picker').style.display = 'none';
-                    
-                    // Clear suggestion bubble
-                    hideSuggestion();
-                }
-            });
-
-            // Handle Emoji
-            document.getElementById('emoji-btn').addEventListener('click', () => { 
-                const picker = document.getElementById('emoji-picker');
-                picker.style.display = (picker.style.display === 'none') ? 'block' : 'none'; 
-            });
-            emojiPicker.addEventListener('emoji-click', e => { messageInput.value += e.detail.unicode; messageInput.focus(); });
-            
-            // --- LOGIC AI SUGGESTION & TOGGLE ---
-            const suggestionBubble = document.getElementById('ai-suggestion-bubble');
-            const suggestionContent = document.getElementById('suggestion-content');
-            const aiToggleBtn = document.getElementById('ai-toggle-btn');
-            
-            let isAiEnabled = true; // Default ON
-            let suggestTimer;
-
-            // [UPDATED] Logic bật/tắt AI (Visual + Logic)
-            function updateToggleState() {
-                if (isAiEnabled) {
-                    aiToggleBtn.classList.add('text-primary'); 
-                    aiToggleBtn.classList.remove('text-muted');
-                    aiToggleBtn.style.backgroundColor = '#e7f1ff'; 
-                } else {
-                    aiToggleBtn.classList.remove('text-primary');
-                    aiToggleBtn.classList.add('text-muted');
-                    aiToggleBtn.style.backgroundColor = 'transparent';
-                    hideSuggestion(); // Ẩn ngay nếu đang hiện
-                }
-            }
-            // Khởi tạo trạng thái nút
-            updateToggleState();
-
-            aiToggleBtn.addEventListener('click', () => {
-                isAiEnabled = !isAiEnabled;
-                updateToggleState();
-            });
-
-            function showSuggestion(text) {
-                suggestionContent.innerText = text;
-                suggestionBubble.classList.add('active');
-            }
-
-            function hideSuggestion() {
-                suggestionBubble.classList.remove('active');
-                messageInput.dataset.suggestion = '';
-            }
-
-            // Xử lý Input
-            messageInput.addEventListener('input', function() {
-                const text = this.value;
-                
-                // Typing status
-                clearTimeout(typingTimer); 
-                socket.emit('typing', { room: roomName });
-                typingTimer = setTimeout(() => { socket.emit('stopped_typing', { room: roomName }); }, 2000);
-
-                // AI Suggestion Logic
-                clearTimeout(suggestTimer);
-                hideSuggestion(); // Ẩn khi đang gõ
-                
-                if (!isAiEnabled || text.length < 1) return;
-
-                // Debounce 300ms
-                suggestTimer = setTimeout(async () => {
-                    try {
-                        const res = await fetch('/api/suggest-text', {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({text: text})
-                        });
-                        
-                        if (!res.ok) throw new Error("API Error");
-                        const data = await res.json();
-                        const suggestion = data.suggestion;
-                        
-                        if (suggestion && suggestion !== text) {
-                            messageInput.dataset.suggestion = suggestion;
-                            // Kiểm tra chế độ (Append hay Replace)
-                            if (suggestion.toLowerCase().startsWith(text.toLowerCase())) {
-                                messageInput.dataset.mode = 'append'; // Tự động điền nốt
-                            } else {
-                                messageInput.dataset.mode = 'replace'; // Teencode -> Tiếng Việt
-                            }
-                            showSuggestion(suggestion);
-                        }
-                    } catch (e) { console.error(e); }
-                }, 300);
-            });
-
-            // Xử lý phím tắt (Tab/ArrowRight)
-            messageInput.addEventListener('keydown', function(e) {
-                // Nếu bong bóng đang hiện và nhấn Tab hoặc Mũi tên phải
-                if (suggestionBubble.classList.contains('active') && (e.key === 'Tab' || e.key === 'ArrowRight')) {
-                    e.preventDefault();
-                    
-                    const suggestion = this.dataset.suggestion;
-                    if (suggestion) {
-                        this.value = suggestion; // Điền text
-                        hideSuggestion(); // Ẩn bong bóng
+                input.addEventListener('input', () => {
+                    if (input.value.trim() === '') this.renderDefaultSuggestions();
+                    else {
+                        clearTimeout(this.searchTimeout);
+                        this.searchTimeout = setTimeout(() => this.performSearch(input.value), 400);
                     }
-                }
-            });
-
-            // ------------------------------------
-            socket.on('typing_status', (data) => { typingStatus.textContent = data.isTyping ? `${data.username} is typing...` : ''; });
-
-            // Thay thế đoạn render user_list cũ
-            socket.on('user_list', data => {
-                const container = document.getElementById('user-list-container');
-                document.getElementById('user-count').textContent = data.total_count || (data.online.length + data.offline.length);
-                container.innerHTML = '';
-            
-                // Hàm tạo item thành viên chuẩn
-                const createMemberItem = (u, isOnline) => {
-                    const div = document.createElement('div');
-                    div.className = 'member-item';
-                    div.innerHTML = `
-                        <div class="member-avatar">
-                            ${u.charAt(0).toUpperCase()}
-                            <span class="status-dot ${isOnline ? 'status-online' : 'status-offline'}"></span>
-                        </div>
-                        <div class="small fw-semibold text-dark text-truncate">${u}</div>
-                    `;
-                    return div;
-                };
-            
-                // Render danh sách (Gộp chung hoặc tách header tùy ý, ở đây gộp chung cho gọn theo thiết kế mới)
-                if (data.online.length > 0) {
-                    data.online.forEach(u => container.appendChild(createMemberItem(u, true)));
-                }
-                
-                if (data.offline.length > 0) {
-                    data.offline.forEach(u => container.appendChild(createMemberItem(u, false)));
-                }
-            });
-        });
-
-        // --- 3. FINANCE GRAPH ---
-        let networkInstance = null;
-        function loadGraph() {
-            fetch("{{ url_for('finance.api_finance_graph') }}?room_id={{ room.id }}").then(r=>r.json()).then(data => {
-                var nodes = new vis.DataSet(data.nodes);
-                var edges = new vis.DataSet(data.edges.map(e => ({from: e.from, to: e.to, label: e.label, arrows: 'to', color: {color: '#dc3545'}, width: 2})));
-                var container = document.getElementById('finance-network');
-                if(networkInstance) networkInstance.setData({nodes, edges});
-                else networkInstance = new vis.Network(container, {nodes, edges}, {nodes: {font:{size:16}, borderWidth:2, color:{background:'#fff', border:'#dc3545'}}, physics:{stabilization:false}});
-            });
-        }
-        document.getElementById('finance-tab').addEventListener('shown.bs.tab', loadGraph);
-        document.getElementById('switchOutside').addEventListener('change', function() {
-            document.getElementById('memberInput').style.display = this.checked ? 'none' : 'block';
-            document.getElementById('outsiderInput').style.display = this.checked ? 'block' : 'none';
-        });
-
-        // --- 4. WEATHER LOGIC ---
-        function handleSearch() {
-            const q = document.getElementById('weather-search-input').value.trim();
-            if(!q) return;
-            fetch("{{ url_for('weather.search_city') }}?q="+encodeURIComponent(q)).then(r=>r.json()).then(data=>{
-                const list = document.getElementById('search-results-list'); list.innerHTML=''; list.style.display='block';
-                if(data.length){ data.forEach(i=>{ const a=document.createElement('a'); a.className='list-group-item list-group-item-action'; a.innerHTML=`<strong>${i.name}</strong>`; a.onclick=()=>{ selectLoc(i.lat,i.lon,i.name); }; list.appendChild(a); }); }
-                else { list.innerHTML='<div class="list-group-item text-muted">Not found</div>'; }
-            });
-        }
-        function selectLoc(lat,lon,name) {
-            document.getElementById('weather-search-input').value=name; document.getElementById('search-results-list').style.display='none';
-            document.getElementById('weather-content').style.display='none'; document.getElementById('weather-loading').style.display='block';
-            fetch(`{{ url_for('weather.get_forecast') }}?lat=${lat}&lon=${lon}&name=${encodeURIComponent(name)}`).then(r=>r.json()).then(d=>{
-                if(d.error) throw new Error(d.error);
-                document.getElementById('w-location').innerText=d.location_name; 
-                document.getElementById('w-temp').innerText=d.current_weather.temperature;
-                document.getElementById('w-desc').innerText=d.current_weather.weather_desc; 
-                document.getElementById('w-precip').innerText=d.current_weather.precipitation_sum;
-                document.getElementById('w-wind').innerText=d.current_weather.wind_max_kmh;
-
-                const aqiEl = document.getElementById('w-aqi');
-                if (d.current_weather.aqi_val !== undefined) {
-                    aqiEl.style.display = 'inline-block';
-                    aqiEl.style.backgroundColor = d.current_weather.aqi_bg;
-                    aqiEl.style.color = d.current_weather.aqi_text;
-                    aqiEl.innerHTML = `<span class="me-2 fs-5">🍃</span> AQI ${d.current_weather.aqi_val}`;
-                } else {
-                    aqiEl.style.display = 'none';
-                }
-
-                const fc = document.getElementById('forecast-container'); fc.innerHTML='';
-                if(d.hourly_forecast) d.hourly_forecast.forEach(h=>{ 
-                    let icon = '⛅';
-                    let desc = h.weather_desc || '';
-                    if(desc.includes('Mưa')) icon = '🌧️';
-                    else if(desc.includes('Nắng') || desc.includes('Quang')) icon = '☀️';
-                    else if(desc.includes('Mây')) icon = '☁️';
-
-                    fc.innerHTML += `
-                    <div class="col-3 col-md-2 px-2 mb-2" style="min-width: 130px;">
-                        <div class="card h-100 border-0 shadow text-center py-4" style="background-color: #ffffff; border-radius: 16px;">
-                            <div class="text-secondary fw-bold mb-1">${h.hour}</div>
-                            <div class="my-2" style="font-size: 3rem;">${icon}</div>
-                            <div class="fw-bolder text-dark" style="font-size: 1.5rem;">${h.temp}°C</div>
-                            <div class="text-muted text-truncate px-2 mt-1" style="font-size: 0.85rem; font-weight: 500;">
-                                ${h.weather_desc}
-                            </div>
-                        </div>
-                    </div>`; 
                 });
-                document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-content').style.display='block';
-            }).catch(e=>{ document.getElementById('weather-loading').style.display='none'; document.getElementById('weather-error').innerText=e.message; document.getElementById('weather-error').style.display='block'; });
+            });
+
+            document.getElementById('btn-trigger-search').onclick = () => this.performSearch(this.dom.inputs.main.value);
+
+            const modeBtns = document.querySelectorAll('.mode-btn');
+            modeBtns.forEach(btn => {
+                btn.onclick = () => {
+                    modeBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    this.transportMode = btn.getAttribute('data-mode');
+                    if (this.locations.start && this.locations.end) this.calculateRoute();
+                };
+            });
         }
-        document.getElementById('weather-tab').addEventListener('shown.bs.tab', ()=>{ loadWeatherData(); });
-        function loadWeatherData() { selectLoc(10.762, 106.660, "Hồ Chí Minh, VN"); }
+
+        renderDefaultSuggestions() {
+            this.dom.results.innerHTML = '';
+            this.dom.results.style.display = 'block';
+            const myLoc = document.createElement('div');
+            myLoc.className = 'result-item';
+            myLoc.innerHTML = `<div style="background: #e8f0fe; padding: 8px; border-radius: 50%; margin-right: 12px;"><i class="bi bi-cursor-fill" style="color:#1a73e8;"></i></div><span class="result-name" style="color: #1a73e8; font-weight: 500;">Your Location</span>`;
+            myLoc.onclick = () => {
+                if (this.userLocation) this.selectLocation(this.userLocation, this.activeInput);
+                else alert("Location permission needed.");
+            };
+            this.dom.results.appendChild(myLoc);
+        }
+
+        async handleMapClick(e) {
+            if (this.mode === 'route') return;
+            const { lat, lng } = e.latlng;
+            this.showBottomCard(lat, lng, "Dropped Pin", "Fetching...");
+            try {
+                const res = await fetch(`${this.config.urls.reverse}?lat=${lat}&lon=${lng}`);
+                const data = await res.json();
+                const addr = data.display_name || "Unknown address";
+                this.showBottomCard(lat, lng, addr.split(',')[0], addr);
+            } catch (err) { console.error(err); }
+        }
+
+        showBottomCard(lat, lng, name, addr) {
+            this.currentSelection = { lat, lon: lng, name };
+            this.clearMarkers('search');
+            const marker = L.marker([lat, lng]).addTo(this.map);
+            this.layers.markers.push({ type: 'search', obj: marker });
+            this.map.flyTo([lat, lng], 16);
+            this.dom.infoName.innerText = name;
+            this.dom.infoAddr.innerText = addr;
+            this.dom.bottomCard.classList.add('visible');
+            this.dom.results.style.display = 'none';
+        }
+
+        setMode(mode) {
+            this.mode = mode;
+            if (mode === 'route') {
+                this.dom.searchBar.style.opacity = '0'; 
+                this.dom.searchBar.style.pointerEvents = 'none'; 
+                this.dom.bottomCard.classList.remove('visible'); 
+                this.dom.sidebar.classList.add('active');
+                if (this.dom.inputs.main.value && this.currentSelection && !this.locations.end) {
+                    this.selectLocation(this.currentSelection, 'end');
+                }
+            } else {
+                this.dom.searchBar.style.opacity = '1';
+                this.dom.searchBar.style.pointerEvents = 'auto';
+                this.dom.sidebar.classList.remove('active');
+                this.clearRoute();
+            }
+        }
+
+        async performSearch(query) {
+            if (!query || query.length < 2) { this.dom.results.style.display = 'none'; return; }
+            try {
+                const res = await fetch(`${this.config.urls.search}?query=${encodeURIComponent(query)}`);
+                const data = await res.json();
+                this.renderResults(data);
+            } catch (e) { console.error(e); }
+        }
+
+        renderResults(data) {
+            this.dom.results.innerHTML = '';
+            this.dom.results.style.display = 'block';
+            data.forEach(place => {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                item.innerHTML = `<i class="bi bi-geo-alt result-icon"></i><div class="result-text"><span class="result-name">${place.display_name.split(',')[0]}</span><span class="result-addr" style="font-size:11px; display:block;">${place.display_name}</span></div>`;
+                item.onclick = () => {
+                    const loc = { lat: parseFloat(place.lat), lon: parseFloat(place.lon), name: place.display_name.split(',')[0] };
+                    if (this.activeInput === 'main') {
+                        this.showBottomCard(loc.lat, loc.lon, loc.name, place.display_name);
+                        this.dom.inputs.main.value = loc.name;
+                    } else {
+                        this.selectLocation(loc, this.activeInput);
+                    }
+                };
+                this.dom.results.appendChild(item);
+            });
+        }
+
+        selectLocation(loc, inputType) {
+            this.dom.results.style.display = 'none';
+            this.dom.inputs[inputType].value = loc.name;
+            this.locations[inputType] = loc;
+            if (!loc.isUser) {
+                this.clearMarkers(inputType);
+                const marker = L.marker([loc.lat, loc.lon]).addTo(this.map);
+                this.layers.markers.push({ type: inputType, obj: marker });
+            }
+            if (this.locations.start && this.locations.end) this.calculateRoute();
+        }
+        
+        clearMarkers(type) {
+            this.layers.markers = this.layers.markers.filter(m => {
+                if (m.type === type) { this.map.removeLayer(m.obj); return false; }
+                return true;
+            });
+        }
+
+        async calculateRoute() {
+            const p1 = `${this.locations.start.lat},${this.locations.start.lon}`;
+            const p2 = `${this.locations.end.lat},${this.locations.end.lon}`;
+            this.dom.routePanel.innerHTML = '<div class="p-4 text-center text-muted">Calculating route...</div>';
+            try {
+                const url = `${this.config.urls.route}?point1=${p1}&point2=${p2}&vehicle=${this.transportMode}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.routes && data.routes[0]) {
+                    this.drawRoute(data.routes[0].geometry); 
+                    this.renderInstructions(data.routes[0]);
+                } else this.dom.routePanel.innerHTML = '<div class="p-4 text-danger">No route found.</div>';
+            } catch (e) { this.dom.routePanel.innerHTML = '<div class="p-4 text-danger">Error calculating route.</div>'; }
+        }
+
+        renderInstructions(route) {
+            const dist = (route.distance / 1000).toFixed(1); 
+            const time = Math.round(route.duration / 60); 
+            let html = `<div style="padding:16px; background:#f8f9fa; border-bottom:1px solid #e8eaed;"><span style="font-size:24px; color:#188038; font-weight:500;">${time} min</span><span style="color:#5f6368; margin-left:8px;">(${dist} km)</span></div>`;
+            route.legs[0].steps.forEach(step => {
+                html += `<div style="padding:12px 16px; border-bottom:1px solid #f1f3f4; display:flex; gap:12px;"><i class="bi bi-arrow-right" style="color:#5f6368;"></i><div><div style="font-size:14px;">${step.maneuver.type} ${step.name || ''}</div><div style="font-size:12px; color:#70757a;">${step.distance.toFixed(0)}m</div></div></div>`;
+            });
+            this.dom.routePanel.innerHTML = html;
+        }
+
+        drawRoute(geometry) {
+            if (this.layers.route) this.map.removeLayer(this.layers.route);
+            this.layers.route = L.geoJSON(geometry, { style: { color: '#1a73e8', weight: 6, opacity: 0.8 } }).addTo(this.map);
+            this.map.fitBounds(this.layers.route.getBounds(), { padding: [50, 50] });
+        }
+
+        clearRoute() {
+            if (this.layers.route) { this.map.removeLayer(this.layers.route); this.layers.route = null; }
+            this.clearMarkers('start'); this.clearMarkers('end');
+            this.locations = { start: null, end: null };
+            this.dom.inputs.start.value = ''; this.dom.inputs.end.value = '';
+            this.dom.routePanel.innerHTML = '<div style="padding:30px; text-align:center;"><p>Select destination.</p></div>';
+        }
+    }
+
+    // --- 3. INIT MAP ON TAB CHANGE (Fix Leaflet Gray Box) ---
+    let mapManager = null;
+    const mapTabBtn = document.getElementById('map-tab');
+    
+    mapTabBtn.addEventListener('shown.bs.tab', function (event) {
+        if (!mapManager) {
+            mapManager = new MapManager();
+            mapManager.initMap();
+        } else {
+            // Cực kỳ quan trọng: Báo cho Leaflet biết kích thước div đã thay đổi (từ hidden -> visible)
+            setTimeout(() => { mapManager.map.invalidateSize(); }, 100);
+        }
+    });
+
     </script>
 {% endblock %}

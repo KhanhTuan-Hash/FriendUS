@@ -221,6 +221,16 @@
   </div>
 
   <div class="tab-pane fade" id="public-rooms" role="tabpanel">
+      <div class="d-flex justify-content-between align-items-center mb-3 p-3 bg-white rounded-4 shadow-sm border">
+          <div>
+              <h6 class="fw-bold text-dark mb-1"><i class="bi bi-robot"></i> AI Matchmaker</h6>
+              <small class="text-muted">Use our algorithm to find groups matching your interests.</small>
+          </div>
+          <a href="{{ url_for('chat.chat', sort='match') }}" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm hover-lift">
+              <i class="bi bi-stars"></i> Find Matching Groups
+          </a>
+      </div>
+
       <div class="d-flex flex-column gap-3">
         {% for room in public_rooms %}
             <div class="card border-0 shadow-sm rounded-4 hover-lift">

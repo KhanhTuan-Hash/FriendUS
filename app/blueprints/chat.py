@@ -172,16 +172,24 @@ def chat():
     # [TỐI ƯU] Lấy sở thích user 1 lần duy nhất
     current_user_scores = UserTagScore.query.filter_by(user_id=current_user.id).all()
 
-    ranked_rooms = []
-    for room in raw_public_rooms:
-        room_tags = room.tags.split(',') if room.tags else []
-        # Truyền list sở thích vào đây
-        score = score_from_matrix_personalized(current_user.id, room_tags, user_scores_cache=current_user_scores)
-        ranked_rooms.append((room, score))
-    
-    # Sort giảm dần theo điểm
-    ranked_rooms.sort(key=lambda x: x[1], reverse=True)
-    public_rooms = [x[0] for x in ranked_rooms] # Lấy danh sách room đã sort
+    # [DEMO ALGORITHM] Chỉ chạy thuật toán khi bấm nút tìm kiếm
+    import random
+    if request.args.get('sort') == 'match':
+        ranked_rooms = []
+        for room in raw_public_rooms:
+            room_tags = room.tags.split(',') if room.tags else []
+            # Truyền list sở thích vào đây
+            score = score_from_matrix_personalized(current_user.id, room_tags, user_scores_cache=current_user_scores)
+            ranked_rooms.append((room, score))
+        
+        # Sort giảm dần theo điểm (Matching)
+        ranked_rooms.sort(key=lambda x: x[1], reverse=True)
+        public_rooms = [x[0] for x in ranked_rooms] 
+        flash('✨ Algorithm activated! Rooms sorted by compatibility.', 'success')
+    else:
+        # Mặc định: Trộn ngẫu nhiên (Linh tinh) để chứng minh chưa sort
+        public_rooms = raw_public_rooms
+        random.shuffle(public_rooms)
     
     # Check các phòng đang chờ owner duyệt (để hiện status Pending)
     my_requests = RoomRequest.query.filter_by(user_id=current_user.id).all()
